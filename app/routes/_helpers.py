@@ -6,6 +6,7 @@ database writes (audit). Import these into any route module that needs them.
 """
 
 from datetime import datetime, timezone
+from typing import Optional
 from flask import request
 
 
@@ -110,12 +111,12 @@ def serialize_student(row: dict) -> dict:
 
 def audit(
     connection,
-    user_id: int | None,
+    user_id: Optional[int],
     action: str,
     table_name: str,
-    record_id: int | None,
-    old_values: dict | None = None,
-    new_values: dict | None = None,
+    record_id: Optional[int],
+    old_values: Optional[dict] = None,
+    new_values: Optional[dict] = None,
 ) -> None:
     """
     Insert a row into audit_log.

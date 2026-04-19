@@ -14,6 +14,7 @@ Execution order:
 
 import os
 import sys
+from typing import Optional
 
 from werkzeug.security import generate_password_hash
 
@@ -40,11 +41,14 @@ def init_db() -> None:
 # ---------------------------------------------------------------------------
 
 def _run_migration(db) -> None:
-    """Read and execute the initial schema migration SQL file."""
-    migration_path = _find_migration_file()
+    """Read and execute the correct schema migration for the current backend."""
+    # Use SQLite-compatible schema for local dev, Postgres schema for production.
+    is_sqlite = getattr(db, "backend", "sqlite") == "sqlite"
+    filename = "001_sqlite_dev.sql" if is_sqlite else "001_initial_schema.sql"
+    migration_path = _find_migration_file(filename)
     if migration_path is None:
         print(
-            "[seeds] Warning: migrations/001_initial_schema.sql not found. "
+            f"[seeds] Warning: migrations/{filename} not found. "
             "Skipping schema migration.",
             file=sys.stderr,
             flush=True,
@@ -60,28 +64,22 @@ def _run_migration(db) -> None:
         print(f"[seeds] Schema migration applied: {migration_path}", flush=True)
     except Exception as exc:
         db.rollback()
-        # On Postgres, IF NOT EXISTS guards mean re-running is safe, but some
-        # statements (e.g. CREATE EXTENSION) may raise errors on re-run in
-        # certain environments. Log and continue rather than aborting startup.
         print(
-            f"[seeds] Migration warning (may be safe to ignore on re-run): {exc}",
+            f"[seeds] Migration warning: {exc}",
             file=sys.stderr,
             flush=True,
         )
 
 
-def _find_migration_file() -> str | None:
+def _find_migration_file(filename: str = "001_initial_schema.sql") -> Optional[str]:
     """
     Locate migrations/001_initial_schema.sql relative to the project root.
     Tries several candidate paths to be robust against different CWDs.
     """
     candidates = [
-        # Project root relative to this file (app/seeds.py → ../migrations/)
-        os.path.join(os.path.dirname(__file__), "..", "migrations", "001_initial_schema.sql"),
-        # CWD-relative
-        os.path.join("migrations", "001_initial_schema.sql"),
-        # Absolute from environment variable (for Docker / Railway)
-        os.path.join(os.environ.get("UFIT_APP_ROOT", ""), "migrations", "001_initial_schema.sql"),
+        os.path.join(os.path.dirname(__file__), "..", "migrations", filename),
+        os.path.join("migrations", filename),
+        os.path.join(os.environ.get("UFIT_APP_ROOT", ""), "migrations", filename),
     ]
     for path in candidates:
         normalized = os.path.normpath(path)
@@ -119,15 +117,15 @@ def _seed_default_admin(db) -> None:
 
     from app.routes._helpers import now_utc
 
-    password_hash = generate_password_hash("admin123")
+    password_hash = generate_password_hash("admin123", method="pbkdf2:sha256")
     ts = now_utc()
 
     try:
         db.execute(
             """INSERT INTO users (role, first_name, last_name, email, password_hash,
-                                  active_status, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, TRUE, ?, ?)""",
-            ("admin", "Admin", "User", "admin@ufit.com", password_hash, ts, ts),
+                                  active_status, created_at)
+               VALUES (?, ?, ?, ?, ?, 1, ?)""",
+            ("admin", "Admin", "User", "admin@ufit.com", password_hash, ts),
         )
         db.commit()
         print(
@@ -171,9 +169,9 @@ def _seed_app_settings(db) -> None:
     for key, value, is_public in _DEFAULT_SETTINGS:
         try:
             db.execute(
-                """INSERT INTO app_settings (setting_key, setting_value, is_public, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (key, value, is_public, ts, ts),
+                """INSERT OR IGNORE INTO app_settings (key, value, updated_at)
+                   VALUES (?, ?, ?)""",
+                (key, value, ts),
             )
             inserted += 1
         except Exception as exc:

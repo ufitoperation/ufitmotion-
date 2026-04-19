@@ -1,11 +1,12 @@
 import os
 from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass
 class Config:
     SECRET_KEY: str
-    DATABASE_URL: str | None
+    DATABASE_URL: Optional[str]
     DB_PATH: str
     APP_ENV: str
     APP_BASE_URL: str

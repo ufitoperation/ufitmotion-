@@ -70,24 +70,24 @@ const STAT_CARD_DATA = [
   },
   {
     label: 'Students',
-    value: '1,847',
+    value: '--',
     icon: iconStudents,
     colorClass: 'accent',
-    trend: '+43 this week',
+    trend: 'Live data in Week 2',
   },
   {
     label: 'Sessions Today',
-    value: '8',
+    value: '--',
     icon: iconSessions,
     colorClass: 'success',
-    trend: '3 in progress',
+    trend: 'Live data in Week 2',
   },
   {
     label: 'Open Incidents',
-    value: '3',
+    value: '--',
     icon: iconIncidents,
     colorClass: 'error',
-    trend: '1 needs review',
+    trend: 'Live data in Week 2',
   },
 ];
 
@@ -843,134 +843,11 @@ function renderStub(title, message, iconSvg = '') {
 }
 
 function renderStudents() {
-  const rows = [
-    { name: 'Aria Thompson',   school: 'Lincoln High',    grade: '9th',  status: 'Active'   },
-    { name: 'Marcus Webb',     school: 'Westview Middle',  grade: '7th',  status: 'Active'   },
-    { name: 'Priya Nair',      school: 'Lincoln High',    grade: '11th', status: 'Inactive' },
-    { name: 'Devon Clarke',    school: 'Eastside Prep',   grade: '10th', status: 'Active'   },
-    { name: 'Sofia Reyes',     school: 'Westview Middle',  grade: '8th',  status: 'Active'   },
-  ];
-
-  const statusBadge = s => s === 'Active'
-    ? `<span class="badge badge-green">${s}</span>`
-    : `<span class="badge badge-gray">${s}</span>`;
-
-  const tableRows = rows.map(r => `
-    <tr>
-      <td><strong>${escapeHtml(r.name)}</strong></td>
-      <td>${escapeHtml(r.school)}</td>
-      <td>${escapeHtml(r.grade)}</td>
-      <td>${statusBadge(r.status)}</td>
-      <td>
-        <div class="td-actions">
-          <button class="btn btn-ghost btn-sm" type="button">View</button>
-        </div>
-      </td>
-    </tr>
-  `).join('');
-
-  return `
-    <div class="card-header" style="margin-bottom:20px;">
-      <div>
-        <div class="text-h2">Students</div>
-        <div class="text-caption">Manage student records across all schools</div>
-      </div>
-      <button class="btn btn-primary btn-sm" type="button">+ Add Student</button>
-    </div>
-
-    <div class="card" style="padding:0;overflow:hidden;">
-      <div class="table-container">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>School</th>
-              <th>Grade</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${tableRows}
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <div style="margin-top:16px;text-align:center;">
-      <span class="text-caption">Showing 5 of 1,847 students — full pagination coming in Week 2</span>
-    </div>
-  `;
+  return renderStub('Students', 'Student records and enrollment management is coming in Week 2.', iconStudents());
 }
 
 function renderIncidents() {
-  const incidents = [
-    { id: 'INC-001', student: 'Marcus Webb',  type: 'Injury',   severity: 'Low',    date: 'Apr 17', status: 'Open'     },
-    { id: 'INC-002', student: 'Aria Thompson', type: 'Behavior', severity: 'Medium', date: 'Apr 16', status: 'Reviewed' },
-    { id: 'INC-003', student: 'Devon Clarke',  type: 'Injury',   severity: 'High',   date: 'Apr 15', status: 'Open'     },
-  ];
-
-  const severityBadge = s => {
-    if (s === 'High')   return `<span class="badge badge-red">${s}</span>`;
-    if (s === 'Medium') return `<span class="badge badge-yellow">${s}</span>`;
-    return `<span class="badge badge-gray">${s}</span>`;
-  };
-
-  const statusBadge = s => s === 'Open'
-    ? `<span class="badge badge-blue">${s}</span>`
-    : `<span class="badge badge-green">${s}</span>`;
-
-  const rows = incidents.map(r => `
-    <tr>
-      <td><code style="font-size:12px;color:var(--color-text-secondary);">${r.id}</code></td>
-      <td><strong>${escapeHtml(r.student)}</strong></td>
-      <td>${escapeHtml(r.type)}</td>
-      <td>${severityBadge(r.severity)}</td>
-      <td>${statusBadge(r.status)}</td>
-      <td>${escapeHtml(r.date)}</td>
-      <td>
-        <div class="td-actions">
-          <button class="btn btn-ghost btn-sm" type="button">View</button>
-        </div>
-      </td>
-    </tr>
-  `).join('');
-
-  return `
-    <div class="card-header" style="margin-bottom:20px;">
-      <div>
-        <div class="text-h2">Incidents</div>
-        <div class="text-caption">Track and resolve student incidents</div>
-      </div>
-      <button class="btn btn-danger btn-sm" type="button">+ Log Incident</button>
-    </div>
-
-    <div class="alert alert-warning" style="margin-bottom:16px;">
-      <span class="alert-icon">${iconIncidents()}</span>
-      <span class="alert-body">
-        <strong>3 open incidents</strong> require attention — 1 is high severity.
-      </span>
-    </div>
-
-    <div class="card" style="padding:0;overflow:hidden;">
-      <div class="table-container">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Student</th>
-              <th>Type</th>
-              <th>Severity</th>
-              <th>Status</th>
-              <th>Date</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
-    </div>
-  `;
+  return renderStub('Incidents', 'Incident reporting and tracking is coming in Week 2.', iconIncidents());
 }
 
 function renderSettings() {

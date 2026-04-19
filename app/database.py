@@ -18,6 +18,7 @@ same object is reused throughout a request and properly torn down in teardown.
 import re
 import sqlite3
 import os
+from typing import Optional
 from flask import g
 
 # ---------------------------------------------------------------------------
@@ -157,18 +158,18 @@ def _maybe_add_returning(sql: str) -> str:
         "assessment_windows": "window_id",
         "assessments": "assessment_id",
         "assessment_scores": "score_id",
-        "behavior_observations": "observation_id",
-        "eod_reports": "report_id",
+        "behavior_observations": "behavior_observation_id",
+        "eod_reports": "eod_id",
         "incident_reports": "incident_id",
-        "coach_observations": "observation_id",
+        "coach_observations": "coach_observation_id",
         "school_reports": "report_id",
-        "student_skill_summary": "summary_id",
-        "student_domain_summary": "summary_id",
-        "student_overall_summary": "summary_id",
+        "student_skill_summary": "student_skill_summary_id",
+        "student_domain_summary": "student_domain_summary_id",
+        "student_overall_summary": "student_overall_summary_id",
         "notifications": "notification_id",
         "role_permissions": "permission_id",
         "audit_log": "log_id",
-        "app_settings": "setting_id",
+        "app_settings": "key",
     }
     pk = pk_map.get(table, "id")
     return f"{stripped} RETURNING {pk}"
@@ -402,7 +403,7 @@ def _open_postgres(database_url: str) -> PostgresConnection:
         )
 
     dsns = _supabase_pooler_dsns(database_url)
-    last_error: Exception | None = None
+    last_error: Optional[Exception] = None
     for dsn in dsns:
         try:
             conn = psycopg.connect(dsn, autocommit=False)
