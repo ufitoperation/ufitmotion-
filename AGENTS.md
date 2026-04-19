@@ -29,10 +29,14 @@ Work proceeds in four phases. Phases are not optional — you cannot start Phase
 
 | Feature Type | Additional Step |
 |---|---|
+| Any new feature | `spec-writer` produces spec first; implementation waits for spec approval |
 | Auth routes, login, session, role checks | Invoke `security-reviewer` after implementation, before commit |
 | Any database query or migration | Use `database-migrations` skill; verify RLS scope |
-| New API endpoint | Add to route registry in `docs/api.md` after implementation |
+| New API endpoint | `api-design` skill validates naming + response shape; add to `docs/api.md` |
 | Role-permission logic | Document in `docs/roles.md`; security-reviewer required |
+| Any Python file changed | `python-reviewer` runs after code-reviewer |
+| Any UI screen built | `accessibility-reviewer` runs before screen is marked complete |
+| Any new feature with tests missing | `tdd-guide` runs before implementation code is written |
 
 **Output:** Working Flask routes, models, and services. No frontend yet.
 
@@ -62,10 +66,14 @@ Work proceeds in four phases. Phases are not optional — you cannot start Phase
 |---|---|---|
 | architect | opus | New tables, schema changes, architectural decisions |
 | planner | opus | Feature planning, implementation breakdown |
+| spec-writer | sonnet | Before any feature implementation — converts fuzzy requirements to verifiable specs |
 | ui-designer | sonnet | New screens, component design, visual polish |
 | design-system-architect | sonnet | Design tokens, DESIGN.md updates |
 | code-reviewer | sonnet | After completing any feature, before commit |
+| python-reviewer | sonnet | After any Python file changes — idiomatic review, type hints, Flask patterns |
 | security-reviewer | sonnet | Auth changes, RLS policy changes, any user data handling |
+| tdd-guide | sonnet | Before writing any feature code — write tests first |
+| accessibility-reviewer | sonnet | After any UI screen is built — WCAG 2.1 AA + mobile/outdoor usability |
 | doc-updater | sonnet | After schema changes, update migration README |
 
 ---
@@ -111,3 +119,29 @@ Work proceeds in four phases. Phases are not optional — you cannot start Phase
 - Runs after any schema change
 - Updates: `docs/schema.md`, migration README, `docs/api.md` if endpoints changed
 - Keeps `docs/roles.md` current with any role-permission changes
+
+### spec-writer
+- Produces a 7-property spec (Complete, Consistent, Verifiable, Bounded, Traceable, Prioritized, Unambiguous) before any feature implementation
+- Writes BDD Given/When/Then acceptance criteria for every key behavior
+- Output lives in `docs/specs/` — one file per feature
+- Implementation does NOT begin until spec is approved
+
+### python-reviewer
+- Runs on all `.py` file changes
+- Checks: PEP 8, type hints, Pythonic idioms, Flask-specific patterns (request context, blueprint structure, g object), parameterized queries, no f-string SQL
+- Flags any issues the generic code-reviewer would miss (e.g., implicit string concatenation in SQL, bare `except:`, mutable default args)
+
+### tdd-guide
+- Runs before implementation code is written for any new feature
+- Produces test file skeletons in `tests/` before routes/models are implemented
+- Enforces Red-Green-Refactor cycle: failing test → passing implementation → refactor
+- Minimum coverage target: 80% on all new code
+
+### accessibility-reviewer
+- Runs after any UI screen or component is built — required before marking screen complete
+- Checks WCAG 2.1 AA compliance AND Ufit-specific mobile constraints:
+  - Minimum 44×44px touch targets (coaches using one hand)
+  - High contrast ratios for outdoor use (bright sunlight)
+  - No hover-only interactions (mobile/touchscreen)
+  - Form completion possible without keyboard (coach using phone)
+- Outdoor-specific: color must communicate meaning even in direct sunlight glare
