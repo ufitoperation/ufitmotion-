@@ -21,11 +21,16 @@ from werkzeug.security import generate_password_hash
 
 def init_db() -> None:
     """Initialize the database schema and seed required default data."""
-    from app.database import get_db
+    from app.database import get_db, ensure_column
 
     db = get_db()
     try:
         _run_migration(db)
+        # Patch existing databases missing columns added after initial migration.
+        ensure_column(db, "schools", "region_id", "INTEGER DEFAULT NULL")
+        ensure_column(db, "schools", "city", "TEXT DEFAULT NULL")
+        ensure_column(db, "schools", "state", "TEXT DEFAULT NULL")
+        ensure_column(db, "schools", "zip_code", "TEXT DEFAULT NULL")
         _seed_default_admin(db)
         _seed_app_settings(db)
         print("Database initialized.", flush=True)
@@ -95,15 +100,16 @@ def _find_migration_file(filename: str = "001_initial_schema.sql") -> Optional[s
 def _seed_default_admin(db) -> None:
     """
     Create a default admin account if no admin or ceo user exists.
+    Skipped in production — use POST /api/auth/setup-admin to create the first account.
 
-    Default credentials:
+    Default credentials (development only):
       email:    admin@ufit.com
       password: admin123
-      role:     admin
-
-    These MUST be changed immediately after first login in any environment
-    other than local development.
     """
+    env = os.environ.get("APP_ENV", "development")
+    if env == "production":
+        return
+
     try:
         existing = db.execute(
             "SELECT user_id FROM users WHERE role IN ('ceo', 'admin') AND deleted_at IS NULL LIMIT 1"
@@ -129,8 +135,7 @@ def _seed_default_admin(db) -> None:
         )
         db.commit()
         print(
-            "[seeds] Default admin created: admin@ufit.com / admin123 "
-            "— CHANGE THIS PASSWORD IMMEDIATELY.",
+            "[seeds] Dev admin created: admin@ufit.com / admin123 — development only.",
             flush=True,
         )
     except Exception as exc:

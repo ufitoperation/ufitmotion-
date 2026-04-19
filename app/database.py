@@ -224,6 +224,8 @@ class _PGCursor:
 
     def __init__(self, cur):
         self._cur = cur
+        self._lastrowid_fetched = False
+        self._cached_lastrow = None
 
     @property
     def rowcount(self):
@@ -231,16 +233,16 @@ class _PGCursor:
 
     @property
     def lastrowid(self):
-        """Return the id from a RETURNING clause, if present."""
-        try:
-            row = self._cur.fetchone()
-            if row:
-                return row[0]
-        except Exception:
-            pass
-        return None
+        """Return the id from a RETURNING clause, if present. Cached after first call."""
+        if not self._lastrowid_fetched:
+            row = self._cur.fetchone()  # consumes the cursor — don't also call fetchone()
+            self._cached_lastrow = row[0] if row else None
+            self._lastrowid_fetched = True
+        return self._cached_lastrow
 
     def fetchone(self):
+        if self._lastrowid_fetched:
+            return None  # cursor already consumed by lastrowid
         row = self._cur.fetchone()
         if row is None:
             return None
@@ -436,6 +438,9 @@ def _open_sqlite(db_path: str) -> _SQLiteConnection:
 # Helper: safe ALTER TABLE ADD COLUMN IF NOT EXISTS (SQLite compat)
 # ---------------------------------------------------------------------------
 
+_SAFE_IDENTIFIER = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+
 def ensure_column(conn, table: str, column: str, column_def: str) -> None:
     """
     Add `column` to `table` with `column_def` if it doesn't already exist.
@@ -445,6 +450,9 @@ def ensure_column(conn, table: str, column: str, column_def: str) -> None:
     Usage:
         ensure_column(db, "users", "avatar_url", "TEXT DEFAULT NULL")
     """
+    if not _SAFE_IDENTIFIER.match(table) or not _SAFE_IDENTIFIER.match(column):
+        raise ValueError(f"Invalid identifier in ensure_column: table={table!r} column={column!r}")
+
     database_url = os.environ.get("DATABASE_URL")
     is_postgres = bool(database_url)
 

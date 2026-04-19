@@ -19,6 +19,8 @@ Route inventory:
   GET        /api/dashboard
 """
 
+from datetime import date, timedelta
+
 from flask import Blueprint, jsonify, request
 
 from app.auth import admin_required, current_user
@@ -242,30 +244,90 @@ def dashboard():
       - sessions: sessions logged in the last 30 days
       - open_incidents: unresolved incident reports
     """
+    user = current_user()
     db = get_db()
     try:
-        schools_count = (db.execute(
-            "SELECT COUNT(*) AS cnt FROM schools WHERE active_status = TRUE AND deleted_at IS NULL"
-        ).fetchone() or {}).get("cnt", 0)
+        thirty_days_ago = (date.today() - timedelta(days=30)).isoformat()
 
-        students_count = (db.execute(
-            "SELECT COUNT(*) AS cnt FROM students WHERE active_status = TRUE AND deleted_at IS NULL"
-        ).fetchone() or {}).get("cnt", 0)
+        # CEO sees all orgs; admin is scoped to their own org.
+        org_id = None
+        if user and user.get("role") == "admin":
+            school_id = user.get("school_id")
+            if school_id:
+                org_row = db.execute(
+                    "SELECT organization_id FROM schools WHERE school_id = ?",
+                    (school_id,),
+                ).fetchone()
+                org_id = org_row["organization_id"] if org_row else None
 
-        coaches_count = (db.execute(
-            """SELECT COUNT(*) AS cnt FROM users
-               WHERE role IN ('head_coach', 'assistant_coach', 'site_coordinator', 'coach_overseer')
-               AND active_status = TRUE AND deleted_at IS NULL"""
-        ).fetchone() or {}).get("cnt", 0)
+        if org_id:
+            schools_count = (db.execute(
+                """SELECT COUNT(*) AS cnt FROM schools
+                   WHERE active_status = TRUE AND deleted_at IS NULL AND organization_id = ?""",
+                (org_id,),
+            ).fetchone() or {}).get("cnt", 0)
 
-        sessions_count = (db.execute(
-            """SELECT COUNT(*) AS cnt FROM sessions
-               WHERE session_date >= DATE('now', '-30 days')""",
-        ).fetchone() or {}).get("cnt", 0)
+            students_count = (db.execute(
+                """SELECT COUNT(*) AS cnt FROM students s
+                   JOIN schools sc ON sc.school_id = s.school_id
+                   WHERE s.active_status = TRUE AND s.deleted_at IS NULL
+                     AND sc.organization_id = ?""",
+                (org_id,),
+            ).fetchone() or {}).get("cnt", 0)
 
-        open_incidents = (db.execute(
-            "SELECT COUNT(*) AS cnt FROM incident_reports WHERE status NOT IN ('resolved', 'closed')"
-        ).fetchone() or {}).get("cnt", 0)
+            coaches_count = (db.execute(
+                """SELECT COUNT(*) AS cnt FROM users u
+                   JOIN staff_profiles sp ON sp.user_id = u.user_id
+                   JOIN staff_assignments sa
+                          ON sa.staff_id = sp.staff_id AND sa.active_status = TRUE
+                   JOIN schools sc ON sc.school_id = sa.school_id
+                   WHERE u.role IN ('head_coach', 'assistant_coach',
+                                    'site_coordinator', 'coach_overseer')
+                     AND u.active_status = TRUE AND u.deleted_at IS NULL
+                     AND sc.organization_id = ?""",
+                (org_id,),
+            ).fetchone() or {}).get("cnt", 0)
+
+            sessions_count = (db.execute(
+                """SELECT COUNT(*) AS cnt FROM sessions se
+                   JOIN schools sc ON sc.school_id = se.school_id
+                   WHERE se.session_date >= ? AND sc.organization_id = ?""",
+                (thirty_days_ago, org_id),
+            ).fetchone() or {}).get("cnt", 0)
+
+            open_incidents = (db.execute(
+                """SELECT COUNT(*) AS cnt FROM incident_reports ir
+                   JOIN schools sc ON sc.school_id = ir.school_id
+                   WHERE ir.status NOT IN ('resolved', 'closed')
+                     AND sc.organization_id = ?""",
+                (org_id,),
+            ).fetchone() or {}).get("cnt", 0)
+
+        else:
+            # CEO or admin with no school assignment: global counts.
+            schools_count = (db.execute(
+                "SELECT COUNT(*) AS cnt FROM schools WHERE active_status = TRUE AND deleted_at IS NULL"
+            ).fetchone() or {}).get("cnt", 0)
+
+            students_count = (db.execute(
+                "SELECT COUNT(*) AS cnt FROM students WHERE active_status = TRUE AND deleted_at IS NULL"
+            ).fetchone() or {}).get("cnt", 0)
+
+            coaches_count = (db.execute(
+                """SELECT COUNT(*) AS cnt FROM users
+                   WHERE role IN ('head_coach', 'assistant_coach',
+                                  'site_coordinator', 'coach_overseer')
+                     AND active_status = TRUE AND deleted_at IS NULL"""
+            ).fetchone() or {}).get("cnt", 0)
+
+            sessions_count = (db.execute(
+                "SELECT COUNT(*) AS cnt FROM sessions WHERE session_date >= ?",
+                (thirty_days_ago,),
+            ).fetchone() or {}).get("cnt", 0)
+
+            open_incidents = (db.execute(
+                "SELECT COUNT(*) AS cnt FROM incident_reports WHERE status NOT IN ('resolved', 'closed')"
+            ).fetchone() or {}).get("cnt", 0)
 
         return jsonify({
             "ok": True,
@@ -277,5 +339,7 @@ def dashboard():
                 "open_incidents": open_incidents,
             },
         })
+    except Exception:
+        return jsonify({"error": "Unable to fetch dashboard data."}), 500
     finally:
         db.close()

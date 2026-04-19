@@ -43,11 +43,11 @@ def bootstrap():
         ).fetchall()
         schools = [serialize_school(r) for r in school_rows]
 
-        # App settings — public key/value pairs.
+        # App settings — all key/value pairs.
         setting_rows = db.execute(
-            "SELECT setting_key, setting_value FROM app_settings WHERE is_public = TRUE"
+            "SELECT key, value FROM app_settings"
         ).fetchall()
-        app_settings = {r["setting_key"]: r["setting_value"] for r in setting_rows}
+        app_settings = {r["key"]: r["value"] for r in setting_rows}
 
         return jsonify({
             "ok": True,
@@ -55,6 +55,8 @@ def bootstrap():
             "schools": schools,
             "app_settings": app_settings,
         })
+    except Exception:
+        return jsonify({"error": "Bootstrap failed. Please refresh."}), 500
     finally:
         db.close()
 
@@ -90,6 +92,8 @@ def get_notifications():
             "notifications": rows,
             "unread_count": len(rows),
         })
+    except Exception:
+        return jsonify({"error": "Unable to fetch notifications."}), 500
     finally:
         db.close()
 

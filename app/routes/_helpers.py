@@ -5,7 +5,10 @@ All helpers are pure or near-pure functions with no side effects beyond
 database writes (audit). Import these into any route module that needs them.
 """
 
-from datetime import datetime, timezone
+import json
+import sys
+from datetime import datetime, date, timezone
+from decimal import Decimal
 from typing import Optional
 from flask import request
 
@@ -131,10 +134,15 @@ def audit(
     old_values   : snapshot before change (UPDATE / DELETE), or None
     new_values   : snapshot after change (INSERT / UPDATE), or None
     """
-    import json
+    def _json_default(obj):
+        if isinstance(obj, (datetime, date)):
+            return obj.isoformat()
+        if isinstance(obj, Decimal):
+            return float(obj)
+        return str(obj)
 
-    old_json = json.dumps(old_values) if old_values is not None else None
-    new_json = json.dumps(new_values) if new_values is not None else None
+    old_json = json.dumps(old_values, default=_json_default) if old_values is not None else None
+    new_json = json.dumps(new_values, default=_json_default) if new_values is not None else None
 
     try:
         connection.execute(
@@ -145,9 +153,9 @@ def audit(
         )
         # Commit is intentionally NOT called here — the caller controls the
         # transaction so that the audit entry and the main write are atomic.
-    except Exception as exc:  # noqa: BLE001
-        # Audit failures must never break the main request flow,
-        # but must always be logged — silent gaps violate FERPA §99.2(b).
-        import sys
+    except Exception as exc:
+        # Log to stderr and re-raise — a missing audit entry is a FERPA §99.2(b)
+        # violation, so the calling route must handle this failure explicitly.
         print(f"AUDIT FAILURE [{action} {table_name}:{record_id}]: {exc}",
               file=sys.stderr, flush=True)
+        raise

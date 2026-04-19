@@ -24,9 +24,13 @@ CREATE TABLE IF NOT EXISTS regions (
 CREATE TABLE IF NOT EXISTS schools (
     school_id INTEGER PRIMARY KEY AUTOINCREMENT,
     organization_id INTEGER NOT NULL REFERENCES organizations(organization_id) ON DELETE CASCADE,
+    region_id INTEGER REFERENCES regions(region_id) ON DELETE SET NULL,
     school_name TEXT NOT NULL,
     school_type TEXT NOT NULL DEFAULT 'elementary',
     address TEXT,
+    city TEXT,
+    state TEXT,
+    zip_code TEXT,
     principal_name TEXT,
     principal_email TEXT,
     assistant_principal_name TEXT,
@@ -425,12 +429,14 @@ CREATE TABLE IF NOT EXISTS student_overall_summary (
 
 CREATE TABLE IF NOT EXISTS notifications (
     notification_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    recipient_user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
-    type TEXT NOT NULL DEFAULT 'system',
-    reference_table TEXT,
-    reference_id INTEGER,
-    message TEXT NOT NULL,
+    user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    title TEXT,
+    body TEXT NOT NULL DEFAULT '',
+    notification_type TEXT NOT NULL DEFAULT 'system',
+    related_table TEXT,
+    related_id INTEGER,
     is_read INTEGER NOT NULL DEFAULT 0,
+    read_at TEXT DEFAULT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

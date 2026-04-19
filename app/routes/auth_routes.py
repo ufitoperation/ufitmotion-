@@ -22,6 +22,9 @@ from app.routes._helpers import audit, now_utc, parse_json, serialize_user
 
 auth_bp = Blueprint("auth", __name__)
 
+# Pre-computed hash for constant-time "user not found" path — prevents timing attacks.
+_TIMING_HASH = generate_password_hash("constant_timing_dummy_ufit", method="pbkdf2:sha256")
+
 # ---------------------------------------------------------------------------
 # Portal → allowed roles mapping
 # ---------------------------------------------------------------------------
@@ -60,33 +63,48 @@ def login():
 
     db = get_db()
     try:
-        row = db.execute(
-            """SELECT u.user_id, u.role, u.first_name, u.last_name, u.email,
-                      u.password_hash, u.active_status, u.auth_uid,
-                      sp.staff_id, sp.position_title,
-                      s.school_id, s.school_name
-               FROM users u
-               LEFT JOIN staff_profiles sp ON sp.user_id = u.user_id
-               LEFT JOIN staff_assignments sa
-                      ON sa.staff_id = sp.staff_id AND sa.active_status = TRUE
-               LEFT JOIN schools s ON s.school_id = sa.school_id
-               WHERE u.email = ? AND u.deleted_at IS NULL""",
-            (email,),
-        ).fetchone()
+        try:
+            row = db.execute(
+                """SELECT u.user_id, u.role, u.first_name, u.last_name, u.email,
+                          u.password_hash, u.active_status, u.auth_uid,
+                          sp.staff_id, sp.position_title,
+                          s.school_id, s.school_name
+                   FROM users u
+                   LEFT JOIN staff_profiles sp ON sp.user_id = u.user_id
+                   LEFT JOIN staff_assignments sa
+                          ON sa.staff_id = sp.staff_id AND sa.active_status = TRUE
+                   LEFT JOIN schools s ON s.school_id = sa.school_id
+                   WHERE u.email = ? AND u.deleted_at IS NULL""",
+                (email,),
+            ).fetchone()
+        except Exception:
+            return jsonify({"error": "Login unavailable. Please try again."}), 500
 
         # Constant-time "no such user" path — still run check_password_hash to
         # prevent timing attacks.
         if row is None:
-            check_password_hash("$dummy$", password)
+            check_password_hash(_TIMING_HASH, password)
+            audit(db, None, "LOGIN_FAILED", "users", None,
+                  new_values={"email": email, "reason": "user_not_found", "ip": request.remote_addr})
+            db.commit()
             return jsonify({"error": "Invalid email or password."}), 401
 
         if not check_password_hash(row["password_hash"], password):
+            audit(db, row["user_id"], "LOGIN_FAILED", "users", row["user_id"],
+                  new_values={"reason": "invalid_password", "ip": request.remote_addr})
+            db.commit()
             return jsonify({"error": "Invalid email or password."}), 401
 
         if not row["active_status"]:
+            audit(db, row["user_id"], "LOGIN_FAILED", "users", row["user_id"],
+                  new_values={"reason": "account_deactivated", "ip": request.remote_addr})
+            db.commit()
             return jsonify({"error": "This account has been deactivated. Contact your administrator."}), 403
 
         if row["role"] not in allowed_roles:
+            audit(db, row["user_id"], "LOGIN_FAILED", "users", row["user_id"],
+                  new_values={"reason": "wrong_portal", "portal": portal, "ip": request.remote_addr})
+            db.commit()
             return jsonify({"error": "You do not have access to this portal."}), 403
 
         session.clear()
@@ -143,8 +161,8 @@ def setup_admin():
         if not all([first_name, last_name, email, password]):
             return jsonify({"error": "first_name, last_name, email, and password are required."}), 400
 
-        if role not in ("ceo", "admin"):
-            return jsonify({"error": "role must be 'ceo' or 'admin'."}), 400
+        if role != "admin":
+            return jsonify({"error": "role must be 'admin'. CEO accounts are created by an existing admin."}), 400
 
         if len(password) < 8:
             return jsonify({"error": "Password must be at least 8 characters."}), 400

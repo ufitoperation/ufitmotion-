@@ -13,8 +13,7 @@ The catch-all deliberately does NOT match /api/* to avoid swallowing
 legitimate 404s on typo'd API routes.
 """
 
-import os
-from flask import Blueprint, render_template, send_from_directory, current_app
+from flask import Blueprint, jsonify, render_template
 
 pages_bp = Blueprint("pages", __name__)
 
@@ -48,7 +47,6 @@ def catch_all(path: str):
     # this guard is for any edge-cases where a bare path slips through.
     if path.startswith("api/"):
         # API routes that fall through to here genuinely don't exist — 404.
-        from flask import jsonify
         return jsonify({"error": "API endpoint not found.", "path": f"/{path}"}), 404
 
     # For all other paths, serve the SPA shell and let the JS router decide.
