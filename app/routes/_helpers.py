@@ -1,0 +1,152 @@
+"""
+_helpers.py — Shared helper functions for Ufit Motion route handlers.
+
+All helpers are pure or near-pure functions with no side effects beyond
+database writes (audit). Import these into any route module that needs them.
+"""
+
+from datetime import datetime, timezone
+from flask import request
+
+
+# ---------------------------------------------------------------------------
+# Request parsing
+# ---------------------------------------------------------------------------
+
+def parse_json() -> dict:
+    """
+    Safely parse the request body as JSON. Returns an empty dict if the body
+    is missing, not JSON, or cannot be decoded.
+    """
+    try:
+        data = request.get_json(silent=True, force=True)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+# ---------------------------------------------------------------------------
+# Timestamps
+# ---------------------------------------------------------------------------
+
+def now_utc() -> str:
+    """Return the current UTC time as an ISO 8601 string with timezone offset."""
+    return datetime.now(timezone.utc).isoformat()
+
+
+# ---------------------------------------------------------------------------
+# Row serializers
+# ---------------------------------------------------------------------------
+
+def serialize_user(row: dict) -> dict:
+    """
+    Convert a users DB row (or join result) to a safe public dict.
+    Strips password_hash and auth_uid — never send these to the client.
+    """
+    if row is None:
+        return {}
+    SAFE_FIELDS = (
+        "user_id",
+        "role",
+        "first_name",
+        "last_name",
+        "email",
+        "active_status",
+        "staff_id",
+        "position_title",
+        "school_id",
+        "school_name",
+        "created_at",
+        "updated_at",
+    )
+    return {k: row[k] for k in SAFE_FIELDS if k in row}
+
+
+def serialize_school(row: dict) -> dict:
+    """Convert a schools DB row to a public dict."""
+    if row is None:
+        return {}
+    SAFE_FIELDS = (
+        "school_id",
+        "organization_id",
+        "region_id",
+        "school_name",
+        "school_type",
+        "address",
+        "city",
+        "state",
+        "zip_code",
+        "principal_name",
+        "principal_email",
+        "active_status",
+        "created_at",
+    )
+    return {k: row[k] for k in SAFE_FIELDS if k in row}
+
+
+def serialize_student(row: dict) -> dict:
+    """
+    Convert a students DB row to a public dict.
+    Returns: student_id, first_name, last_name, grade_level, school_id.
+    """
+    if row is None:
+        return {}
+    SAFE_FIELDS = (
+        "student_id",
+        "student_first_name",
+        "student_last_name",
+        "grade_level",
+        "school_id",
+        "school_name",
+        "active_status",
+        "created_at",
+    )
+    return {k: row[k] for k in SAFE_FIELDS if k in row}
+
+
+# ---------------------------------------------------------------------------
+# Audit logging
+# ---------------------------------------------------------------------------
+
+def audit(
+    connection,
+    user_id: int | None,
+    action: str,
+    table_name: str,
+    record_id: int | None,
+    old_values: dict | None = None,
+    new_values: dict | None = None,
+) -> None:
+    """
+    Insert a row into audit_log.
+
+    Parameters
+    ----------
+    connection   : active DB connection (not closed by this function)
+    user_id      : ID of the user performing the action, or None for system ops
+    action       : verb describing the change, e.g. 'INSERT', 'UPDATE', 'DELETE'
+    table_name   : name of the affected table
+    record_id    : primary key of the affected record, or None
+    old_values   : snapshot before change (UPDATE / DELETE), or None
+    new_values   : snapshot after change (INSERT / UPDATE), or None
+    """
+    import json
+
+    old_json = json.dumps(old_values) if old_values is not None else None
+    new_json = json.dumps(new_values) if new_values is not None else None
+
+    try:
+        connection.execute(
+            """INSERT INTO audit_log
+               (user_id, action, table_name, record_id, old_values, new_values, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, action, table_name, record_id, old_json, new_json, now_utc()),
+        )
+        # Commit is intentionally NOT called here — the caller controls the
+        # transaction so that the audit entry and the main write are atomic.
+    except Exception as exc:  # noqa: BLE001
+        # Audit failures must never break the main request flow,
+        # but must always be logged — silent gaps violate FERPA §99.2(b).
+        import sys
+        print(f"AUDIT FAILURE [{action} {table_name}:{record_id}]: {exc}",
+              file=sys.stderr, flush=True)
