@@ -846,11 +846,11 @@ COMMENT ON TABLE app_settings IS
 -- ===========================================================================
 
 ALTER TABLE contracts
-    ADD CONSTRAINT IF NOT EXISTS fk_contracts_school
+    ADD CONSTRAINT fk_contracts_school
     FOREIGN KEY (school_id) REFERENCES schools (school_id) ON DELETE CASCADE;
 
 ALTER TABLE staff_assignments
-    ADD CONSTRAINT IF NOT EXISTS fk_staff_assignments_program
+    ADD CONSTRAINT fk_staff_assignments_program
     FOREIGN KEY (program_id) REFERENCES programs (program_id) ON DELETE SET NULL;
 
 
