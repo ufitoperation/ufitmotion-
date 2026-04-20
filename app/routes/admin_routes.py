@@ -31,9 +31,11 @@ from zoneinfo import ZoneInfo
 from datetime import date, timedelta
 
 from flask import Blueprint, jsonify, request
+from werkzeug.security import generate_password_hash
 
 from app.auth import admin_required, current_user, roles_required
 from app.database import get_db
+from app.hubspot import trigger_principal_sync
 from app.routes._helpers import audit, now_utc, parse_json, serialize_school, serialize_student, serialize_user
 
 _PACIFIC = ZoneInfo("America/Los_Angeles")
@@ -99,12 +101,160 @@ def list_schools():
 @admin_required
 def create_school():
     """
-    TODO: Create a new school.
-    Body: { organization_id, region_id, school_name, school_type, address,
-            city, state, zip_code, principal_name, principal_email }
-    Validate org exists, insert, audit, return created school.
+    Create a new school.
+    Body: { organization_id, school_name, school_type?, region_id?, address?,
+            city?, state?, zip_code?, principal_name?, principal_email? }
     """
-    return jsonify({"ok": True, "stub": True, "route": "POST /api/schools"}), 201
+    actor = current_user()
+    data = parse_json()
+    organization_id = data.get("organization_id")
+    school_name = (data.get("school_name") or "").strip()
+    school_type = data.get("school_type", "elementary")
+
+    if not organization_id or not school_name:
+        return jsonify({"error": "organization_id and school_name are required."}), 400
+
+    valid_types = ("elementary", "middle", "high", "k8", "other")
+    if school_type not in valid_types:
+        return jsonify({"error": f"school_type must be one of: {', '.join(valid_types)}."}), 400
+
+    db = get_db()
+    try:
+        org = db.execute(
+            """SELECT organization_id, organization_name FROM organizations
+               WHERE organization_id = ? AND deleted_at IS NULL""",
+            (organization_id,),
+        ).fetchone()
+        if not org:
+            return jsonify({"error": "Organization not found."}), 404
+
+        principal_name = (data.get("principal_name") or "").strip() or None
+        principal_email = (data.get("principal_email") or "").strip().lower() or None
+        if principal_email and ("@" not in principal_email or "." not in principal_email.split("@")[-1]):
+            return jsonify({"error": "Invalid principal_email format."}), 400
+
+        ts = now_utc()
+        cur = db.execute(
+            """INSERT INTO schools
+               (organization_id, region_id, school_name, school_type,
+                address, city, state, zip_code,
+                principal_name, principal_email, active_status, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)""",
+            (
+                organization_id, data.get("region_id"), school_name, school_type,
+                data.get("address"), data.get("city"), data.get("state"), data.get("zip_code"),
+                principal_name, principal_email, ts,
+            ),
+        )
+        school_id = cur.lastrowid
+        audit(db, actor["user_id"] if actor else None, "INSERT", "schools", school_id,
+              new_values={"school_name": school_name, "organization_id": organization_id})
+        db.commit()
+
+        school = db.execute(
+            """SELECT school_id, organization_id, region_id, school_name, school_type,
+                      address, city, state, zip_code, principal_name, principal_email,
+                      active_status, created_at
+               FROM schools WHERE school_id = ?""",
+            (school_id,),
+        ).fetchone()
+
+        # HubSpot: sync principal if email provided
+        if principal_email and principal_name:
+            parts = principal_name.split(" ", 1)
+            trigger_principal_sync(
+                email=principal_email,
+                first_name=parts[0],
+                last_name=parts[1] if len(parts) > 1 else "",
+                school_id=school_id,
+                school_name=school_name,
+                org_id=org["organization_id"],
+                org_name=org["organization_name"],
+            )
+
+        return jsonify({"ok": True, "school": serialize_school(school)}), 201
+    finally:
+        db.close()
+
+
+@admin_bp.route("/api/schools/<int:school_id>", methods=["PATCH"])
+@admin_required
+def update_school(school_id: int):
+    """
+    Update a school's principal contact info (and other mutable fields).
+    Body: any subset of { school_name, principal_name, principal_email,
+                          address, city, state, zip_code }
+    Triggers HubSpot sync if principal_email is set after the update.
+    """
+    actor = current_user()
+    data = parse_json()
+
+    mutable = ("school_name", "principal_name", "principal_email",
+               "address", "city", "state", "zip_code")
+    updates = {k: data[k] for k in mutable if k in data}
+    if not updates:
+        return jsonify({"error": "No updatable fields provided."}), 400
+
+    db = get_db()
+    try:
+        school = db.execute(
+            """SELECT s.school_id, s.organization_id, s.school_name,
+                      s.principal_name, s.principal_email,
+                      o.organization_name
+               FROM schools s
+               JOIN organizations o ON o.organization_id = s.organization_id
+               WHERE s.school_id = ? AND s.deleted_at IS NULL""",
+            (school_id,),
+        ).fetchone()
+        if not school:
+            return jsonify({"error": "School not found."}), 404
+
+        # Build UPDATE using only the validated allowlist — never interpolate untrusted input.
+        _COL_SQL = {
+            "school_name": "school_name = ?",
+            "principal_name": "principal_name = ?",
+            "principal_email": "principal_email = ?",
+            "address": "address = ?",
+            "city": "city = ?",
+            "state": "state = ?",
+            "zip_code": "zip_code = ?",
+        }
+        clauses = [_COL_SQL[k] for k in updates]
+        params = list(updates.values()) + [school_id]
+        db.execute(
+            f"UPDATE schools SET {', '.join(clauses)} WHERE school_id = ?",
+            params,
+        )
+        audit(db, actor["user_id"] if actor else None, "UPDATE", "schools", school_id,
+              old_values=dict(school), new_values=updates)
+        db.commit()
+
+        updated = db.execute(
+            """SELECT school_id, organization_id, region_id, school_name, school_type,
+                      address, city, state, zip_code, principal_name, principal_email,
+                      active_status, created_at
+               FROM schools WHERE school_id = ?""",
+            (school_id,),
+        ).fetchone()
+
+        # HubSpot sync if we now have both name and email
+        new_email = updates.get("principal_email", school["principal_email"])
+        new_name = updates.get("principal_name", school["principal_name"])
+        if new_email and new_name:
+            parts = new_name.split(" ", 1)
+            trigger_principal_sync(
+                email=new_email,
+                first_name=parts[0],
+                last_name=parts[1] if len(parts) > 1 else "",
+                school_id=school_id,
+                school_name=updated["school_name"],
+                org_id=school["organization_id"],
+                org_name=school["organization_name"],
+            )
+
+        return jsonify({"ok": True, "school": serialize_school(updated)})
+    finally:
+        db.close()
 
 
 @admin_bp.route("/api/schools/<int:school_id>", methods=["DELETE"])
@@ -138,12 +288,123 @@ def list_users():
 @admin_required
 def create_user():
     """
-    TODO: Create a new staff user account.
-    Body: { first_name, last_name, email, role, password, school_id, position_title }
-    Hash password with werkzeug, create staff_profile, optionally create staff_assignment.
-    Audit the creation. Return serialized user (no password_hash).
+    Create a new staff user account.
+    Body: { first_name, last_name, email, role, password, school_id?, position_title? }
+    Creates user row, staff_profile, and staff_assignment (if school_id provided).
+    Triggers HubSpot sync for principal role.
     """
-    return jsonify({"ok": True, "stub": True, "route": "POST /api/users"}), 201
+    actor = current_user()
+    data = parse_json()
+
+    first_name = (data.get("first_name") or "").strip()
+    last_name = (data.get("last_name") or "").strip()
+    email = (data.get("email") or "").strip().lower()
+    role = (data.get("role") or "").strip()
+    password = data.get("password") or ""
+
+    if not all([first_name, last_name, email, role, password]):
+        return jsonify({"error": "first_name, last_name, email, role, and password are required."}), 400
+
+    if "@" not in email or "." not in email.split("@")[-1]:
+        return jsonify({"error": "Invalid email format."}), 400
+
+    valid_roles = (
+        "ceo", "admin", "coach_overseer", "site_coordinator",
+        "head_coach", "assistant_coach", "principal", "school_staff",
+    )
+    if role not in valid_roles:
+        return jsonify({"error": f"role must be one of: {', '.join(valid_roles)}."}), 400
+
+    if len(password) < 8:
+        return jsonify({"error": "Password must be at least 8 characters."}), 400
+
+    school_id = data.get("school_id")
+    position_title = (data.get("position_title") or "").strip() or None
+
+    db = get_db()
+    try:
+        dup = db.execute(
+            "SELECT user_id FROM users WHERE email = ? AND deleted_at IS NULL",
+            (email,),
+        ).fetchone()
+        if dup:
+            return jsonify({"error": "An account with that email already exists."}), 409
+
+        # Validate school if provided
+        school = None
+        if school_id:
+            school = db.execute(
+                """SELECT s.school_id, s.school_name, s.organization_id,
+                          o.organization_name
+                   FROM schools s
+                   JOIN organizations o ON o.organization_id = s.organization_id
+                   WHERE s.school_id = ? AND s.deleted_at IS NULL""",
+                (school_id,),
+            ).fetchone()
+            if not school:
+                return jsonify({"error": "School not found."}), 404
+
+        ts = now_utc()
+        password_hash = generate_password_hash(password, method="pbkdf2:sha256")
+        cur = db.execute(
+            """INSERT INTO users
+               (role, first_name, last_name, email, password_hash, active_status, created_at)
+               VALUES (?, ?, ?, ?, ?, 1, ?)""",
+            (role, first_name, last_name, email, password_hash, ts),
+        )
+        new_user_id = cur.lastrowid
+
+        # Staff profile for all non-parent roles
+        staff_id = None
+        if role != "parent":
+            sp_cur = db.execute(
+                """INSERT INTO staff_profiles
+                   (user_id, position_title, status, created_at)
+                   VALUES (?, ?, 'active', ?)""",
+                (new_user_id, position_title, ts),
+            )
+            staff_id = sp_cur.lastrowid
+
+            if school_id and staff_id:
+                db.execute(
+                    """INSERT INTO staff_assignments
+                       (staff_id, school_id, assignment_role, start_date, active_status, created_at)
+                       VALUES (?, ?, ?, DATE('now'), 1, ?)""",
+                    (staff_id, school_id, role, ts),
+                )
+
+        audit(db, actor["user_id"] if actor else None, "INSERT", "users", new_user_id,
+              new_values={"role": role, "email": email, "school_id": school_id})
+        db.commit()
+
+        user = db.execute(
+            """SELECT u.user_id, u.role, u.first_name, u.last_name, u.email,
+                      u.active_status, u.created_at,
+                      sp.staff_id, sp.position_title,
+                      s.school_id, s.school_name
+               FROM users u
+               LEFT JOIN staff_profiles sp ON sp.user_id = u.user_id
+               LEFT JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status = 1
+               LEFT JOIN schools s ON s.school_id = sa.school_id
+               WHERE u.user_id = ?""",
+            (new_user_id,),
+        ).fetchone()
+
+        # HubSpot sync for principals
+        if role == "principal" and school and email:
+            trigger_principal_sync(
+                email=email,
+                first_name=first_name,
+                last_name=last_name,
+                school_id=school["school_id"],
+                school_name=school["school_name"],
+                org_id=school["organization_id"],
+                org_name=school["organization_name"],
+            )
+
+        return jsonify({"ok": True, "user": serialize_user(dict(user))}), 201
+    finally:
+        db.close()
 
 
 @admin_bp.route("/api/users/<int:user_id>", methods=["DELETE"])
@@ -752,5 +1013,100 @@ def admin_students_growth():
         })
     except Exception:
         return jsonify({"error": "Could not load student growth data — please try again or contact support."}), 500
+    finally:
+        db.close()
+
+
+# ===========================================================================
+# EOD COMPLIANCE ALERTS
+# ===========================================================================
+
+@admin_bp.route("/api/admin/eod-alerts", methods=["POST"])
+@roles_required("ceo", "admin", "coach_overseer")
+def trigger_eod_alerts():
+    """
+    Trigger EOD compliance notifications for coaches who had sessions today
+    but have not yet submitted an EOD report.
+
+    Intended to be called at 20:00 Pacific by a scheduler (cron/Railway).
+    Safe to call multiple times — idempotent per coach per calendar day.
+
+    Returns:
+      { ok, alerts_sent, skipped_already_alerted, coaches_flagged: [{staff_id, coach_name}] }
+    """
+    now = _now_pacific()
+    today = now.date().isoformat()
+
+    db = get_db()
+    try:
+        # Find coaches who had a session today but no EOD submitted today.
+        missing_rows = db.execute(
+            """SELECT DISTINCT sp.staff_id,
+                      u.user_id,
+                      u.first_name || ' ' || u.last_name AS coach_name
+               FROM sessions ses
+               JOIN session_staff ss ON ss.session_id = ses.session_id
+               JOIN staff_profiles sp ON sp.staff_id = ss.staff_id
+               JOIN users u ON u.user_id = sp.user_id
+               WHERE ses.session_date = ?
+                 AND ses.deleted_at IS NULL
+                 AND u.deleted_at IS NULL
+                 AND u.active_status = 1
+                 AND sp.staff_id NOT IN (
+                   SELECT staff_id FROM eod_reports
+                   WHERE report_date = ? AND deleted_at IS NULL
+                 )""",
+            (today, today),
+        ).fetchall()
+
+        alerts_sent = 0
+        skipped = 0
+        coaches_flagged = []
+
+        for row in missing_rows:
+            staff_id = row["staff_id"]
+            user_id = row["user_id"]
+            coach_name = row["coach_name"]
+
+            # Idempotency: skip if we already sent an eod_late alert today for this coach
+            existing = db.execute(
+                """SELECT notification_id FROM notifications
+                   WHERE user_id = ?
+                     AND notification_type = 'eod_late'
+                     AND related_table = 'staff_profiles'
+                     AND related_id = ?
+                     AND DATE(created_at) = ?""",
+                (user_id, staff_id, today),
+            ).fetchone()
+
+            if existing:
+                skipped += 1
+                continue
+
+            db.execute(
+                """INSERT INTO notifications
+                   (user_id, title, body, notification_type,
+                    related_table, related_id, created_at)
+                   VALUES (?, ?, ?, 'eod_late', 'staff_profiles', ?, ?)""",
+                (
+                    user_id,
+                    "EOD Report Due",
+                    f"Your End-of-Day report for {today} has not been submitted. "
+                    "Please submit it now to stay compliant.",
+                    staff_id,
+                    now_utc(),
+                ),
+            )
+            alerts_sent += 1
+            coaches_flagged.append({"staff_id": staff_id, "coach_name": coach_name})
+
+        db.commit()
+
+        return jsonify({
+            "ok": True,
+            "alerts_sent": alerts_sent,
+            "skipped_already_alerted": skipped,
+            "coaches_flagged": coaches_flagged,
+        })
     finally:
         db.close()
