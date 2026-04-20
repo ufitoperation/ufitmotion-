@@ -17,15 +17,39 @@ Route inventory:
   DELETE     /api/programs/<id>
   GET        /api/reports
   GET        /api/dashboard
+
+Phase 3A analytics routes (admin/ceo/coach_overseer):
+  GET        /api/admin/dashboard
+  GET        /api/admin/schools
+  GET        /api/admin/coaches
+  GET        /api/admin/incidents
+  GET        /api/admin/students/growth
 """
 
+import datetime
+from zoneinfo import ZoneInfo
 from datetime import date, timedelta
 
 from flask import Blueprint, jsonify, request
 
-from app.auth import admin_required, current_user
+from app.auth import admin_required, current_user, roles_required
 from app.database import get_db
 from app.routes._helpers import audit, now_utc, parse_json, serialize_school, serialize_student, serialize_user
+
+_PACIFIC = ZoneInfo("America/Los_Angeles")
+
+
+def _now_pacific() -> datetime.datetime:
+    """Return current Pacific wall-clock datetime. Monkeypatchable in tests."""
+    return datetime.datetime.now(tz=_PACIFIC)
+
+
+def _get_week_bounds() -> tuple:
+    """Return (week_start_str, week_end_str) for the current Mon–Sun Pacific week."""
+    today = _now_pacific().date()
+    week_start = today - datetime.timedelta(days=today.weekday())  # Monday
+    week_end = week_start + datetime.timedelta(days=6)             # Sunday
+    return week_start.isoformat(), week_end.isoformat()
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -341,5 +365,392 @@ def dashboard():
         })
     except Exception:
         return jsonify({"error": "Unable to fetch dashboard data."}), 500
+    finally:
+        db.close()
+
+
+# ===========================================================================
+# PHASE 3A — ADMIN ANALYTICS
+# ===========================================================================
+
+@admin_bp.route("/api/admin/dashboard", methods=["GET"])
+@roles_required("ceo", "admin", "coach_overseer")
+def admin_dashboard():
+    week_start, week_end = _get_week_bounds()
+    db = get_db()
+    try:
+        active_schools = db.execute(
+            "SELECT COUNT(*) AS cnt FROM schools WHERE active_status=1 AND deleted_at IS NULL"
+        ).fetchone()["cnt"]
+
+        active_coaches = db.execute(
+            """SELECT COUNT(*) AS cnt FROM users
+               WHERE role IN ('head_coach','assistant_coach')
+                 AND active_status=1 AND deleted_at IS NULL"""
+        ).fetchone()["cnt"]
+
+        sessions_this_week = db.execute(
+            """SELECT COUNT(*) AS cnt FROM sessions
+               WHERE session_date BETWEEN ? AND ? AND deleted_at IS NULL""",
+            (week_start, week_end),
+        ).fetchone()["cnt"]
+
+        # EOD compliance: actual / expected, capped at 1.0
+        expected_row = db.execute(
+            """SELECT COUNT(*) AS cnt FROM (
+                 SELECT DISTINCT ss.staff_id, s.session_date
+                 FROM sessions s
+                 JOIN session_staff ss ON ss.session_id = s.session_id
+                 WHERE s.session_date BETWEEN ? AND ?
+                   AND s.deleted_at IS NULL
+               )""",
+            (week_start, week_end),
+        ).fetchone()
+        expected = expected_row["cnt"] if expected_row else 0
+
+        actual_row = db.execute(
+            """SELECT COUNT(*) AS cnt FROM eod_reports
+               WHERE report_date BETWEEN ? AND ? AND deleted_at IS NULL""",
+            (week_start, week_end),
+        ).fetchone()
+        actual = actual_row["cnt"] if actual_row else 0
+
+        if expected > 0:
+            eod_compliance_rate = round(min(1.0, actual / expected), 2)
+        else:
+            eod_compliance_rate = 0.0
+
+        open_incidents = db.execute(
+            """SELECT COUNT(*) AS cnt FROM incident_reports
+               WHERE status='open' AND deleted_at IS NULL"""
+        ).fetchone()["cnt"]
+
+        return jsonify({
+            "ok": True,
+            "active_schools": active_schools,
+            "active_coaches": active_coaches,
+            "sessions_this_week": sessions_this_week,
+            "eod_compliance_rate": eod_compliance_rate,
+            "open_incidents": open_incidents,
+        })
+    except Exception:
+        return jsonify({"error": "Could not load dashboard — please try again or contact support."}), 500
+    finally:
+        db.close()
+
+
+@admin_bp.route("/api/admin/schools", methods=["GET"])
+@roles_required("ceo", "admin", "coach_overseer")
+def admin_list_schools():
+    week_start, week_end = _get_week_bounds()
+    db = get_db()
+    try:
+        rows = db.execute(
+            """SELECT
+                 s.school_id, s.organization_id, s.region_id,
+                 s.school_name, s.school_type, s.address, s.city, s.state,
+                 s.zip_code, s.principal_name, s.principal_email,
+                 s.active_status, s.created_at,
+                 (SELECT COUNT(*) FROM users u
+                  JOIN staff_profiles sp ON sp.user_id = u.user_id
+                  JOIN staff_assignments sa ON sa.staff_id = sp.staff_id
+                  WHERE sa.school_id = s.school_id
+                    AND sa.active_status = 1
+                    AND u.role IN ('head_coach','assistant_coach')
+                    AND u.active_status = 1
+                    AND u.deleted_at IS NULL
+                 ) AS coach_count,
+                 (SELECT COUNT(*) FROM sessions ses
+                  WHERE ses.school_id = s.school_id
+                    AND ses.session_date BETWEEN ? AND ?
+                    AND ses.deleted_at IS NULL
+                 ) AS session_count_this_week,
+                 (SELECT MAX(e.report_date) FROM eod_reports e
+                  WHERE e.school_id = s.school_id
+                    AND e.deleted_at IS NULL
+                 ) AS last_eod_date
+               FROM schools s
+               WHERE s.active_status = 1 AND s.deleted_at IS NULL
+               ORDER BY s.school_name ASC""",
+            (week_start, week_end),
+        ).fetchall()
+
+        schools = []
+        for r in rows:
+            school = serialize_school(r)
+            school["coach_count"] = r["coach_count"]
+            school["session_count_this_week"] = r["session_count_this_week"]
+            school["last_eod_date"] = r["last_eod_date"]
+            schools.append(school)
+
+        return jsonify({"ok": True, "schools": schools, "total": len(schools)})
+    except Exception:
+        return jsonify({"error": "Could not load schools — please try again or contact support."}), 500
+    finally:
+        db.close()
+
+
+@admin_bp.route("/api/admin/coaches", methods=["GET"])
+@roles_required("ceo", "admin", "coach_overseer")
+def admin_list_coaches():
+    week_start, week_end = _get_week_bounds()
+    db = get_db()
+    try:
+        rows = db.execute(
+            """SELECT
+                 u.user_id, u.role, u.first_name, u.last_name, u.email,
+                 u.active_status, u.created_at,
+                 sp.staff_id, sp.position_title,
+                 s.school_id, s.school_name,
+                 (SELECT COUNT(*) FROM eod_reports e
+                  WHERE e.staff_id = sp.staff_id
+                    AND e.report_date BETWEEN ? AND ?
+                    AND e.deleted_at IS NULL
+                 ) AS eod_submissions_this_week,
+                 (SELECT COUNT(*) FROM eod_reports e
+                  WHERE e.staff_id = sp.staff_id
+                    AND e.report_date BETWEEN ? AND ?
+                    AND e.submitted_on_time = 0
+                    AND e.deleted_at IS NULL
+                 ) AS late_submissions_this_week,
+                 (SELECT COUNT(*) FROM incident_reports ir
+                  WHERE ir.reported_by_staff_id = sp.staff_id
+                    AND ir.report_date BETWEEN ? AND ?
+                    AND ir.deleted_at IS NULL
+                 ) AS incidents_filed_this_week
+               FROM users u
+               LEFT JOIN staff_profiles sp ON sp.user_id = u.user_id
+               LEFT JOIN staff_assignments sa ON sa.staff_id = sp.staff_id
+                          AND sa.active_status = 1
+               LEFT JOIN schools s ON s.school_id = sa.school_id
+               WHERE u.role IN ('head_coach','assistant_coach')
+                 AND u.active_status = 1
+                 AND u.deleted_at IS NULL
+               ORDER BY u.last_name ASC, u.first_name ASC""",
+            (week_start, week_end, week_start, week_end, week_start, week_end),
+        ).fetchall()
+
+        coaches = []
+        for r in rows:
+            coach = serialize_user(r)
+            coach["eod_submissions_this_week"] = r["eod_submissions_this_week"]
+            coach["late_submissions_this_week"] = r["late_submissions_this_week"]
+            coach["incidents_filed_this_week"] = r["incidents_filed_this_week"]
+            coaches.append(coach)
+
+        return jsonify({"ok": True, "coaches": coaches, "total": len(coaches)})
+    except Exception:
+        return jsonify({"error": "Could not load coaches — please try again or contact support."}), 500
+    finally:
+        db.close()
+
+
+@admin_bp.route("/api/admin/incidents", methods=["GET"])
+@roles_required("ceo", "admin", "coach_overseer")
+def admin_incidents():
+    raw_weeks = request.args.get("weeks", "4")
+    try:
+        weeks = int(raw_weeks)
+        if not (1 <= weeks <= 12):
+            raise ValueError
+    except (ValueError, TypeError):
+        return jsonify({"error": "weeks must be an integer between 1 and 12."}), 422
+
+    week_start_str, _ = _get_week_bounds()
+    week_start_date = datetime.date.fromisoformat(week_start_str)
+    window_start = week_start_date - datetime.timedelta(weeks=weeks)
+    window_end = week_start_date - datetime.timedelta(days=1)
+    window_start_str = window_start.isoformat()
+    window_end_str = window_end.isoformat()
+
+    db = get_db()
+    try:
+        total_row = db.execute(
+            """SELECT COUNT(*) AS cnt FROM incident_reports
+               WHERE report_date BETWEEN ? AND ? AND deleted_at IS NULL""",
+            (window_start_str, window_end_str),
+        ).fetchone()
+        total = total_row["cnt"] if total_row else 0
+
+        severity_rows = db.execute(
+            """SELECT severity_level, COUNT(*) AS cnt
+               FROM incident_reports
+               WHERE report_date BETWEEN ? AND ? AND deleted_at IS NULL
+               GROUP BY severity_level
+               ORDER BY cnt DESC""",
+            (window_start_str, window_end_str),
+        ).fetchall()
+        by_severity = [{"severity_level": r["severity_level"], "count": r["cnt"]}
+                       for r in severity_rows]
+
+        school_rows = db.execute(
+            """SELECT ir.school_id, s.school_name, COUNT(*) AS cnt
+               FROM incident_reports ir
+               JOIN schools s ON s.school_id = ir.school_id
+               WHERE ir.report_date BETWEEN ? AND ? AND ir.deleted_at IS NULL
+               GROUP BY ir.school_id, s.school_name
+               ORDER BY cnt DESC""",
+            (window_start_str, window_end_str),
+        ).fetchall()
+        by_school = [{"school_id": r["school_id"], "school_name": r["school_name"], "count": r["cnt"]}
+                     for r in school_rows]
+
+        # Build week list — N entries, zero-fill missing weeks
+        week_counts = {}
+        for week_rows in db.execute(
+            """SELECT report_date, COUNT(*) AS cnt
+               FROM incident_reports
+               WHERE report_date BETWEEN ? AND ? AND deleted_at IS NULL
+               GROUP BY report_date""",
+            (window_start_str, window_end_str),
+        ).fetchall():
+            d = datetime.date.fromisoformat(week_rows["report_date"])
+            # Align to Monday of that week
+            monday = (d - datetime.timedelta(days=d.weekday())).isoformat()
+            week_counts[monday] = week_counts.get(monday, 0) + week_rows["cnt"]
+
+        by_week = []
+        for i in range(weeks):
+            w_start = (window_start + datetime.timedelta(weeks=i)).isoformat()
+            by_week.append({"week_start": w_start, "count": week_counts.get(w_start, 0)})
+
+        return jsonify({
+            "ok": True,
+            "weeks": weeks,
+            "window_start": window_start_str,
+            "window_end": window_end_str,
+            "total": total,
+            "by_severity": by_severity,
+            "by_school": by_school,
+            "by_week": by_week,
+        })
+    except Exception:
+        return jsonify({"error": "Could not load incidents — please try again or contact support."}), 500
+    finally:
+        db.close()
+
+
+@admin_bp.route("/api/admin/students/growth", methods=["GET"])
+@roles_required("ceo", "admin", "coach_overseer")
+def admin_students_growth():
+    raw_window_id = request.args.get("window_id")
+    window_id = None
+    if raw_window_id is not None:
+        try:
+            window_id = int(raw_window_id)
+            if window_id < 1:
+                raise ValueError
+        except (ValueError, TypeError):
+            return jsonify({"error": "window_id must be a positive integer."}), 400
+
+    db = get_db()
+    try:
+        # Total active students
+        total_students = db.execute(
+            "SELECT COUNT(*) AS cnt FROM students WHERE active_status=1 AND deleted_at IS NULL"
+        ).fetchone()["cnt"]
+
+        # Assessed students (with optional window filter)
+        if window_id is not None:
+            assessed_students = db.execute(
+                """SELECT COUNT(DISTINCT student_id) AS cnt
+                   FROM assessments WHERE deleted_at IS NULL AND window_id=?""",
+                (window_id,),
+            ).fetchone()["cnt"]
+        else:
+            assessed_students = db.execute(
+                "SELECT COUNT(DISTINCT student_id) AS cnt FROM assessments WHERE deleted_at IS NULL"
+            ).fetchone()["cnt"]
+
+        # by_school: all active schools, left-join assessed counts
+        school_rows = db.execute(
+            "SELECT school_id, school_name FROM schools WHERE active_status=1 AND deleted_at IS NULL ORDER BY school_name ASC"
+        ).fetchall()
+
+        if window_id is not None:
+            assessed_by_school = {
+                r["school_id"]: r["cnt"]
+                for r in db.execute(
+                    """SELECT school_id, COUNT(DISTINCT student_id) AS cnt
+                       FROM assessments WHERE deleted_at IS NULL AND window_id=?
+                       GROUP BY school_id""",
+                    (window_id,),
+                ).fetchall()
+            }
+        else:
+            assessed_by_school = {
+                r["school_id"]: r["cnt"]
+                for r in db.execute(
+                    """SELECT school_id, COUNT(DISTINCT student_id) AS cnt
+                       FROM assessments WHERE deleted_at IS NULL
+                       GROUP BY school_id"""
+                ).fetchall()
+            }
+
+        total_by_school = {
+            r["school_id"]: r["cnt"]
+            for r in db.execute(
+                """SELECT school_id, COUNT(*) AS cnt
+                   FROM students WHERE active_status=1 AND deleted_at IS NULL
+                   GROUP BY school_id"""
+            ).fetchall()
+        }
+
+        by_school = [
+            {
+                "school_id": r["school_id"],
+                "school_name": r["school_name"],
+                "assessed_count": assessed_by_school.get(r["school_id"], 0),
+                "total_students": total_by_school.get(r["school_id"], 0),
+            }
+            for r in school_rows
+        ]
+
+        # by_skill_domain — avg raw_level per domain
+        if window_id is not None:
+            domain_rows = db.execute(
+                """SELECT sd.domain_id AS skill_domain_id, sd.domain_name,
+                          ROUND(AVG(CAST(asco.raw_level AS REAL)), 2) AS avg_raw_level
+                   FROM assessment_scores asco
+                   JOIN skills sk ON sk.skill_id = asco.skill_id
+                   JOIN skill_domains sd ON sd.domain_id = sk.domain_id
+                   JOIN assessments a ON a.assessment_id = asco.assessment_id
+                   WHERE a.deleted_at IS NULL AND a.window_id = ?
+                   GROUP BY sd.domain_id, sd.domain_name
+                   ORDER BY sd.domain_name ASC""",
+                (window_id,),
+            ).fetchall()
+        else:
+            domain_rows = db.execute(
+                """SELECT sd.domain_id AS skill_domain_id, sd.domain_name,
+                          ROUND(AVG(CAST(asco.raw_level AS REAL)), 2) AS avg_raw_level
+                   FROM assessment_scores asco
+                   JOIN skills sk ON sk.skill_id = asco.skill_id
+                   JOIN skill_domains sd ON sd.domain_id = sk.domain_id
+                   JOIN assessments a ON a.assessment_id = asco.assessment_id
+                   WHERE a.deleted_at IS NULL
+                   GROUP BY sd.domain_id, sd.domain_name
+                   ORDER BY sd.domain_name ASC"""
+            ).fetchall()
+
+        by_skill_domain = [
+            {
+                "skill_domain_id": r["skill_domain_id"],
+                "domain_name": r["domain_name"],
+                "avg_raw_level": r["avg_raw_level"],
+            }
+            for r in domain_rows
+        ]
+
+        return jsonify({
+            "ok": True,
+            "window_id": window_id,
+            "assessed_students": assessed_students,
+            "total_students": total_students,
+            "by_school": by_school,
+            "by_skill_domain": by_skill_domain,
+        })
+    except Exception:
+        return jsonify({"error": "Could not load student growth data — please try again or contact support."}), 500
     finally:
         db.close()
