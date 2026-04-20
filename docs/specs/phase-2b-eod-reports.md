@@ -16,6 +16,7 @@
 | v2 | 2026-04-19 | Audit pass: 15 gaps closed — see §10 |
 | v3 | 2026-04-19 | Second audit pass: 11 gaps closed — see §10 |
 | v4 | 2026-04-20 | 3 minor gaps closed: test timezone label, GET page/per_page non-integer handling, head_coach school_id filter behavior |
+| v5 | 2026-04-20 | Full Google Form field mapping: 19 new columns added to §3.1, §3.2, §3.4, §3.5, §8; new §11 migration SQL |
 
 ---
 
@@ -37,7 +38,7 @@
 
 At the end of each coaching day, coaches submit a structured report summarizing what happened — activities completed, student engagement, any incidents, and flags for follow-up. This is the primary accountability artifact for Ufit's client schools and Ufit HQ.
 
-SOUL.md constraint: **coach can complete this in under 2 minutes on mobile.** This means minimal required fields. Every optional field is explicitly optional — the form must be completable with just 3 required text responses.
+SOUL.md constraint: **coach can complete this in under 2 minutes on mobile.** This means minimal required fields. Every optional field is explicitly optional — the form must be completable with just 4 required text responses (adding `ufit_standards_notes` to the original 3).
 
 One EOD report is submitted per coach per school per date. A coach who visits two schools in one day submits two EOD reports.
 
@@ -73,22 +74,41 @@ One EOD report is submitted per coach per school per date. A coach who visits tw
 
 **Body fields:**
 
-| Field | Type | Required | Constraints |
-|---|---|---|---|
-| `school_id` | integer | Yes | Must be within coach's scope |
-| `report_date` | string | Yes | YYYY-MM-DD. Max 7 days past, not future |
-| `activities_completed` | string | Yes | What the coach actually did. Max 2000 chars. Maps to `eod_reports.activities_completed` |
-| `student_engagement_summary` | string | Yes | Overall engagement level description. Max 1000 chars. Maps to `eod_reports.student_engagement_summary` |
-| `attendance_summary` | string | No | Notes on who was present/absent. Max 500 chars |
-| `behavior_summary` | string | No | Notable behavior events. Max 500 chars |
-| `success_story` | string | No | One win from the day. Max 500 chars |
-| `challenge_summary` | string | No | What was hard. Max 500 chars |
-| `notes` | string | No | Catch-all: equipment issues, weather, anything else. Max 1000 chars |
-| `injury_incident_flag` | boolean | No | Default `false`. Set `true` if a physical injury or safety incident occurred |
-| `followup_needed` | boolean | No | Default `false`. Auto-overridden to `true` if `injury_incident_flag = true` |
-| `principal_communication_needed` | boolean | No | Default `false` |
-| `program_id` | integer | No | Optional link to a specific program. Must be an active program at `school_id` if provided. Maps to `eod_reports.program_id`. |
-| `session_id` | integer | No | Optional link to a specific session logged today at this school. Must exist, be at `school_id`, be on `report_date`, and not be soft-deleted. |
+| Field | Type | Required | Constraints | Google Form Q# |
+|---|---|---|---|---|
+| `school_id` | integer | Yes | Must be within coach's scope | — (identity) |
+| `report_date` | string | Yes | YYYY-MM-DD. Max 7 days past, not future | — (identity) |
+| `activities_completed` | string | Yes | What the coach actually did. Max 2000 chars. Maps to `eod_reports.activities_completed` | Q21 |
+| `student_engagement_summary` | string | Yes | Overall engagement level description. Max 1000 chars. Maps to `eod_reports.student_engagement_summary` | Q23 |
+| `ufit_standards_notes` | string | Yes | Whether all coaches followed UFIT standards (engagement, professionalism, no cell phones, active supervision) and elaboration. Max 1000 chars. Maps to `eod_reports.ufit_standards_notes` | Q26 |
+| `attendance_summary` | string | No | Notes on who was present/absent. Max 500 chars | — |
+| `behavior_summary` | string | No | Notable behavior events. Max 500 chars | Q24 |
+| `success_story` | string | No | One win from the day. Max 500 chars | — |
+| `challenge_summary` | string | No | What was hard. Max 500 chars | — |
+| `notes` | string | No | Catch-all: equipment issues, weather, anything else. Max 1000 chars | — |
+| `injury_incident_flag` | boolean | No | Default `false`. Set `true` if a physical injury or safety incident occurred | Q3 |
+| `followup_needed` | boolean | No | Default `false`. Auto-overridden to `true` if `injury_incident_flag = true` | — |
+| `principal_communication_needed` | boolean | No | Default `false` | Q25 |
+| `program_id` | integer | No | Optional link to a specific program. Must be an active program at `school_id` if provided. Maps to `eod_reports.program_id`. | — |
+| `session_id` | integer | No | Optional link to a specific session logged today at this school. Must exist, be at `school_id`, be on `report_date`, and not be soft-deleted. | — |
+| `incident_report_filed` | boolean | No | Whether all incidents have been filed in the incident report link. Nullable — only relevant when `injury_incident_flag = true`. | Q4 |
+| `school_concerns` | string | No | New information, concerns, or changes with the school. Max 500 chars. | Q5 |
+| `school_concerns_resolved` | boolean | No | Whether the school concerns noted above are resolved. Nullable — only relevant when `school_concerns` is provided. | Q6 |
+| `school_concerns_notes` | string | No | How the concerns were resolved (Q7) or how Ufit can help (Q8). Max 1000 chars. | Q7 + Q8 |
+| `schedule_changes` | string | No | New information on changes with the coach's schedule or days requested off. Max 500 chars. | Q9 |
+| `coaches_clocked_in` | boolean | No | Whether all coaches clocked in and out in front of the lead coach today. Nullable. | Q10 |
+| `late_arrivals` | string | No | Names and minutes/hours late for any late arrivals today. Max 500 chars. | Q11 |
+| `coaches_in_uniform` | boolean | No | Whether all coaches were in uniform today. Nullable. | Q12 |
+| `verbal_warnings` | string | No | Description of any verbal warnings given today. Max 500 chars. | Q13 |
+| `hr_app_issues` | string | No | Team member issues using BambooHR or Ontheclock app. Max 500 chars. | Q14 |
+| `coaches_setup_ready` | boolean | No | Whether coaches were set up and ready in their areas today. Nullable. | Q15 |
+| `equipment_accounted` | boolean | No | Whether all yard equipment and materials were accounted for and stored properly. Nullable. | Q16 |
+| `transitions_orderly` | boolean | No | Whether all transitions were in lines and orderly. Nullable. | Q17 |
+| `safety_hazards` | string | No | Description of any safety hazards observed in the yard area. Max 500 chars. | Q18 |
+| `yard_supervised` | boolean | No | Whether the yard area was supervised at all times during active use. Nullable. | Q19 |
+| `curriculum_followed` | boolean | No | Whether the UFIT grade-level psychomotor curriculum was followed today. Nullable. | Q20 |
+| `equipment_requests` | string | No | Supplies or equipment needed for the yard. Max 500 chars. | Q22 |
+| `principal_communication_notes` | string | No | Details of communication with the principal or point of contact and their feedback. Max 1000 chars. | Q25 |
 
 **Example request body (minimal — 2-minute mobile completion):**
 ```json
@@ -96,7 +116,8 @@ One EOD report is submitted per coach per school per date. A coach who visits tw
   "school_id": 4,
   "report_date": "2026-04-19",
   "activities_completed": "Locomotor skills — galloping, skipping, hopping. Finished with relay races.",
-  "student_engagement_summary": "High energy. 3rd graders were very competitive on relays. K was distracted today."
+  "student_engagement_summary": "High energy. 3rd graders were very competitive on relays. K was distracted today.",
+  "ufit_standards_notes": "All coaches followed UFIT standards. High engagement throughout, no cell phone use observed."
 }
 ```
 
@@ -107,6 +128,7 @@ One EOD report is submitted per coach per school per date. A coach who visits tw
   "report_date": "2026-04-19",
   "activities_completed": "Locomotor skills — galloping, skipping, hopping. Relay races.",
   "student_engagement_summary": "High energy. Very engaged for relay races.",
+  "ufit_standards_notes": "All coaches followed UFIT standards — engaged, professional, no cell phones, active supervision throughout.",
   "attendance_summary": "28 of 30 students present. 2 absent — notes from teacher.",
   "behavior_summary": "No major issues. One student needed a 2-minute cool-down.",
   "success_story": "Jordan Rivera completed a full gallop sequence for the first time.",
@@ -114,9 +136,27 @@ One EOD report is submitted per coach per school per date. A coach who visits tw
   "notes": "Equipment: 3 hula hoops cracked. Need replacements. Weather: indoor session, no issue.",
   "injury_incident_flag": false,
   "followup_needed": false,
-  "principal_communication_needed": false,
+  "principal_communication_needed": true,
+  "principal_communication_notes": "Spoke with Principal Davis about upcoming field day. She wants to coordinate with PE curriculum.",
   "program_id": 7,
-  "session_id": 42
+  "session_id": 42,
+  "incident_report_filed": null,
+  "school_concerns": null,
+  "school_concerns_resolved": null,
+  "school_concerns_notes": null,
+  "schedule_changes": null,
+  "coaches_clocked_in": true,
+  "late_arrivals": null,
+  "coaches_in_uniform": true,
+  "verbal_warnings": null,
+  "hr_app_issues": null,
+  "coaches_setup_ready": true,
+  "equipment_accounted": true,
+  "transitions_orderly": true,
+  "safety_hazards": null,
+  "yard_supervised": true,
+  "curriculum_followed": true,
+  "equipment_requests": "3 replacement hula hoops needed."
 }
 ```
 
@@ -134,30 +174,42 @@ One EOD report is submitted per coach per school per date. A coach who visits tw
 
 6. **`student_engagement_summary` present, non-empty after stripping whitespace.** Same rule. → 400 `{"error": "Missing required field: student_engagement_summary."}`
 
-7. **String length limits.** Applied to the raw (un-stripped) value. Each string field must not exceed its max:
+7. **`ufit_standards_notes` present, non-empty after stripping whitespace.** `data.get("ufit_standards_notes", "").strip()` must be truthy. → 400 `{"error": "Missing required field: ufit_standards_notes."}`
+
+8. **String length limits.** Applied to the raw (un-stripped) value. Each string field must not exceed its max:
    - `activities_completed`: 2000
    - `student_engagement_summary`: 1000
+   - `ufit_standards_notes`: 1000
    - `attendance_summary`, `behavior_summary`, `success_story`, `challenge_summary`: 500 each
    - `notes`: 1000
-   → 400 `{"error": "Field 'activities_completed' exceeds maximum length of 2000 characters."}`
+   - `school_concerns`: 500
+   - `school_concerns_notes`: 1000
+   - `schedule_changes`: 500
+   - `late_arrivals`: 500
+   - `verbal_warnings`: 500
+   - `hr_app_issues`: 500
+   - `safety_hazards`: 500
+   - `equipment_requests`: 500
+   - `principal_communication_notes`: 1000
+   → 400 `{"error": "Field '<field_name>' exceeds maximum length of <N> characters."}`
 
-8. **Boolean fields type check.** `injury_incident_flag`, `followup_needed`, `principal_communication_needed` — if provided, must be a Python `bool` (`isinstance(val, bool)`). JSON `true`/`false` deserialize as Python `bool`; strings like `"true"` or integers do not. → 400 `{"error": "<field> must be a boolean."}` (field-specific message)
+9. **Boolean fields type check.** `injury_incident_flag`, `followup_needed`, `principal_communication_needed`, `incident_report_filed`, `school_concerns_resolved`, `coaches_clocked_in`, `coaches_in_uniform`, `coaches_setup_ready`, `equipment_accounted`, `transitions_orderly`, `yard_supervised`, `curriculum_followed` — if provided and not `None`/`null`, must be a Python `bool` (`isinstance(val, bool)`). JSON `true`/`false` deserialize as Python `bool`; strings like `"true"` or integers do not. JSON `null` is accepted (stored as NULL). → 400 `{"error": "<field> must be a boolean."}` (field-specific message)
 
-9. **`program_id` type check.** If provided, must be a positive integer (same pattern as `school_id`). → 400 `{"error": "program_id must be an integer."}`
+10. **`program_id` type check.** If provided, must be a positive integer (same pattern as `school_id`). → 400 `{"error": "program_id must be an integer."}`
 
-10. **`session_id` type check.** If provided, must be a positive integer. → 400 `{"error": "session_id must be a positive integer."}`
+11. **`session_id` type check.** If provided, must be a positive integer. → 400 `{"error": "session_id must be a positive integer."}`
 
-11. **Staff profile guard.** `current_user()["staff_id"]` must not be None. → 500 `{"error": "Staff profile missing for this account. Contact your administrator."}`
+12. **Staff profile guard.** `current_user()["staff_id"]` must not be None. → 500 `{"error": "Staff profile missing for this account. Contact your administrator."}`
 
-12. **School assignment guard.** For `head_coach`, `assistant_coach`, AND `coach_overseer`: `current_user()["school_id"]` must not be None. → 403 `{"error": "You have no active school assignment. Contact your administrator."}` — overseer's org is resolved from their school in rule 14; without it there is no org to check against.
+13. **School assignment guard.** For `head_coach`, `assistant_coach`, AND `coach_overseer`: `current_user()["school_id"]` must not be None. → 403 `{"error": "You have no active school assignment. Contact your administrator."}` — overseer's org is resolved from their school in rule 15; without it there is no org to check against.
 
-13. **School authorization — head_coach / assistant_coach.** `school_id` must equal `current_user()["school_id"]`. → 403 `{"error": "You are not assigned to this school."}`
+14. **School authorization — head_coach / assistant_coach.** `school_id` must equal `current_user()["school_id"]`. → 403 `{"error": "You are not assigned to this school."}`
 
-14. **School authorization — coach_overseer.** `school_id` must belong to the same `organization_id` as the overseer's school (same two-step lookup as Phase 2A §3.2 rules 12/15). → 403 `{"error": "School is not in your organization."}`
+15. **School authorization — coach_overseer.** `school_id` must belong to the same `organization_id` as the overseer's school (same two-step lookup as Phase 2A §3.2 rules 12/15). → 403 `{"error": "School is not in your organization."}`
 
-15. **`program_id` validation.** If provided: `SELECT program_id FROM programs WHERE program_id = ? AND school_id = ? AND program_status = 'active'`. If not found → 400 `{"error": "Program not found at this school."}`
+16. **`program_id` validation.** If provided: `SELECT program_id FROM programs WHERE program_id = ? AND school_id = ? AND program_status = 'active'`. If not found → 400 `{"error": "Program not found at this school."}`
 
-16. **Duplicate EOD guard.** Performed inside the DB transaction (after `get_db()`) to close the race-condition window. No DB UNIQUE constraint exists on `(staff_id, school_id, report_date)` — this guard is the sole protection. Query: `SELECT eod_id FROM eod_reports WHERE staff_id = ? AND school_id = ? AND report_date = ? AND deleted_at IS NULL LIMIT 1`. If found → 409:
+17. **Duplicate EOD guard.** Performed inside the DB transaction (after `get_db()`) to close the race-condition window. No DB UNIQUE constraint exists on `(staff_id, school_id, report_date)` — this guard is the sole protection. Query: `SELECT eod_id FROM eod_reports WHERE staff_id = ? AND school_id = ? AND report_date = ? AND deleted_at IS NULL LIMIT 1`. If found → 409:
     ```json
     {
       "error": "An EOD report for this school and date has already been submitted.",
@@ -165,7 +217,7 @@ One EOD report is submitted per coach per school per date. A coach who visits tw
     }
     ```
 
-17. **`session_id` validation.** If provided: `SELECT session_id FROM sessions WHERE session_id = ? AND school_id = ? AND session_date = ? AND deleted_at IS NULL`. If not found → 400 `{"error": "session_id does not match a session at this school on this date."}`
+18. **`session_id` validation.** If provided: `SELECT session_id FROM sessions WHERE session_id = ? AND school_id = ? AND session_date = ? AND deleted_at IS NULL`. If not found → 400 `{"error": "session_id does not match a session at this school on this date."}`
 
 ### 3.3 Business Logic (before INSERT)
 
@@ -204,7 +256,12 @@ if injury_incident_flag:
 ### 3.4 Database Write (single transaction)
 
 1. **INSERT** one row into `eod_reports`:
-   - All validated fields
+   - All validated fields including all 19 new columns:
+     `incident_report_filed`, `school_concerns`, `school_concerns_resolved`, `school_concerns_notes`,
+     `schedule_changes`, `coaches_clocked_in`, `late_arrivals`, `coaches_in_uniform`, `verbal_warnings`,
+     `hr_app_issues`, `coaches_setup_ready`, `equipment_accounted`, `transitions_orderly`, `safety_hazards`,
+     `yard_supervised`, `curriculum_followed`, `equipment_requests`, `principal_communication_notes`,
+     `ufit_standards_notes`
    - `submitted_on_time` from computation above
    - `followup_needed` from override logic above
    - `created_at = now_utc()` (captured once before INSERT, used in response)
@@ -253,16 +310,35 @@ A `serialize_eod_report()` helper must be added to `app/routes/_helpers.py` (par
     "report_date": "2026-04-19",
     "activities_completed": "Locomotor skills — galloping, skipping, hopping.",
     "student_engagement_summary": "High energy. Very engaged.",
+    "ufit_standards_notes": "All coaches followed UFIT standards throughout the session.",
     "attendance_summary": null,
     "behavior_summary": null,
     "success_story": null,
     "challenge_summary": null,
     "notes": null,
     "injury_incident_flag": false,
+    "incident_report_filed": null,
     "followup_needed": false,
     "principal_communication_needed": false,
+    "principal_communication_notes": null,
     "submitted_on_time": true,
     "session_id": null,
+    "school_concerns": null,
+    "school_concerns_resolved": null,
+    "school_concerns_notes": null,
+    "schedule_changes": null,
+    "coaches_clocked_in": null,
+    "late_arrivals": null,
+    "coaches_in_uniform": null,
+    "verbal_warnings": null,
+    "hr_app_issues": null,
+    "coaches_setup_ready": null,
+    "equipment_accounted": null,
+    "transitions_orderly": null,
+    "safety_hazards": null,
+    "yard_supervised": null,
+    "curriculum_followed": null,
+    "equipment_requests": null,
     "created_at": "2026-04-19T19:45:00+00:00"
   }
 }
@@ -270,6 +346,7 @@ A `serialize_eod_report()` helper must be added to `app/routes/_helpers.py` (par
 
 `school_name` and `coach_name` fetched via JOIN after commit (confirmation banner per SOUL.md voice). `staff_id` is returned directly from `current_user()["staff_id"]` — no extra query needed.
 `program_id` is null when not provided; if provided, returned as the integer stored.
+All 19 new fields are always present in the serialized output; they serialize as `null` when the column value is NULL.
 
 POST 201 response and GET list items use the same `serialize_eod_report()` output — both include `staff_id` and `coach_name`.
 
@@ -282,7 +359,7 @@ POST 201 response and GET list items use the same `serialize_eod_report()` outpu
 | No school assignment | 403 | `{"error": "You have no active school assignment. Contact your administrator."}` |
 | Wrong school (head/assistant) | 403 | `{"error": "You are not assigned to this school."}` |
 | School outside org (overseer) | 403 | `{"error": "School is not in your organization."}` |
-| Missing/invalid field | 400 | `{"error": "..."}` (see rules 1–8) |
+| Missing/invalid field | 400 | `{"error": "..."}` (see rules 1–11) |
 | Duplicate EOD | 409 | `{"error": "...", "existing_eod_id": 15}` |
 | Invalid session_id | 400 | `{"error": "session_id does not match a session at this school on this date."}` |
 | Missing staff_profile | 500 | `{"error": "Staff profile missing for this account. Contact your administrator."}` |
@@ -364,16 +441,35 @@ If provided by `head_coach` or `assistant_coach`, silently ignore — their scop
       "report_date": "2026-04-19",
       "activities_completed": "Locomotor skills — galloping, skipping, hopping.",
       "student_engagement_summary": "High energy. Very engaged.",
+      "ufit_standards_notes": "All coaches followed UFIT standards throughout the session.",
       "attendance_summary": null,
       "behavior_summary": null,
       "success_story": null,
       "challenge_summary": null,
       "notes": null,
       "injury_incident_flag": false,
+      "incident_report_filed": null,
       "followup_needed": false,
       "principal_communication_needed": false,
+      "principal_communication_notes": null,
       "submitted_on_time": true,
       "session_id": null,
+      "school_concerns": null,
+      "school_concerns_resolved": null,
+      "school_concerns_notes": null,
+      "schedule_changes": null,
+      "coaches_clocked_in": null,
+      "late_arrivals": null,
+      "coaches_in_uniform": null,
+      "verbal_warnings": null,
+      "hr_app_issues": null,
+      "coaches_setup_ready": null,
+      "equipment_accounted": null,
+      "transitions_orderly": null,
+      "safety_hazards": null,
+      "yard_supervised": null,
+      "curriculum_followed": null,
+      "equipment_requests": null,
       "created_at": "2026-04-19T19:45:00+00:00"
     }
   ],
@@ -426,7 +522,8 @@ When the coach POSTs {
   school_id: 4,
   report_date: "2026-04-19",
   activities_completed: "Locomotor skills",
-  student_engagement_summary: "High energy"
+  student_engagement_summary: "High energy",
+  ufit_standards_notes: "All coaches met UFIT standards."
 }
 Then the response is 201
 And eod_reports has one new row
@@ -434,6 +531,7 @@ And audit_log has one INSERT row for table_name='eod_reports'
 And both inserts share one commit (no partial write on failure)
 And the response body includes eod_id, school_name, staff_id, coach_name, submitted_on_time
 And attendance_summary, behavior_summary, success_story, challenge_summary, notes, program_id are null
+And all 19 new fields are present in the response and are null
 ```
 
 ### 5.2 POST — submitted_on_time = true (before 20:00 Pacific)
@@ -570,6 +668,7 @@ When head_coach_A GETs /api/eod-reports
 Then the response is 200
 And eod_id=7 is in the response
 And the item has school_name, coach_name, submitted_on_time, program_id fields
+And all 19 new fields are present in the serialized item
 ```
 
 ### 5.16 GET — head_coach does NOT see other coaches' reports
@@ -651,7 +750,7 @@ Then the response is 401
 
 | Dimension | Constraint | Trade-off |
 |---|---|---|
-| **Speed** | Coach completes EOD in under 2 minutes | Only 3 required fields; all others optional |
+| **Speed** | Coach completes EOD in under 2 minutes | Only 4 required fields; all others optional |
 | **Accuracy** | Date policy: no future, max 7 days past | Same rationale as Phase 2A sessions |
 | **Accountability** | `submitted_on_time` computed server-side | Coach cannot self-report timeliness |
 | **Safety** | `injury_incident_flag = true` → `followup_needed = true` (non-overridable) | Coach cannot forget to flag injury follow-up |
@@ -665,7 +764,7 @@ Then the response is 401
 `tests/test_eod_reports.py` must cover at minimum:
 
 **POST tests:**
-- `test_create_eod_minimal_success` — 201, only required fields, nullable fields null in response
+- `test_create_eod_minimal_success` — 201, only required fields, nullable fields null in response, all 19 new fields present and null
 - `test_create_eod_full_success` — 201, all fields provided and saved
 - `test_create_eod_submitted_on_time_true` — before 20:00 Pacific
 - `test_create_eod_submitted_on_time_false_after_deadline` — after 20:00 UTC
@@ -680,19 +779,25 @@ Then the response is 401
 - `test_create_eod_past_8_days` — 400
 - `test_create_eod_missing_activities_completed` — 400
 - `test_create_eod_missing_student_engagement_summary` — 400
+- `test_create_eod_missing_ufit_standards_notes` — 400 (`ufit_standards_notes` is required)
+- `test_create_eod_ufit_standards_notes_too_long` — 400 (1001-char string rejected)
 - `test_create_eod_field_too_long` — 400
 - `test_create_eod_invalid_session_id` — 400
-- `test_create_eod_boolean_field_wrong_type` — 400 (string "true" rejected)
+- `test_create_eod_boolean_field_wrong_type` — 400 (string "true" rejected for existing boolean fields)
+- `test_create_eod_new_boolean_fields_wrong_type` — 400 (string "true" rejected for new boolean fields, e.g. `coaches_clocked_in`)
+- `test_create_eod_new_text_fields_too_long` — 400 (e.g. `schedule_changes` > 500 chars rejected)
+- `test_create_eod_all_new_fields_saved` — 201, all 19 new fields present in response with correct values as submitted
 - `test_create_eod_whitespace_only_activities` — 400 (strip check)
+- `test_create_eod_whitespace_only_ufit_standards_notes` — 400 (strip check for new required field)
 - `test_create_eod_program_id_valid` — 201, program_id in response
 - `test_create_eod_program_id_wrong_school` — 400 (program not at school)
 - `test_create_eod_session_id_deleted_session` — 400 (soft-deleted session rejected)
-- `test_create_eod_overseer_no_school_assignment` — 403 (rule 12 now covers overseer)
+- `test_create_eod_overseer_no_school_assignment` — 403 (rule 13 now covers overseer)
 - `test_create_eod_submitted_on_time_true_after_midnight_utc` — true (18:00 Pacific = 01:00 UTC next day)
 - `test_create_eod_unauthenticated` — 401
 
 **GET tests:**
-- `test_list_eod_head_coach_sees_own_reports` — positive: own reports returned with all fields
+- `test_list_eod_head_coach_sees_own_reports` — positive: own reports returned with all fields including 19 new fields
 - `test_list_eod_head_coach_own_only` — negative: other coaches' reports excluded
 - `test_list_eod_site_coordinator_region_scope` — region included, out-of-region excluded
 - `test_list_eod_overseer_org_scope` — org-wide, no cross-org
@@ -754,3 +859,103 @@ To approve: respond "Spec approved — proceed to tdd-guide for Phase 2B."
 | 24 | Full request body example missing `program_id` | Added `"program_id": 7` to full example |
 | 25 | BDD 5.1 missing atomicity assertion (2 inserts, 1 commit) | Added "both inserts share one commit" assertion |
 | 26 | head_coach GET: historical reports at prior schools not addressed | §4.2 now states only current school reports returned; 2 new test cases added |
+
+### v4 — 3 gaps closed
+
+| # | Gap | Resolution |
+|---|---|---|
+| 27 | Test `test_create_eod_submitted_on_time_false_after_deadline` had label "UTC" — deadline is Pacific | Renamed to `_after_deadline` (timezone-neutral label) |
+| 28 | GET `page`/`per_page` non-integer handling not specified | §4.4 error table updated: "not a valid integer" triggers 400 for both params |
+| 29 | `head_coach` GET `school_id` filter behavior not specified | §4.2 now states: silently ignore if provided by head_coach/assistant_coach |
+
+### v5 — Full Google Form field mapping (19 new columns)
+
+| # | Gap | Resolution |
+|---|---|---|
+| 30 | Spec only covered ~5 of the 26 Google Form questions coaches fill out | Mapped all 26 questions to DB columns; identified 19 new columns |
+| 31 | `ufit_standards_notes` (Q26) missing — marked required on the form | Added as 4th required field with same validation pattern as `activities_completed` |
+| 32 | `incident_report_filed` (Q4) missing | Added as BOOLEAN NULL optional field |
+| 33 | `school_concerns` / `school_concerns_resolved` / `school_concerns_notes` (Q5–Q8) missing | Added all three fields; Q7+Q8 combined into single `school_concerns_notes` text field |
+| 34 | `schedule_changes` (Q9) missing | Added as TEXT NULL optional field |
+| 35 | `coaches_clocked_in` (Q10) missing | Added as BOOLEAN NULL optional field |
+| 36 | `late_arrivals` (Q11) missing | Added as TEXT NULL optional field |
+| 37 | `coaches_in_uniform` (Q12) missing | Added as BOOLEAN NULL optional field |
+| 38 | `verbal_warnings` (Q13) missing | Added as TEXT NULL optional field |
+| 39 | `hr_app_issues` (Q14) missing | Added as TEXT NULL optional field |
+| 40 | `coaches_setup_ready` (Q15) missing | Added as BOOLEAN NULL optional field |
+| 41 | `equipment_accounted` (Q16) missing | Added as BOOLEAN NULL optional field |
+| 42 | `transitions_orderly` (Q17) missing | Added as BOOLEAN NULL optional field |
+| 43 | `safety_hazards` (Q18) missing | Added as TEXT NULL optional field |
+| 44 | `yard_supervised` (Q19) missing | Added as BOOLEAN NULL optional field |
+| 45 | `curriculum_followed` (Q20) missing | Added as BOOLEAN NULL optional field |
+| 46 | `equipment_requests` (Q22) missing | Added as TEXT NULL optional field |
+| 47 | `principal_communication_notes` (Q25) missing — only the boolean flag existed | Added as TEXT NULL optional field alongside existing `principal_communication_needed` boolean |
+| 48 | §3.1 field table had no Google Form Q# mapping column | Added Q# column to §3.1 table for traceability |
+| 49 | §3.2 boolean validation rule did not list new boolean fields | Rule 9 updated to enumerate all 12 boolean fields |
+| 50 | §3.2 string length table did not include new text fields | Rule 8 updated with all new text fields and their max lengths |
+| 51 | §3.4 INSERT did not enumerate new columns | §3.4 now lists all 19 new columns by name |
+| 52 | §3.5 serialize_eod_report() response shape did not include new fields | Response shape updated; all 19 new fields serialize as null when NULL |
+| 53 | §4.3 GET response shape did not include new fields | Response shape updated to match §3.5 |
+| 54 | §8 test skeleton missing tests for new fields | 4 new test cases added: missing_ufit_standards_notes, ufit_standards_notes_too_long, new_boolean_fields_wrong_type, new_text_fields_too_long, all_new_fields_saved |
+| 55 | No migration SQL for the 19 new columns | New §11 added with exact SQL for `003_add_eod_report_fields.sql` |
+
+---
+
+## 11. Schema Migration
+
+**File:** `migrations/003_add_eod_report_fields.sql`
+
+Migration number is `003` because `002` is reserved for the `sessions.deleted_at` migration from the handoff.
+
+```sql
+-- 003_add_eod_report_fields.sql
+-- Adds 19 new columns to eod_reports to cover all 26 Google Form questions.
+-- All new columns are nullable (DEFAULT NULL) so existing rows are unaffected.
+
+ALTER TABLE eod_reports ADD COLUMN incident_report_filed BOOLEAN DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN school_concerns TEXT DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN school_concerns_resolved BOOLEAN DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN school_concerns_notes TEXT DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN schedule_changes TEXT DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN coaches_clocked_in BOOLEAN DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN late_arrivals TEXT DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN coaches_in_uniform BOOLEAN DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN verbal_warnings TEXT DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN hr_app_issues TEXT DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN coaches_setup_ready BOOLEAN DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN equipment_accounted BOOLEAN DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN transitions_orderly BOOLEAN DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN safety_hazards TEXT DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN yard_supervised BOOLEAN DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN curriculum_followed BOOLEAN DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN equipment_requests TEXT DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN principal_communication_notes TEXT DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN ufit_standards_notes TEXT DEFAULT NULL;
+```
+
+**Note on `ufit_standards_notes` nullability in migration vs. application layer:**
+The column is added as `DEFAULT NULL` to allow the migration to run without disrupting existing rows. The NOT NULL constraint is enforced at the application layer (validation rule 7) for all new submissions. If a DB-level constraint is desired after backfilling, a follow-up migration may add `ALTER TABLE eod_reports ALTER COLUMN ufit_standards_notes SET NOT NULL;` once all legacy rows have been populated.
+
+**Rollback:**
+```sql
+-- Rollback 003_add_eod_report_fields.sql
+ALTER TABLE eod_reports DROP COLUMN IF EXISTS incident_report_filed;
+ALTER TABLE eod_reports DROP COLUMN IF EXISTS school_concerns;
+ALTER TABLE eod_reports DROP COLUMN IF EXISTS school_concerns_resolved;
+ALTER TABLE eod_reports DROP COLUMN IF EXISTS school_concerns_notes;
+ALTER TABLE eod_reports DROP COLUMN IF EXISTS schedule_changes;
+ALTER TABLE eod_reports DROP COLUMN IF EXISTS coaches_clocked_in;
+ALTER TABLE eod_reports DROP COLUMN IF EXISTS late_arrivals;
+ALTER TABLE eod_reports DROP COLUMN IF EXISTS coaches_in_uniform;
+ALTER TABLE eod_reports DROP COLUMN IF EXISTS verbal_warnings;
+ALTER TABLE eod_reports DROP COLUMN IF EXISTS hr_app_issues;
+ALTER TABLE eod_reports DROP COLUMN IF EXISTS coaches_setup_ready;
+ALTER TABLE eod_reports DROP COLUMN IF EXISTS equipment_accounted;
+ALTER TABLE eod_reports DROP COLUMN IF EXISTS transitions_orderly;
+ALTER TABLE eod_reports DROP COLUMN IF EXISTS safety_hazards;
+ALTER TABLE eod_reports DROP COLUMN IF EXISTS yard_supervised;
+ALTER TABLE eod_reports DROP COLUMN IF EXISTS curriculum_followed;
+ALTER TABLE eod_reports DROP COLUMN IF EXISTS equipment_requests;
+ALTER TABLE eod_reports DROP COLUMN IF EXISTS principal_communication_notes;
+ALTER TABLE eod_reports DROP COLUMN IF EXISTS ufit_standards_notes;
+```

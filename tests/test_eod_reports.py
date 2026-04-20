@@ -48,12 +48,13 @@ def _json(resp):
 
 
 def _minimal_body(school_id):
-    """Minimal valid POST body — only the three required fields."""
+    """Minimal valid POST body — only the four required fields."""
     return {
         "school_id": school_id,
         "report_date": TODAY.isoformat(),
         "activities_completed": "Locomotor skills — galloping, skipping, hopping.",
         "student_engagement_summary": "High energy. 3rd graders very engaged.",
+        "ufit_standards_notes": "All coaches engaged, professional, no cell phones.",
     }
 
 
@@ -157,6 +158,7 @@ class TestCreateEodReport:
             "report_date": TODAY.isoformat(),
             "activities_completed": "Locomotor skills.",
             "student_engagement_summary": "High energy.",
+            "ufit_standards_notes": "All coaches met UFIT standards today.",
             "attendance_summary": "28 of 30 present.",
             "behavior_summary": "No major issues.",
             "success_story": "Jordan completed gallop sequence.",
@@ -167,6 +169,11 @@ class TestCreateEodReport:
             "principal_communication_needed": True,
             "program_id": program_id,
             "session_id": session_id,
+            "coaches_clocked_in": True,
+            "coaches_in_uniform": True,
+            "curriculum_followed": True,
+            "principal_communication_notes": "Principal happy with progress.",
+            "equipment_requests": "Need 2 new jump ropes.",
         }
 
         with authenticated_client(coach["user_id"]) as c:
@@ -622,6 +629,7 @@ class TestCreateEodReport:
         raw = (
             f'{{"school_id": {school_id}, "report_date": "{TODAY.isoformat()}", '
             f'"activities_completed": "Test", "student_engagement_summary": "Test", '
+            f'"ufit_standards_notes": "All standards met.", '
             f'"injury_incident_flag": "true"}}'
         )
         with authenticated_client(coach["user_id"]) as c:
@@ -765,6 +773,7 @@ class TestCreateEodReport:
                 "report_date": TODAY.isoformat(),
                 "activities_completed": "Test.",
                 "student_engagement_summary": "Test.",
+                "ufit_standards_notes": "All standards met.",
             })
 
         assert resp.status_code == 403
@@ -782,6 +791,181 @@ class TestCreateEodReport:
         })
         assert resp.status_code == 401
         assert _json(resp)["error"] == "Authentication required."
+
+    def test_create_eod_missing_ufit_standards_notes(
+        self,
+        authenticated_client,
+        make_org,
+        make_region,
+        make_school,
+        make_user_with_staff,
+        monkeypatch,
+    ):
+        """Missing ufit_standards_notes (required field, Q26) — 400."""
+        org_id = make_org()
+        region_id = make_region()
+        school_id = make_school(org_id, region_id=region_id)
+        coach = make_user_with_staff(role="head_coach", school_id=school_id)
+
+        monkeypatch.setattr("app.routes.coach_routes._get_today", lambda: TODAY)
+
+        body = _minimal_body(school_id)
+        del body["ufit_standards_notes"]
+        with authenticated_client(coach["user_id"]) as c:
+            resp = _post_json(c, body)
+
+        assert resp.status_code == 400
+        assert _json(resp)["error"] == "Missing required field: ufit_standards_notes."
+
+    def test_create_eod_ufit_standards_notes_whitespace_only(
+        self,
+        authenticated_client,
+        make_org,
+        make_region,
+        make_school,
+        make_user_with_staff,
+        monkeypatch,
+    ):
+        """ufit_standards_notes with only whitespace fails the strip check — 400."""
+        org_id = make_org()
+        region_id = make_region()
+        school_id = make_school(org_id, region_id=region_id)
+        coach = make_user_with_staff(role="head_coach", school_id=school_id)
+
+        monkeypatch.setattr("app.routes.coach_routes._get_today", lambda: TODAY)
+
+        with authenticated_client(coach["user_id"]) as c:
+            resp = _post_json(c, {**_minimal_body(school_id), "ufit_standards_notes": "   "})
+
+        assert resp.status_code == 400
+        assert _json(resp)["error"] == "Missing required field: ufit_standards_notes."
+
+    def test_create_eod_ufit_standards_notes_too_long(
+        self,
+        authenticated_client,
+        make_org,
+        make_region,
+        make_school,
+        make_user_with_staff,
+        monkeypatch,
+    ):
+        """ufit_standards_notes of 1001 chars exceeds the 1000-char limit — 400."""
+        org_id = make_org()
+        region_id = make_region()
+        school_id = make_school(org_id, region_id=region_id)
+        coach = make_user_with_staff(role="head_coach", school_id=school_id)
+
+        monkeypatch.setattr("app.routes.coach_routes._get_today", lambda: TODAY)
+
+        with authenticated_client(coach["user_id"]) as c:
+            resp = _post_json(c, {**_minimal_body(school_id), "ufit_standards_notes": "x" * 1001})
+
+        assert resp.status_code == 400
+        assert _json(resp)["error"] == (
+            "Field 'ufit_standards_notes' exceeds maximum length of 1000 characters."
+        )
+
+    def test_create_eod_new_boolean_fields_wrong_type(
+        self,
+        authenticated_client,
+        make_org,
+        make_region,
+        make_school,
+        make_user_with_staff,
+        monkeypatch,
+    ):
+        """Nullable boolean field sent as a string — 400."""
+        org_id = make_org()
+        region_id = make_region()
+        school_id = make_school(org_id, region_id=region_id)
+        coach = make_user_with_staff(role="head_coach", school_id=school_id)
+
+        monkeypatch.setattr("app.routes.coach_routes._get_today", lambda: TODAY)
+
+        with authenticated_client(coach["user_id"]) as c:
+            resp = _post_json(c, {**_minimal_body(school_id), "coaches_clocked_in": "yes"})
+
+        assert resp.status_code == 400
+        assert _json(resp)["error"] == "coaches_clocked_in must be a boolean."
+
+    def test_create_eod_new_text_fields_too_long(
+        self,
+        authenticated_client,
+        make_org,
+        make_region,
+        make_school,
+        make_user_with_staff,
+        monkeypatch,
+    ):
+        """Optional text field (late_arrivals) exceeding 500-char limit — 400."""
+        org_id = make_org()
+        region_id = make_region()
+        school_id = make_school(org_id, region_id=region_id)
+        coach = make_user_with_staff(role="head_coach", school_id=school_id)
+
+        monkeypatch.setattr("app.routes.coach_routes._get_today", lambda: TODAY)
+
+        with authenticated_client(coach["user_id"]) as c:
+            resp = _post_json(c, {**_minimal_body(school_id), "late_arrivals": "x" * 501})
+
+        assert resp.status_code == 400
+        assert _json(resp)["error"] == (
+            "Field 'late_arrivals' exceeds maximum length of 500 characters."
+        )
+
+    def test_create_eod_all_new_fields_saved(
+        self,
+        authenticated_client,
+        make_org,
+        make_region,
+        make_school,
+        make_user_with_staff,
+        monkeypatch,
+    ):
+        """All 19 new v5 fields are saved and returned in the 201 response."""
+        org_id = make_org()
+        region_id = make_region()
+        school_id = make_school(org_id, region_id=region_id)
+        coach = make_user_with_staff(role="head_coach", school_id=school_id)
+
+        _freeze_pacific(monkeypatch, datetime.datetime(2026, 4, 19, 15, 0, 0, tzinfo=_PACIFIC_TZ))
+
+        body = {
+            **_minimal_body(school_id),
+            "incident_report_filed": True,
+            "school_concerns": "New principal starting next week.",
+            "school_concerns_resolved": False,
+            "school_concerns_notes": "Will follow up with site coordinator.",
+            "schedule_changes": "Coach Torres requested Friday off.",
+            "coaches_clocked_in": True,
+            "late_arrivals": "None today.",
+            "coaches_in_uniform": True,
+            "verbal_warnings": "None issued.",
+            "hr_app_issues": "None reported.",
+            "coaches_setup_ready": True,
+            "equipment_accounted": True,
+            "transitions_orderly": True,
+            "safety_hazards": "None observed.",
+            "yard_supervised": True,
+            "curriculum_followed": True,
+            "equipment_requests": "2 new jump ropes needed.",
+            "principal_communication_notes": "Principal praised student engagement.",
+        }
+
+        with authenticated_client(coach["user_id"]) as c:
+            resp = _post_json(c, body)
+
+        assert resp.status_code == 201, f"Expected 201, got {resp.status_code}: {resp.data}"
+        eod = _json(resp)["eod_report"]
+        assert eod["incident_report_filed"] is True
+        assert eod["school_concerns"] == "New principal starting next week."
+        assert eod["school_concerns_resolved"] is False
+        assert eod["school_concerns_notes"] == "Will follow up with site coordinator."
+        assert eod["coaches_clocked_in"] is True
+        assert eod["coaches_in_uniform"] is True
+        assert eod["curriculum_followed"] is True
+        assert eod["principal_communication_notes"] == "Principal praised student engagement."
+        assert eod["ufit_standards_notes"] == "All coaches engaged, professional, no cell phones."
 
 
 # ===========================================================================

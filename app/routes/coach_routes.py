@@ -45,6 +45,16 @@ _EOD_STR_LIMITS = {
     "success_story": 500,
     "challenge_summary": 500,
     "notes": 1000,
+    "school_concerns": 1000,
+    "school_concerns_notes": 1000,
+    "schedule_changes": 500,
+    "late_arrivals": 500,
+    "verbal_warnings": 500,
+    "hr_app_issues": 500,
+    "safety_hazards": 500,
+    "equipment_requests": 500,
+    "principal_communication_notes": 1000,
+    "ufit_standards_notes": 1000,
 }
 
 _PACIFIC = ZoneInfo("America/Los_Angeles")
@@ -698,7 +708,15 @@ def list_eod_reports():
                    er.behavior_summary, er.success_story, er.challenge_summary,
                    er.notes, er.injury_incident_flag, er.followup_needed,
                    er.principal_communication_needed, er.submitted_on_time,
-                   er.session_id, er.created_at
+                   er.session_id, er.created_at,
+                   er.incident_report_filed, er.school_concerns,
+                   er.school_concerns_resolved, er.school_concerns_notes,
+                   er.schedule_changes, er.coaches_clocked_in, er.late_arrivals,
+                   er.coaches_in_uniform, er.verbal_warnings, er.hr_app_issues,
+                   er.coaches_setup_ready, er.equipment_accounted,
+                   er.transitions_orderly, er.safety_hazards, er.yard_supervised,
+                   er.curriculum_followed, er.equipment_requests,
+                   er.principal_communication_notes, er.ufit_standards_notes
             FROM eod_reports er
             JOIN schools sc ON sc.school_id = er.school_id
             LEFT JOIN staff_profiles sp ON sp.staff_id = er.staff_id
@@ -778,14 +796,29 @@ def create_eod_report():
     if not isinstance(engagement_raw, str) or not engagement_raw.strip():
         return jsonify({"error": "Missing required field: student_engagement_summary."}), 400
 
-    # Rule 7: string length limits (checked against raw values, not stripped)
+    # Rule 7: ufit_standards_notes — required, non-empty after strip (Q26)
+    ufit_standards_raw = data.get("ufit_standards_notes")
+    if not isinstance(ufit_standards_raw, str) or not ufit_standards_raw.strip():
+        return jsonify({"error": "Missing required field: ufit_standards_notes."}), 400
+
+    # Rule 8: string length limits (checked against raw values, not stripped)
     for field, limit in _EOD_STR_LIMITS.items():
         val = data.get(field)
         if val is not None and len(str(val)) > limit:
             return jsonify({"error": f"Field '{field}' exceeds maximum length of {limit} characters."}), 400
 
-    # Rule 8: boolean fields — must be actual JSON booleans (not strings or integers)
+    # Rule 9: non-nullable boolean fields — must be actual JSON booleans
     for bool_field in ("injury_incident_flag", "followup_needed", "principal_communication_needed"):
+        val = data.get(bool_field)
+        if val is not None and not isinstance(val, bool):
+            return jsonify({"error": f"{bool_field} must be a boolean."}), 400
+
+    # Nullable boolean fields — JSON null accepted (stored as NULL); non-null must be bool
+    for bool_field in (
+        "incident_report_filed", "school_concerns_resolved", "coaches_clocked_in",
+        "coaches_in_uniform", "coaches_setup_ready", "equipment_accounted",
+        "transitions_orderly", "yard_supervised", "curriculum_followed",
+    ):
         val = data.get(bool_field)
         if val is not None and not isinstance(val, bool):
             return jsonify({"error": f"{bool_field} must be a boolean."}), 400
@@ -847,6 +880,24 @@ def create_eod_report():
     success_story = data.get("success_story") or None
     challenge_summary = data.get("challenge_summary") or None
     notes = data.get("notes") or None
+    incident_report_filed = data.get("incident_report_filed")
+    school_concerns = data.get("school_concerns") or None
+    school_concerns_resolved = data.get("school_concerns_resolved")
+    school_concerns_notes = data.get("school_concerns_notes") or None
+    schedule_changes = data.get("schedule_changes") or None
+    coaches_clocked_in = data.get("coaches_clocked_in")
+    late_arrivals = data.get("late_arrivals") or None
+    coaches_in_uniform = data.get("coaches_in_uniform")
+    verbal_warnings = data.get("verbal_warnings") or None
+    hr_app_issues = data.get("hr_app_issues") or None
+    coaches_setup_ready = data.get("coaches_setup_ready")
+    equipment_accounted = data.get("equipment_accounted")
+    transitions_orderly = data.get("transitions_orderly")
+    safety_hazards = data.get("safety_hazards") or None
+    yard_supervised = data.get("yard_supervised")
+    curriculum_followed = data.get("curriculum_followed")
+    equipment_requests = data.get("equipment_requests") or None
+    principal_communication_notes = data.get("principal_communication_notes") or None
 
     db = get_db()
     try:
@@ -910,13 +961,28 @@ def create_eod_report():
                 activities_completed, student_engagement_summary, attendance_summary,
                 behavior_summary, success_story, challenge_summary, notes,
                 injury_incident_flag, followup_needed, principal_communication_needed,
-                submitted_on_time, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                submitted_on_time,
+                incident_report_filed, school_concerns, school_concerns_resolved,
+                school_concerns_notes, schedule_changes, coaches_clocked_in,
+                late_arrivals, coaches_in_uniform, verbal_warnings, hr_app_issues,
+                coaches_setup_ready, equipment_accounted, transitions_orderly,
+                safety_hazards, yard_supervised, curriculum_followed,
+                equipment_requests, principal_communication_notes, ufit_standards_notes,
+                created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (school_id, staff_id, program_id, session_id, report_date_raw,
              activities_raw, engagement_raw, attendance_summary,
              behavior_summary, success_story, challenge_summary, notes,
              injury_incident_flag, followup_needed, principal_communication_needed,
-             submitted_on_time, created_at_val),
+             submitted_on_time,
+             incident_report_filed, school_concerns, school_concerns_resolved,
+             school_concerns_notes, schedule_changes, coaches_clocked_in,
+             late_arrivals, coaches_in_uniform, verbal_warnings, hr_app_issues,
+             coaches_setup_ready, equipment_accounted, transitions_orderly,
+             safety_hazards, yard_supervised, curriculum_followed,
+             equipment_requests, principal_communication_notes, ufit_standards_raw,
+             created_at_val),
         )
         new_eod_id = cur.lastrowid
 
@@ -941,7 +1007,15 @@ def create_eod_report():
                       er.behavior_summary, er.success_story, er.challenge_summary,
                       er.notes, er.injury_incident_flag, er.followup_needed,
                       er.principal_communication_needed, er.submitted_on_time,
-                      er.session_id, er.created_at
+                      er.session_id, er.created_at,
+                      er.incident_report_filed, er.school_concerns,
+                      er.school_concerns_resolved, er.school_concerns_notes,
+                      er.schedule_changes, er.coaches_clocked_in, er.late_arrivals,
+                      er.coaches_in_uniform, er.verbal_warnings, er.hr_app_issues,
+                      er.coaches_setup_ready, er.equipment_accounted,
+                      er.transitions_orderly, er.safety_hazards, er.yard_supervised,
+                      er.curriculum_followed, er.equipment_requests,
+                      er.principal_communication_notes, er.ufit_standards_notes
                FROM eod_reports er
                JOIN schools sc ON sc.school_id = er.school_id
                LEFT JOIN staff_profiles sp ON sp.staff_id = er.staff_id

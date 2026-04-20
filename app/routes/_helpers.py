@@ -110,16 +110,30 @@ def serialize_eod_report(row: dict) -> dict:
         "program_id", "report_date", "activities_completed", "student_engagement_summary",
         "attendance_summary", "behavior_summary", "success_story", "challenge_summary",
         "notes", "session_id", "created_at",
+        "school_concerns", "school_concerns_notes", "schedule_changes",
+        "late_arrivals", "verbal_warnings", "hr_app_issues",
+        "safety_hazards", "equipment_requests",
+        "principal_communication_notes", "ufit_standards_notes",
     ):
         if field in row.keys():
             result[field] = row[field]
-    # SQLite stores booleans as 0/1 integers — convert to Python bool for JSON
+    # Non-nullable booleans — SQLite stores as 0/1; always coerce to bool
     for field in (
         "injury_incident_flag", "followup_needed",
         "principal_communication_needed", "submitted_on_time",
     ):
         if field in row.keys():
             result[field] = bool(row[field])
+    # Nullable booleans — NULL means "not answered"; preserve None instead of coercing to False
+    for field in (
+        "incident_report_filed", "school_concerns_resolved",
+        "coaches_clocked_in", "coaches_in_uniform",
+        "coaches_setup_ready", "equipment_accounted",
+        "transitions_orderly", "yard_supervised", "curriculum_followed",
+    ):
+        if field in row.keys():
+            val = row[field]
+            result[field] = bool(val) if val is not None else None
     return result
 
 
