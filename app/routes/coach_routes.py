@@ -23,7 +23,7 @@ from app.auth import coach_required, current_user
 from app.database import get_db
 from app.routes._helpers import (
     audit, now_utc, parse_json,
-    serialize_eod_report, serialize_session, serialize_student,
+    serialize_eod_report, serialize_incident, serialize_session, serialize_student,
 )
 
 coach_bp = Blueprint("coach", __name__)
@@ -964,33 +964,325 @@ def create_eod_report():
 # INCIDENTS
 # ===========================================================================
 
+_INCIDENT_TYPES = frozenset({"injury", "behavior", "property", "medical", "safety", "other"})
+_SEVERITY_LEVELS = frozenset({"low", "medium", "high", "critical"})
+_INCIDENT_STR_LIMITS = {
+    "description": 2000,
+    "immediate_action_taken": 1000,
+    "resolution_notes": 1000,
+}
+
+
 @coach_bp.route("/api/incidents", methods=["GET"])
 @coach_required
 def list_incidents():
-    """
-    TODO: Return incident reports visible to the current coach.
-    - Regular coaches: only their own reports.
-    - coach_overseer / site_coordinator: all reports at their scope.
-    Supports ?status=, ?severity=, ?school_id=, ?from=, ?to= query params.
-    """
-    return jsonify({"ok": True, "stub": True, "route": "GET /api/incidents"})
+    user = current_user()
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+
+    role = user["role"]
+    staff_id = user["staff_id"]
+    db = get_db()
+
+    # --- Pagination ---
+    page_raw = request.args.get("page", "1")
+    per_page_raw = request.args.get("per_page", "20")
+    try:
+        page = int(page_raw)
+        if page < 1:
+            raise ValueError
+    except (ValueError, TypeError):
+        return jsonify({"error": "page must be a positive integer."}), 400
+    try:
+        per_page = min(int(per_page_raw), 100)
+        if per_page < 1:
+            raise ValueError
+    except (ValueError, TypeError):
+        return jsonify({"error": "per_page must be a positive integer."}), 400
+
+    offset = (page - 1) * per_page
+
+    # --- Optional filters ---
+    from_date = request.args.get("from")
+    to_date = request.args.get("to")
+    status_filter = request.args.get("status")
+    severity_filter = request.args.get("severity")
+
+    filter_sql = ""
+    filter_params: list = []
+
+    if from_date:
+        filter_sql += " AND ir.report_date >= ?"
+        filter_params.append(from_date)
+    if to_date:
+        filter_sql += " AND ir.report_date <= ?"
+        filter_params.append(to_date)
+    if status_filter:
+        filter_sql += " AND ir.status = ?"
+        filter_params.append(status_filter)
+    if severity_filter:
+        filter_sql += " AND ir.severity_level = ?"
+        filter_params.append(severity_filter)
+
+    # --- Role scoping ---
+    if role in ("head_coach", "assistant_coach"):
+        scope_sql = "AND ir.reported_by_staff_id = ? AND ir.school_id = ?"
+        scope_params = [staff_id, user["school_id"]]
+    elif role == "site_coordinator":
+        scope_sql = (
+            "AND ir.school_id IN"
+            " (SELECT school_id FROM staff_assignments"
+            "  WHERE staff_id = ? AND active_status = 1)"
+        )
+        scope_params = [staff_id]
+    else:  # coach_overseer
+        overseer_school_id = user["school_id"]
+        if not overseer_school_id:
+            return jsonify({"error": "You have no active school assignment."}), 403
+        org_row = db.execute(
+            "SELECT organization_id FROM schools WHERE school_id = ?",
+            (overseer_school_id,),
+        ).fetchone()
+        if not org_row:
+            return jsonify({"error": "You have no active school assignment."}), 403
+        scope_sql = "AND sc.organization_id = ?"
+        scope_params = [org_row["organization_id"]]
+
+    base_join = (
+        " FROM incident_reports ir"
+        " JOIN schools sc ON sc.school_id = ir.school_id"
+        " LEFT JOIN users u ON u.user_id = ("
+        "   SELECT sp2.user_id FROM staff_profiles sp2"
+        "   WHERE sp2.staff_id = ir.reported_by_staff_id"
+        " ) AND u.deleted_at IS NULL"
+        " WHERE ir.deleted_at IS NULL"
+        f" {scope_sql}"
+        f" {filter_sql}"
+    )
+
+    count_params = scope_params + filter_params
+    total = db.execute(
+        "SELECT COUNT(*) AS cnt" + base_join,
+        count_params,
+    ).fetchone()["cnt"]
+
+    rows = db.execute(
+        "SELECT ir.incident_id, ir.school_id, sc.school_name,"
+        " ir.reported_by_staff_id AS staff_id,"
+        " (u.first_name || ' ' || u.last_name) AS coach_name,"
+        " ir.session_id, ir.student_id,"
+        " ir.report_date, ir.incident_type, ir.severity_level,"
+        " ir.description, ir.immediate_action_taken,"
+        " ir.school_notified, ir.family_notified, ir.escalated_to_supervisor,"
+        " ir.status, ir.resolution_notes, ir.created_at"
+        + base_join
+        + " ORDER BY ir.report_date DESC, ir.incident_id DESC"
+        + " LIMIT ? OFFSET ?",
+        count_params + [per_page, offset],
+    ).fetchall()
+
+    db.close()
+    return jsonify({
+        "ok": True,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "incidents": [serialize_incident(r) for r in rows],
+    })
 
 
 @coach_bp.route("/api/incidents", methods=["POST"])
 @coach_required
 def create_incident():
-    """
-    TODO: File an incident report.
-    Body: {
-      school_id, session_id (optional), student_id (optional),
-      incident_date, incident_time, severity,  # 'low' | 'medium' | 'high' | 'critical'
-      description, immediate_action_taken,
-      parent_notified, admin_notified, medical_attention_required
-    }
-    severity = 'critical' → auto-notify all admin users via notifications table.
-    Audit. Return created incident.
-    """
-    return jsonify({"ok": True, "stub": True, "route": "POST /api/incidents"}), 201
+    user = current_user()
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+
+    # Rule 1-2: only field coaches can file
+    if user["role"] in ("site_coordinator", "coach_overseer"):
+        return jsonify({"error": "Incident reports must be filed by a coach."}), 403
+
+    data = parse_json()
+    role = user["role"]
+    staff_id = user["staff_id"]
+
+    # Rule 3: school_id
+    school_id_raw = data.get("school_id")
+    if not isinstance(school_id_raw, int) or school_id_raw <= 0:
+        return jsonify({"error": "school_id is required and must be a positive integer."}), 400
+    school_id = school_id_raw
+
+    # Rule 4-6: report_date
+    report_date_raw = data.get("report_date")
+    if not isinstance(report_date_raw, str) or not report_date_raw.strip():
+        return jsonify({"error": "report_date is required in YYYY-MM-DD format."}), 400
+    try:
+        report_date = datetime.date.fromisoformat(report_date_raw.strip())
+    except ValueError:
+        return jsonify({"error": "report_date is required in YYYY-MM-DD format."}), 400
+
+    today = _get_today()
+    if report_date > today:
+        return jsonify({"error": "report_date cannot be in the future."}), 400
+    if (today - report_date).days > 7:
+        return jsonify({"error": "report_date cannot be more than 7 days in the past."}), 400
+
+    # Rule 7: incident_type
+    incident_type = data.get("incident_type")
+    if not isinstance(incident_type, str) or incident_type not in _INCIDENT_TYPES:
+        return jsonify({"error": f"incident_type must be one of: {', '.join(sorted(_INCIDENT_TYPES))}."}), 400
+
+    # Rule 8: severity_level
+    severity_level = data.get("severity_level")
+    if not isinstance(severity_level, str) or severity_level not in _SEVERITY_LEVELS:
+        return jsonify({"error": f"severity_level must be one of: {', '.join(sorted(_SEVERITY_LEVELS))}."}), 400
+
+    # Rule 9-10: description
+    description = data.get("description")
+    if not isinstance(description, str) or not description.strip():
+        return jsonify({"error": "description is required."}), 400
+    if len(description) > 2000:
+        return jsonify({"error": "description cannot exceed 2000 characters."}), 400
+
+    # Rule 11-12: immediate_action_taken
+    immediate_action = data.get("immediate_action_taken")
+    if not isinstance(immediate_action, str) or not immediate_action.strip():
+        return jsonify({"error": "immediate_action_taken is required."}), 400
+    if len(immediate_action) > 1000:
+        return jsonify({"error": "immediate_action_taken cannot exceed 1000 characters."}), 400
+
+    # Rule 13: optional text length limits
+    resolution_notes = data.get("resolution_notes")
+    if resolution_notes is not None:
+        if not isinstance(resolution_notes, str):
+            resolution_notes = str(resolution_notes)
+        if len(resolution_notes) > 1000:
+            return jsonify({"error": "resolution_notes cannot exceed 1000 characters."}), 400
+
+    # Rule 14: boolean fields
+    for bool_field in ("school_notified", "family_notified", "escalated_to_supervisor"):
+        val = data.get(bool_field)
+        if val is not None and not isinstance(val, bool):
+            return jsonify({"error": f"{bool_field} must be a boolean."}), 400
+
+    school_notified = data.get("school_notified", False)
+    family_notified = data.get("family_notified", False)
+    escalated = data.get("escalated_to_supervisor", False)
+
+    # Rule 15: school access check
+    if role in ("head_coach", "assistant_coach"):
+        if user["school_id"] != school_id:
+            return jsonify({"error": "You are not assigned to this school."}), 403
+
+    db = get_db()
+
+    # Rule 16: validate session_id
+    session_id = data.get("session_id")
+    if session_id is not None:
+        if not isinstance(session_id, int) or session_id <= 0:
+            return jsonify({"error": "session_id does not match a valid session for this school and date."}), 400
+        sess_row = db.execute(
+            "SELECT session_id FROM sessions"
+            " WHERE session_id = ? AND school_id = ? AND session_date = ? AND deleted_at IS NULL",
+            (session_id, school_id, report_date_raw),
+        ).fetchone()
+        if not sess_row:
+            return jsonify({"error": "session_id does not match a valid session for this school and date."}), 400
+
+    # Rule 17: validate student_id
+    student_id = data.get("student_id")
+    if student_id is not None:
+        if not isinstance(student_id, int) or student_id <= 0:
+            return jsonify({"error": "student_id does not belong to this school."}), 400
+        stud_row = db.execute(
+            "SELECT student_id FROM students WHERE student_id = ? AND school_id = ? AND deleted_at IS NULL",
+            (student_id, school_id),
+        ).fetchone()
+        if not stud_row:
+            return jsonify({"error": "student_id does not belong to this school."}), 400
+
+    created_at_val = now_utc()
+
+    try:
+        cur = db.execute(
+            """INSERT INTO incident_reports
+               (school_id, session_id, report_date, reported_by_staff_id,
+                student_id, incident_type, severity_level, description,
+                immediate_action_taken, school_notified, family_notified,
+                escalated_to_supervisor, status, resolution_notes, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)""",
+            (school_id, session_id, report_date_raw, staff_id,
+             student_id, incident_type, severity_level, description,
+             immediate_action, school_notified, family_notified, escalated,
+             resolution_notes, created_at_val),
+        )
+        incident_id = cur.lastrowid
+
+        # Critical incident: notify admin/ceo/overseer users in same org
+        if severity_level == "critical":
+            db.execute(
+                """INSERT INTO notifications
+                   (user_id, title, body, notification_type, related_table, related_id, created_at)
+                   SELECT DISTINCT u.user_id,
+                          'Critical Incident Filed',
+                          'A critical incident was filed at ' || sc.school_name || ' on ' || ?,
+                          'incident',
+                          'incident_reports',
+                          ?,
+                          ?
+                   FROM users u
+                   JOIN staff_profiles sp ON sp.user_id = u.user_id
+                   JOIN staff_assignments sa ON sa.staff_id = sp.staff_id
+                   JOIN schools sa_sc ON sa_sc.school_id = sa.school_id
+                   JOIN schools sc ON sc.school_id = ?
+                   WHERE u.role IN ('ceo', 'admin', 'coach_overseer')
+                     AND sa_sc.organization_id = sc.organization_id
+                     AND u.deleted_at IS NULL""",
+                (report_date_raw, incident_id, created_at_val, school_id),
+            )
+
+        audit(
+            db,
+            user["user_id"],
+            "INSERT",
+            "incident_reports",
+            incident_id,
+            None,
+            {
+                "school_id": school_id,
+                "report_date": report_date_raw,
+                "incident_type": incident_type,
+                "severity_level": severity_level,
+            },
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        db.close()
+        raise
+
+    # Fetch display row with school_name + coach_name
+    display_row = db.execute(
+        """SELECT ir.incident_id, ir.school_id, sc.school_name,
+                  ir.reported_by_staff_id AS staff_id,
+                  (u.first_name || ' ' || u.last_name) AS coach_name,
+                  ir.session_id, ir.student_id,
+                  ir.report_date, ir.incident_type, ir.severity_level,
+                  ir.description, ir.immediate_action_taken,
+                  ir.school_notified, ir.family_notified, ir.escalated_to_supervisor,
+                  ir.status, ir.resolution_notes, ir.created_at
+           FROM incident_reports ir
+           JOIN schools sc ON sc.school_id = ir.school_id
+           LEFT JOIN users u ON u.user_id = (
+             SELECT sp2.user_id FROM staff_profiles sp2
+             WHERE sp2.staff_id = ir.reported_by_staff_id
+           ) AND u.deleted_at IS NULL
+           WHERE ir.incident_id = ?""",
+        (incident_id,),
+    ).fetchone()
+    db.close()
+
+    return jsonify({"ok": True, "incident": serialize_incident(display_row)}), 201
 
 
 # ===========================================================================

@@ -123,6 +123,26 @@ def serialize_eod_report(row: dict) -> dict:
     return result
 
 
+def serialize_incident(row: dict) -> dict:
+    """Convert an incident_reports DB row (or join result) to a public dict."""
+    if row is None:
+        return {}
+    result = {}
+    for field in (
+        "incident_id", "school_id", "school_name", "staff_id", "coach_name",
+        "session_id", "student_id",
+        "report_date", "incident_type", "severity_level",
+        "description", "immediate_action_taken", "resolution_notes",
+        "status", "created_at",
+    ):
+        if field in row.keys():
+            result[field] = row[field]
+    for field in ("school_notified", "family_notified", "escalated_to_supervisor"):
+        if field in row.keys():
+            result[field] = bool(row[field])
+    return result
+
+
 def serialize_student(row: dict) -> dict:
     """
     Convert a students DB row to a public dict.

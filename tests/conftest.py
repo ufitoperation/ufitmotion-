@@ -633,6 +633,67 @@ def make_eod_report(app):
 
 
 @pytest.fixture()
+def make_incident(app):
+    """
+    Factory: create an incident_reports row directly.
+
+    Usage:
+        incident_id = make_incident(
+            school_id=4,
+            staff_id=2,
+            report_date="2026-04-20",
+        )
+
+    Returns the new incident_id (integer).
+    """
+    created_ids = []
+
+    def _make(
+        school_id,
+        staff_id,
+        report_date="2026-04-15",
+        incident_type="injury",
+        severity_level="low",
+        description="Test incident description.",
+        immediate_action_taken="Applied first aid.",
+        status="open",
+        deleted_at=None,
+    ):
+        with app.app_context():
+            from app.database import get_db
+            from app.routes._helpers import now_utc
+
+            db = get_db()
+            ts = now_utc()
+            cur = db.execute(
+                """INSERT INTO incident_reports
+                   (school_id, reported_by_staff_id, report_date, incident_type,
+                    severity_level, description, immediate_action_taken,
+                    status, created_at, deleted_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (school_id, staff_id, report_date, incident_type,
+                 severity_level, description, immediate_action_taken,
+                 status, ts, deleted_at),
+            )
+            db.commit()
+            inc_id = cur.lastrowid
+            db.close()
+
+        created_ids.append(inc_id)
+        return inc_id
+
+    yield _make
+
+    with app.app_context():
+        from app.database import get_db
+        db = get_db()
+        for inc_id in reversed(created_ids):
+            db.execute("DELETE FROM incident_reports WHERE incident_id = ?", (inc_id,))
+        db.commit()
+        db.close()
+
+
+@pytest.fixture()
 def authenticated_client(app):
     """
     Factory: return a Flask test client with the given user_id in the session.
