@@ -137,6 +137,31 @@ def serialize_eod_report(row: dict) -> dict:
     return result
 
 
+def serialize_assessment(row: dict, scores: list = None) -> dict:
+    if row is None:
+        return {}
+    result = {}
+    for field in (
+        "assessment_id", "student_id", "school_id", "school_name",
+        "window_id", "window_name", "assessed_by_staff_id", "assessor_name",
+        "assessment_date", "assessment_method", "overall_assessment_notes", "created_at",
+    ):
+        if field in row.keys():
+            result[field] = row[field]
+    result["scores"] = scores if scores is not None else []
+    return result
+
+
+def serialize_assessment_score(row: dict) -> dict:
+    if row is None:
+        return {}
+    result = {}
+    for field in ("score_id", "skill_id", "skill_name", "raw_level", "normalized_score"):
+        if field in row.keys():
+            result[field] = row[field]
+    return result
+
+
 def serialize_incident(row: dict) -> dict:
     """Convert an incident_reports DB row (or join result) to a public dict."""
     if row is None:

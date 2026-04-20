@@ -23,6 +23,7 @@ from app.auth import coach_required, current_user
 from app.database import get_db
 from app.routes._helpers import (
     audit, now_utc, parse_json,
+    serialize_assessment, serialize_assessment_score,
     serialize_eod_report, serialize_incident, serialize_session, serialize_student,
 )
 
@@ -1366,30 +1367,428 @@ def create_incident():
 @coach_bp.route("/api/assessments", methods=["GET"])
 @coach_required
 def list_assessments():
-    """
-    TODO: Return assessment records for students at the coach's school.
-    Supports ?student_id=, ?window_id=, ?domain_id=, ?school_id= query params.
-    Returns skill scores, domain averages, benchmark comparisons.
-    """
-    return jsonify({"ok": True, "stub": True, "route": "GET /api/assessments"})
+    user = current_user()
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+
+    role = user["role"]
+    staff_id = user.get("staff_id")
+
+    raw_page = request.args.get("page", "1")
+    raw_per_page = request.args.get("per_page", "20")
+    try:
+        page = int(raw_page)
+        if page < 1:
+            raise ValueError
+    except (ValueError, TypeError):
+        return jsonify({"error": "page must be a positive integer."}), 400
+    try:
+        per_page = int(raw_per_page)
+        if not (1 <= per_page <= 100):
+            raise ValueError
+    except (ValueError, TypeError):
+        return jsonify({"error": "per_page must be between 1 and 100."}), 400
+
+    student_id_filter = request.args.get("student_id")
+    if student_id_filter is not None:
+        try:
+            student_id_filter = int(student_id_filter)
+            if student_id_filter <= 0:
+                raise ValueError
+        except (ValueError, TypeError):
+            return jsonify({"error": "student_id must be a positive integer."}), 400
+
+    window_id_filter = request.args.get("window_id")
+    if window_id_filter is not None:
+        try:
+            window_id_filter = int(window_id_filter)
+            if window_id_filter <= 0:
+                raise ValueError
+        except (ValueError, TypeError):
+            return jsonify({"error": "window_id must be a positive integer."}), 400
+
+    school_id_filter = request.args.get("school_id")
+    if school_id_filter is not None:
+        try:
+            school_id_filter = int(school_id_filter)
+            if school_id_filter <= 0:
+                raise ValueError
+        except (ValueError, TypeError):
+            return jsonify({"error": "school_id must be a positive integer."}), 400
+
+    db = get_db()
+    try:
+        if role in ("head_coach", "assistant_coach"):
+            user_school_id = user.get("school_id")
+            if not user_school_id:
+                return jsonify({
+                    "error": "You have no active school assignment. Contact your administrator."
+                }), 403
+            scope_sql = "AND a.school_id = ?"
+            scope_params = [user_school_id]
+
+        elif role == "site_coordinator":
+            if not staff_id:
+                return jsonify({
+                    "error": "You have no active region assignment. Contact your administrator."
+                }), 403
+            scope_sql = (
+                "AND a.school_id IN"
+                " (SELECT school_id FROM staff_assignments"
+                "  WHERE staff_id = ? AND active_status = 1)"
+            )
+            scope_params = [staff_id]
+            if school_id_filter is not None:
+                assigned = db.execute(
+                    "SELECT 1 FROM staff_assignments"
+                    " WHERE staff_id = ? AND school_id = ? AND active_status = 1",
+                    (staff_id, school_id_filter),
+                ).fetchone()
+                if not assigned:
+                    return jsonify({"error": "You do not have access to this school."}), 403
+
+        elif role == "coach_overseer":
+            overseer_school_id = user.get("school_id")
+            if not overseer_school_id:
+                return jsonify({
+                    "error": "You have no active school assignment. Contact your administrator."
+                }), 403
+            org_row = db.execute(
+                "SELECT organization_id FROM schools WHERE school_id = ?",
+                (overseer_school_id,),
+            ).fetchone()
+            org_id = org_row["organization_id"] if org_row else None
+            if not org_id:
+                return jsonify({
+                    "error": "You have no active school assignment. Contact your administrator."
+                }), 403
+            scope_sql = "AND sc.organization_id = ?"
+            scope_params = [org_id]
+            if school_id_filter is not None:
+                filter_sc = db.execute(
+                    "SELECT organization_id FROM schools WHERE school_id = ?",
+                    (school_id_filter,),
+                ).fetchone()
+                if not filter_sc or filter_sc["organization_id"] != org_id:
+                    return jsonify({"error": "You do not have access to this school."}), 403
+
+        else:
+            scope_sql = "AND 1=0"
+            scope_params = []
+
+        school_filter_sql = ""
+        school_filter_params: list = []
+        if school_id_filter is not None and role not in ("head_coach", "assistant_coach"):
+            school_filter_sql = "AND a.school_id = ?"
+            school_filter_params = [school_id_filter]
+
+        student_filter_sql = ""
+        student_filter_params: list = []
+        if student_id_filter is not None:
+            student_filter_sql = "AND a.student_id = ?"
+            student_filter_params = [student_id_filter]
+
+        window_filter_sql = ""
+        window_filter_params: list = []
+        if window_id_filter is not None:
+            window_filter_sql = "AND a.window_id = ?"
+            window_filter_params = [window_id_filter]
+
+        count_sql = f"""
+            SELECT COUNT(*) AS cnt
+            FROM assessments a
+            JOIN schools sc ON sc.school_id = a.school_id
+            WHERE a.deleted_at IS NULL
+              {scope_sql}
+              {school_filter_sql}
+              {student_filter_sql}
+              {window_filter_sql}
+        """
+        count_params = (
+            scope_params + school_filter_params + student_filter_params + window_filter_params
+        )
+        total = db.execute(count_sql, count_params).fetchone()["cnt"]
+        pages = math.ceil(total / per_page) if total > 0 else 0
+        offset = (page - 1) * per_page
+
+        main_sql = f"""
+            SELECT a.assessment_id, a.student_id, a.school_id, sc.school_name,
+                   a.window_id, aw.window_name, a.assessed_by_staff_id,
+                   (u.first_name || ' ' || u.last_name) AS assessor_name,
+                   a.assessment_date, a.assessment_method,
+                   a.overall_assessment_notes, a.created_at
+            FROM assessments a
+            JOIN schools sc ON sc.school_id = a.school_id
+            LEFT JOIN assessment_windows aw ON aw.window_id = a.window_id
+            LEFT JOIN staff_profiles sp ON sp.staff_id = a.assessed_by_staff_id
+            LEFT JOIN users u ON u.user_id = sp.user_id AND u.deleted_at IS NULL
+            WHERE a.deleted_at IS NULL
+              {scope_sql}
+              {school_filter_sql}
+              {student_filter_sql}
+              {window_filter_sql}
+            ORDER BY a.assessment_date DESC, a.assessment_id DESC
+            LIMIT ? OFFSET ?
+        """
+        main_params = count_params + [per_page, offset]
+        rows = db.execute(main_sql, main_params).fetchall()
+
+        assessments_out = []
+        for row in rows:
+            score_rows = db.execute(
+                """SELECT s.score_id, s.skill_id, sk.skill_name, s.raw_level, s.normalized_score
+                   FROM assessment_scores s
+                   LEFT JOIN skills sk ON sk.skill_id = s.skill_id
+                   WHERE s.assessment_id = ?""",
+                (row["assessment_id"],),
+            ).fetchall()
+            assessments_out.append(
+                serialize_assessment(row, [serialize_assessment_score(sr) for sr in score_rows])
+            )
+
+        return jsonify({
+            "ok": True,
+            "assessments": assessments_out,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "pages": pages,
+        })
+
+    except Exception as exc:
+        print(f"list_assessments ERROR: {exc}", file=sys.stderr, flush=True)
+        return jsonify({"error": "Could not load assessments — please try again or contact support."}), 500
+    finally:
+        db.close()
 
 
 @coach_bp.route("/api/assessments", methods=["POST"])
 @coach_required
 def submit_assessment():
-    """
-    TODO: Submit skill assessment scores for a student.
-    Body: {
-      student_id, window_id, assessor_staff_id,
-      scores: [{ skill_id, raw_score, benchmark_id }]
-    }
-    Validate student belongs to coach's school (no cross-org access).
-    Insert into assessments + assessment_scores.
-    Trigger re-calculation of student_skill_summary, student_domain_summary,
-    student_overall_summary via summary update helper.
-    Audit. Return assessment with scores.
-    """
-    return jsonify({"ok": True, "stub": True, "route": "POST /api/assessments"}), 201
+    # Rule 1: site_coordinator blocked before body parsing
+    user = current_user()
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+    if user["role"] == "site_coordinator":
+        return jsonify({"error": "You do not have permission to submit assessments."}), 403
+
+    data = parse_json()
+
+    # Rule 2: student_id — required, positive integer
+    student_id = data.get("student_id")
+    if student_id is None:
+        return jsonify({"error": "Missing required field: student_id."}), 400
+    if not isinstance(student_id, int) or isinstance(student_id, bool) or student_id <= 0:
+        return jsonify({"error": "student_id must be a positive integer."}), 400
+
+    # Rule 3: window_id — required, positive integer
+    window_id = data.get("window_id")
+    if window_id is None:
+        return jsonify({"error": "Missing required field: window_id."}), 400
+    if not isinstance(window_id, int) or isinstance(window_id, bool) or window_id <= 0:
+        return jsonify({"error": "window_id must be a positive integer."}), 400
+
+    # Rule 4: scores — required, non-empty list
+    scores_raw = data.get("scores")
+    if scores_raw is None:
+        return jsonify({"error": "Missing required field: scores."}), 400
+    if not isinstance(scores_raw, list) or len(scores_raw) == 0:
+        return jsonify({"error": "scores must be a non-empty array."}), 400
+
+    # Rule 5: validate each score item
+    for item in scores_raw:
+        if not isinstance(item, dict):
+            return jsonify({"error": "Each score must have skill_id (integer) and raw_score (integer 1-5)."}), 400
+        sid = item.get("skill_id")
+        rs = item.get("raw_score")
+        if not isinstance(sid, int) or isinstance(sid, bool) or sid <= 0:
+            return jsonify({"error": "Each score must have skill_id (integer) and raw_score (integer 1-5)."}), 400
+        if not isinstance(rs, int) or isinstance(rs, bool) or not (1 <= rs <= 5):
+            return jsonify({"error": "Each score must have skill_id (integer) and raw_score (integer 1-5)."}), 400
+
+    # Rule 6: assessor_staff_id — optional, positive integer if provided
+    assessor_staff_id = data.get("assessor_staff_id")
+    if assessor_staff_id is not None:
+        if not isinstance(assessor_staff_id, int) or isinstance(assessor_staff_id, bool) or assessor_staff_id <= 0:
+            return jsonify({"error": "assessor_staff_id must be a positive integer."}), 400
+
+    # Rule 7: assessment_date — optional, valid date, not future, not > 7 days past
+    assessment_date_raw = data.get("assessment_date")
+    if assessment_date_raw is not None:
+        try:
+            assessment_dt = datetime.date.fromisoformat(str(assessment_date_raw))
+        except (ValueError, TypeError):
+            return jsonify({"error": "Invalid date format. Use YYYY-MM-DD."}), 400
+        today = _get_today()
+        if assessment_dt > today:
+            return jsonify({"error": "Assessment date cannot be in the future."}), 400
+        if (today - assessment_dt).days > 7:
+            return jsonify({"error": "Assessment date cannot be more than 7 days in the past."}), 400
+        assessment_date_val = assessment_date_raw
+    else:
+        assessment_date_val = _get_today().isoformat()
+
+    # Rule 8: overall_assessment_notes length
+    notes = data.get("overall_assessment_notes") or None
+    if notes is not None and len(str(notes)) > 2000:
+        return jsonify({"error": "Field 'overall_assessment_notes' exceeds maximum length of 2000 characters."}), 400
+
+    assessment_method = data.get("assessment_method") or "observational"
+
+    # Rule 9: staff profile guard
+    staff_id = user.get("staff_id")
+    if not staff_id:
+        return jsonify({
+            "error": "Staff profile missing for this account. Contact your administrator."
+        }), 500
+
+    role = user["role"]
+
+    # Rule 10: school assignment guard
+    if role in ("head_coach", "assistant_coach", "coach_overseer"):
+        if not user.get("school_id"):
+            return jsonify({
+                "error": "You have no active school assignment. Contact your administrator."
+            }), 403
+
+    if assessor_staff_id is None:
+        assessor_staff_id = staff_id
+
+    db = get_db()
+    try:
+        # Rule 11: student existence and school scope
+        student_row = db.execute(
+            "SELECT student_id, school_id FROM students"
+            " WHERE student_id = ? AND active_status = 1 AND deleted_at IS NULL",
+            (student_id,),
+        ).fetchone()
+        if not student_row:
+            return jsonify({"error": "Student not found or is not active."}), 403
+
+        student_school_id = student_row["school_id"]
+
+        if role in ("head_coach", "assistant_coach"):
+            if student_school_id != user["school_id"]:
+                return jsonify({"error": "Student does not belong to your school."}), 403
+        elif role == "coach_overseer":
+            org_row = db.execute(
+                "SELECT organization_id FROM schools WHERE school_id = ?",
+                (user["school_id"],),
+            ).fetchone()
+            org_id = org_row["organization_id"] if org_row else None
+            target_org_row = db.execute(
+                "SELECT organization_id FROM schools WHERE school_id = ?",
+                (student_school_id,),
+            ).fetchone()
+            target_org_id = target_org_row["organization_id"] if target_org_row else None
+            if org_id != target_org_id:
+                return jsonify({"error": "Student does not belong to a school in your organization."}), 403
+
+        # Rule 12: window validation
+        window_row = db.execute(
+            "SELECT window_id, school_id, status FROM assessment_windows WHERE window_id = ?",
+            (window_id,),
+        ).fetchone()
+        if not window_row:
+            return jsonify({"error": "Assessment window not found."}), 400
+        if window_row["status"] != "active":
+            return jsonify({"error": "Assessment window is not active."}), 400
+        if window_row["school_id"] != student_school_id:
+            return jsonify({"error": "Assessment window does not belong to the student's school."}), 400
+
+        # Rule 13: skill_id validation
+        for item in scores_raw:
+            skill_row = db.execute(
+                "SELECT skill_id FROM skills WHERE skill_id = ? AND active_status = 1",
+                (item["skill_id"],),
+            ).fetchone()
+            if not skill_row:
+                return jsonify({"error": f"Invalid or inactive skill_id: {item['skill_id']}."}), 400
+
+        # Rule 14: duplicate assessment guard
+        dup_row = db.execute(
+            "SELECT assessment_id FROM assessments"
+            " WHERE student_id = ? AND window_id = ? AND deleted_at IS NULL LIMIT 1",
+            (student_id, window_id),
+        ).fetchone()
+        if dup_row:
+            return jsonify({
+                "error": "An assessment for this student and window already exists.",
+                "existing_assessment_id": dup_row["assessment_id"],
+            }), 409
+
+        created_at_val = now_utc()
+        cur = db.execute(
+            """INSERT INTO assessments
+               (student_id, school_id, program_id, session_id, window_id,
+                assessed_by_staff_id, assessment_date, assessment_method,
+                overall_assessment_notes, created_at)
+               VALUES (?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?)""",
+            (student_id, student_school_id, window_id,
+             assessor_staff_id, assessment_date_val, assessment_method,
+             notes, created_at_val),
+        )
+        new_assessment_id = cur.lastrowid
+
+        for item in scores_raw:
+            db.execute(
+                """INSERT INTO assessment_scores
+                   (assessment_id, student_id, skill_id, raw_level, normalized_score,
+                    benchmark_id, observed_independence, observed_consistency,
+                    observed_accuracy, growth_flag, created_at)
+                   VALUES (?, ?, ?, ?, ?, NULL, 1, 0, 0, 0, ?)""",
+                (new_assessment_id, student_id, item["skill_id"],
+                 item["raw_score"], item["raw_score"], created_at_val),
+            )
+
+        audit(
+            db, user["user_id"], "INSERT", "assessments", new_assessment_id,
+            new_values={
+                "student_id": student_id,
+                "school_id": student_school_id,
+                "window_id": window_id,
+                "score_count": len(scores_raw),
+            },
+        )
+        db.commit()
+
+        # Post-commit: fetch for response
+        display_row = db.execute(
+            """SELECT a.assessment_id, a.student_id, a.school_id, sc.school_name,
+                      a.window_id, aw.window_name, a.assessed_by_staff_id,
+                      (u.first_name || ' ' || u.last_name) AS assessor_name,
+                      a.assessment_date, a.assessment_method,
+                      a.overall_assessment_notes, a.created_at
+               FROM assessments a
+               JOIN schools sc ON sc.school_id = a.school_id
+               LEFT JOIN assessment_windows aw ON aw.window_id = a.window_id
+               LEFT JOIN staff_profiles sp ON sp.staff_id = a.assessed_by_staff_id
+               LEFT JOIN users u ON u.user_id = sp.user_id AND u.deleted_at IS NULL
+               WHERE a.assessment_id = ?""",
+            (new_assessment_id,),
+        ).fetchone()
+
+        score_rows = db.execute(
+            """SELECT s.score_id, s.skill_id, sk.skill_name, s.raw_level, s.normalized_score
+               FROM assessment_scores s
+               LEFT JOIN skills sk ON sk.skill_id = s.skill_id
+               WHERE s.assessment_id = ?""",
+            (new_assessment_id,),
+        ).fetchall()
+
+        return jsonify({
+            "ok": True,
+            "assessment": serialize_assessment(
+                display_row, [serialize_assessment_score(sr) for sr in score_rows]
+            ),
+        }), 201
+
+    except Exception as exc:
+        db.rollback()
+        print(f"submit_assessment ERROR: {exc}", file=sys.stderr, flush=True)
+        return jsonify({"error": "Assessment could not be saved — please try again or contact support."}), 500
+    finally:
+        db.close()
 
 
 # ===========================================================================

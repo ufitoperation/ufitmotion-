@@ -694,6 +694,207 @@ def make_incident(app):
 
 
 @pytest.fixture()
+def make_skill_domain(app):
+    """
+    Factory: create a skill_domains row.
+
+    Usage:
+        domain_id = make_skill_domain(name="Physical / Psychomotor")
+
+    Returns the new domain_id (integer).
+    Note: the migration seeds three default domains; pass a unique name to avoid
+    conflicts with those rows.
+    """
+    created_ids = []
+
+    def _make(name=None, domain_type="physical_psychomotor"):
+        import time
+        unique_name = name or f"Test Domain {time.time_ns()}"
+        with app.app_context():
+            from app.database import get_db
+            from app.routes._helpers import now_utc
+            db = get_db()
+            cur = db.execute(
+                """INSERT INTO skill_domains
+                   (domain_name, domain_type, active_status, created_at)
+                   VALUES (?, ?, 1, ?)""",
+                (unique_name, domain_type, now_utc()),
+            )
+            db.commit()
+            did = cur.lastrowid
+            db.close()
+        created_ids.append(did)
+        return did
+
+    yield _make
+
+    with app.app_context():
+        from app.database import get_db
+        db = get_db()
+        for did in reversed(created_ids):
+            db.execute("DELETE FROM skill_domains WHERE domain_id = ?", (did,))
+        db.commit()
+        db.close()
+
+
+@pytest.fixture()
+def make_skill(app):
+    """
+    Factory: create a skills row.
+
+    Usage:
+        skill_id = make_skill(domain_id, name="Galloping", grade_band="K-2")
+
+    Returns the new skill_id (integer).
+    """
+    created_ids = []
+
+    def _make(domain_id, name=None, grade_band="K-2", active=True):
+        import time
+        unique_name = name or f"Test Skill {time.time_ns()}"
+        with app.app_context():
+            from app.database import get_db
+            from app.routes._helpers import now_utc
+            db = get_db()
+            cur = db.execute(
+                """INSERT INTO skills
+                   (domain_id, skill_name, grade_band, assessment_type,
+                    active_status, created_at)
+                   VALUES (?, ?, ?, 'observational', ?, ?)""",
+                (domain_id, unique_name, grade_band, 1 if active else 0, now_utc()),
+            )
+            db.commit()
+            sid = cur.lastrowid
+            db.close()
+        created_ids.append(sid)
+        return sid
+
+    yield _make
+
+    with app.app_context():
+        from app.database import get_db
+        db = get_db()
+        for sid in reversed(created_ids):
+            db.execute("DELETE FROM skills WHERE skill_id = ?", (sid,))
+        db.commit()
+        db.close()
+
+
+@pytest.fixture()
+def make_assessment_window(app):
+    """
+    Factory: create an assessment_windows row.
+
+    Usage:
+        window_id = make_assessment_window(school_id, name="Fall 2026", status="active")
+
+    Returns the new window_id (integer).
+    """
+    created_ids = []
+
+    def _make(school_id, name=None, status="active", program_id=None):
+        import time
+        unique_name = name or f"Test Window {time.time_ns()}"
+        with app.app_context():
+            from app.database import get_db
+            from app.routes._helpers import now_utc
+            db = get_db()
+            cur = db.execute(
+                """INSERT INTO assessment_windows
+                   (school_id, program_id, window_name, start_date, end_date, status, created_at)
+                   VALUES (?, ?, ?, '2026-04-01', '2026-06-30', ?, ?)""",
+                (school_id, program_id, unique_name, status, now_utc()),
+            )
+            db.commit()
+            wid = cur.lastrowid
+            db.close()
+        created_ids.append(wid)
+        return wid
+
+    yield _make
+
+    with app.app_context():
+        from app.database import get_db
+        db = get_db()
+        for wid in reversed(created_ids):
+            db.execute("DELETE FROM assessment_windows WHERE window_id = ?", (wid,))
+        db.commit()
+        db.close()
+
+
+@pytest.fixture()
+def make_assessment(app):
+    """
+    Factory: create an assessments row + assessment_scores rows directly.
+
+    Usage:
+        assessment_id = make_assessment(
+            student_id=42,
+            school_id=4,
+            window_id=3,
+            staff_id=2,
+            scores=[(skill_id_1, 3), (skill_id_2, 4)],
+        )
+
+    Returns the new assessment_id (integer).
+    Each item in scores is a (skill_id, raw_level) tuple.
+    """
+    created_ids = []
+
+    def _make(
+        student_id,
+        school_id,
+        window_id,
+        staff_id,
+        scores=None,
+        assessment_date="2026-04-15",
+        deleted_at=None,
+    ):
+        with app.app_context():
+            from app.database import get_db
+            from app.routes._helpers import now_utc
+
+            db = get_db()
+            ts = now_utc()
+            cur = db.execute(
+                """INSERT INTO assessments
+                   (student_id, school_id, window_id, assessed_by_staff_id,
+                    assessment_date, assessment_method, created_at, deleted_at)
+                   VALUES (?, ?, ?, ?, ?, 'observational', ?, ?)""",
+                (student_id, school_id, window_id, staff_id,
+                 assessment_date, ts, deleted_at),
+            )
+            db.commit()
+            assessment_id = cur.lastrowid
+
+            for skill_id, raw_level in (scores or []):
+                db.execute(
+                    """INSERT INTO assessment_scores
+                       (assessment_id, student_id, skill_id, raw_level,
+                        normalized_score, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    (assessment_id, student_id, skill_id, raw_level,
+                     raw_level, ts),
+                )
+            db.commit()
+            db.close()
+
+        created_ids.append(assessment_id)
+        return assessment_id
+
+    yield _make
+
+    with app.app_context():
+        from app.database import get_db
+        db = get_db()
+        for assessment_id in reversed(created_ids):
+            # assessment_scores cascade-deletes with assessment
+            db.execute("DELETE FROM assessments WHERE assessment_id = ?", (assessment_id,))
+        db.commit()
+        db.close()
+
+
+@pytest.fixture()
 def authenticated_client(app):
     """
     Factory: return a Flask test client with the given user_id in the session.
