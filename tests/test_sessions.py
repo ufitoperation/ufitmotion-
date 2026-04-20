@@ -275,6 +275,7 @@ class TestCreateSession:
 
     def test_create_session_future_date(
         self,
+        monkeypatch,
         authenticated_client,
         make_org,
         make_region,
@@ -289,6 +290,8 @@ class TestCreateSession:
         - HTTP 400 returned.
         - Error message: "Session date cannot be in the future."
         """
+        monkeypatch.setattr("app.routes.coach_routes._get_today", lambda: TODAY)
+
         org_id = make_org("Future Date Org")
         region_id = make_region()
         school_id = make_school(org_id, region_id=region_id)
@@ -345,6 +348,7 @@ class TestCreateSession:
 
     def test_create_session_past_7_days(
         self,
+        monkeypatch,
         app,
         authenticated_client,
         make_org,
@@ -359,6 +363,8 @@ class TestCreateSession:
         Verifies:
         - HTTP 201 returned (7 days ago is within the allowed window).
         """
+        monkeypatch.setattr("app.routes.coach_routes._get_today", lambda: TODAY)
+
         org_id = make_org("7 Days Past Org")
         region_id = make_region()
         school_id = make_school(org_id, region_id=region_id)

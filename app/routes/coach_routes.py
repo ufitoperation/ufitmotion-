@@ -16,11 +16,15 @@ import datetime
 import math
 import re
 import sys
+from zoneinfo import ZoneInfo
 from flask import Blueprint, jsonify, request
 
 from app.auth import coach_required, current_user
 from app.database import get_db
-from app.routes._helpers import audit, now_utc, parse_json, serialize_session, serialize_student
+from app.routes._helpers import (
+    audit, now_utc, parse_json,
+    serialize_eod_report, serialize_session, serialize_student,
+)
 
 coach_bp = Blueprint("coach", __name__)
 
@@ -33,11 +37,27 @@ _STR_LIMITS = {
     "student_group_name": 200,
     "notes": 1000,
 }
+_EOD_STR_LIMITS = {
+    "activities_completed": 2000,
+    "student_engagement_summary": 1000,
+    "attendance_summary": 500,
+    "behavior_summary": 500,
+    "success_story": 500,
+    "challenge_summary": 500,
+    "notes": 1000,
+}
+
+_PACIFIC = ZoneInfo("America/Los_Angeles")
 
 
 def _get_today() -> datetime.date:
-    """Return today's date. Monkeypatchable in tests."""
+    """Return today's UTC date. Monkeypatchable in tests."""
     return datetime.date.today()
+
+
+def _now_pacific() -> datetime.datetime:
+    """Return current Pacific wall-clock datetime. Monkeypatchable in tests."""
+    return datetime.datetime.now(tz=_PACIFIC)
 
 
 # ===========================================================================
@@ -522,32 +542,422 @@ def create_session():
 @coach_bp.route("/api/eod-reports", methods=["GET"])
 @coach_required
 def list_eod_reports():
-    """
-    TODO: Return EOD reports filed by the current coach.
-    - coach_overseer: see all coaches' reports.
-    Supports ?school_id=, ?from=, ?to=, ?page=, ?per_page= query params.
-    Returns report date, school, summary, incidents_count, filed_at timestamp.
-    """
-    return jsonify({"ok": True, "stub": True, "route": "GET /api/eod-reports"})
+    # GET /api/eod-reports — response contains no student PII; FERPA audit not required.
+    user = current_user()
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+
+    role = user["role"]
+    staff_id = user.get("staff_id")
+
+    raw_page = request.args.get("page", "1")
+    raw_per_page = request.args.get("per_page", "20")
+    try:
+        page = int(raw_page)
+        if page < 1:
+            raise ValueError
+    except (ValueError, TypeError):
+        return jsonify({"error": "page must be a positive integer."}), 400
+    try:
+        per_page = int(raw_per_page)
+        if not (1 <= per_page <= 100):
+            raise ValueError
+    except (ValueError, TypeError):
+        return jsonify({"error": "per_page must be between 1 and 100."}), 400
+
+    today = _get_today()
+    default_from = (today - datetime.timedelta(days=30)).isoformat()
+    default_to = today.isoformat()
+    from_date = request.args.get("from", default_from)
+    to_date = request.args.get("to", default_to)
+    try:
+        datetime.date.fromisoformat(from_date)
+        datetime.date.fromisoformat(to_date)
+    except ValueError:
+        return jsonify({"error": "Invalid date format. Use YYYY-MM-DD."}), 400
+    if from_date > to_date:
+        return jsonify({"error": "from must be before or equal to to."}), 400
+
+    school_id_filter = request.args.get("school_id")
+    if school_id_filter is not None:
+        try:
+            school_id_filter = int(school_id_filter)
+            if school_id_filter <= 0:
+                raise ValueError
+        except (ValueError, TypeError):
+            return jsonify({"error": "school_id must be a positive integer."}), 400
+
+    program_id_filter = request.args.get("program_id")
+    if program_id_filter is not None:
+        try:
+            program_id_filter = int(program_id_filter)
+            if program_id_filter <= 0:
+                raise ValueError
+        except (ValueError, TypeError):
+            return jsonify({"error": "program_id must be a positive integer."}), 400
+
+    db = get_db()
+    try:
+        if role in ("head_coach", "assistant_coach"):
+            user_school_id = user.get("school_id")
+            if not user_school_id:
+                return jsonify({
+                    "error": "You have no active school assignment. Contact your administrator."
+                }), 403
+            # EOD reports are coach-scoped (not school-scoped like sessions).
+            # Only current school — school_id filter silently ignored for head/assistant.
+            scope_sql = "AND er.staff_id = ? AND er.school_id = ?"
+            scope_params = [staff_id, user_school_id]
+
+        elif role == "site_coordinator":
+            if not staff_id:
+                return jsonify({
+                    "error": "You have no active region assignment. Contact your administrator."
+                }), 403
+            # Phase 2B: scope via staff_assignments.
+            # Broader region-based scoping requires a region_id column on schools (schema gap).
+            scope_sql = (
+                "AND er.school_id IN"
+                " (SELECT school_id FROM staff_assignments"
+                "  WHERE staff_id = ? AND active_status = 1)"
+            )
+            scope_params = [staff_id]
+            if school_id_filter is not None:
+                assigned = db.execute(
+                    "SELECT 1 FROM staff_assignments"
+                    " WHERE staff_id = ? AND school_id = ? AND active_status = 1",
+                    (staff_id, school_id_filter),
+                ).fetchone()
+                if not assigned:
+                    return jsonify({"error": "You do not have access to this school."}), 403
+
+        elif role == "coach_overseer":
+            overseer_school_id = user.get("school_id")
+            if not overseer_school_id:
+                return jsonify({
+                    "error": "You have no active school assignment. Contact your administrator."
+                }), 403
+            org_row = db.execute(
+                "SELECT organization_id FROM schools WHERE school_id = ?",
+                (overseer_school_id,),
+            ).fetchone()
+            org_id = org_row["organization_id"] if org_row else None
+            if not org_id:
+                return jsonify({
+                    "error": "You have no active school assignment. Contact your administrator."
+                }), 403
+            scope_sql = "AND sc.organization_id = ?"
+            scope_params = [org_id]
+            if school_id_filter is not None:
+                filter_sc = db.execute(
+                    "SELECT organization_id FROM schools WHERE school_id = ?",
+                    (school_id_filter,),
+                ).fetchone()
+                if not filter_sc or filter_sc["organization_id"] != org_id:
+                    return jsonify({"error": "You do not have access to this school."}), 403
+
+        else:
+            scope_sql = "AND 1=0"
+            scope_params = []
+
+        # scope_sql, school_filter_sql, program_filter_sql contain only hardcoded fragments
+        school_filter_sql = ""
+        school_filter_params: list = []
+        if school_id_filter is not None and role not in ("head_coach", "assistant_coach"):
+            school_filter_sql = "AND er.school_id = ?"
+            school_filter_params = [school_id_filter]
+
+        program_filter_sql = ""
+        program_filter_params: list = []
+        if program_id_filter is not None:
+            program_filter_sql = "AND er.program_id = ?"
+            program_filter_params = [program_id_filter]
+
+        count_sql = f"""
+            SELECT COUNT(*) AS cnt
+            FROM eod_reports er
+            JOIN schools sc ON sc.school_id = er.school_id
+            WHERE er.deleted_at IS NULL
+              AND er.report_date >= ? AND er.report_date <= ?
+              {scope_sql}
+              {school_filter_sql}
+              {program_filter_sql}
+        """
+        count_params = (
+            [from_date, to_date] + scope_params + school_filter_params + program_filter_params
+        )
+        total = db.execute(count_sql, count_params).fetchone()["cnt"]
+        pages = math.ceil(total / per_page) if total > 0 else 0
+        offset = (page - 1) * per_page
+
+        main_sql = f"""
+            SELECT er.eod_id, er.school_id, sc.school_name, er.staff_id,
+                   (u.first_name || ' ' || u.last_name) AS coach_name,
+                   er.program_id, er.report_date, er.activities_completed,
+                   er.student_engagement_summary, er.attendance_summary,
+                   er.behavior_summary, er.success_story, er.challenge_summary,
+                   er.notes, er.injury_incident_flag, er.followup_needed,
+                   er.principal_communication_needed, er.submitted_on_time,
+                   er.session_id, er.created_at
+            FROM eod_reports er
+            JOIN schools sc ON sc.school_id = er.school_id
+            LEFT JOIN staff_profiles sp ON sp.staff_id = er.staff_id
+            LEFT JOIN users u ON u.user_id = sp.user_id AND u.deleted_at IS NULL
+            WHERE er.deleted_at IS NULL
+              AND er.report_date >= ? AND er.report_date <= ?
+              {scope_sql}
+              {school_filter_sql}
+              {program_filter_sql}
+            ORDER BY er.report_date DESC, er.eod_id DESC
+            LIMIT ? OFFSET ?
+        """
+        main_params = (
+            [from_date, to_date] + scope_params + school_filter_params + program_filter_params
+            + [per_page, offset]
+        )
+        rows = db.execute(main_sql, main_params).fetchall()
+
+        return jsonify({
+            "ok": True,
+            "eod_reports": [serialize_eod_report(r) for r in rows],
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "pages": pages,
+        })
+
+    except Exception as exc:
+        print(f"list_eod_reports ERROR: {exc}", file=sys.stderr, flush=True)
+        return jsonify({"error": "Could not load EOD reports — please try again or contact support."}), 500
+    finally:
+        db.close()
 
 
 @coach_bp.route("/api/eod-reports", methods=["POST"])
 @coach_required
 def create_eod_report():
-    """
-    TODO: Submit an end-of-day report.
-    Body: {
-      school_id, report_date, session_ids (list),
-      highlights, challenges, student_concerns,
-      equipment_issues, weather_notes, incidents_count
-    }
-    Validate: one EOD per coach per date per school.
-    Insert into eod_reports. Link to sessions.
-    If incidents_count > 0 and no incident report exists, flag for follow-up.
-    Audit. Return created report.
-    Target: coach can complete this in under 2 minutes on mobile.
-    """
-    return jsonify({"ok": True, "stub": True, "route": "POST /api/eod-reports"}), 201
+    # Rule 1: site_coordinator blocked before body parsing (role known from session)
+    user = current_user()
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+    if user["role"] == "site_coordinator":
+        return jsonify({"error": "You do not have permission to submit EOD reports."}), 403
+
+    data = parse_json()
+
+    # Rule 2: school_id — required, positive integer
+    school_id = data.get("school_id")
+    if school_id is None:
+        return jsonify({"error": "Missing required field: school_id."}), 400
+    if not isinstance(school_id, int) or isinstance(school_id, bool) or school_id <= 0:
+        return jsonify({"error": "school_id must be an integer."}), 400
+
+    # Rule 3: report_date — required, valid YYYY-MM-DD calendar date
+    report_date_raw = data.get("report_date")
+    if not report_date_raw:
+        return jsonify({"error": "Missing required field: report_date."}), 400
+    try:
+        report_dt = datetime.date.fromisoformat(str(report_date_raw))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid date format. Use YYYY-MM-DD."}), 400
+
+    # Rule 4: date range — UTC comparison is acceptable for calendar-date checks
+    today = _get_today()
+    if report_dt > today:
+        return jsonify({"error": "Report date cannot be in the future."}), 400
+    if (today - report_dt).days > 7:
+        return jsonify({"error": "Report date cannot be more than 7 days in the past."}), 400
+
+    # Rule 5: activities_completed — required, non-empty after strip
+    activities_raw = data.get("activities_completed")
+    if not isinstance(activities_raw, str) or not activities_raw.strip():
+        return jsonify({"error": "Missing required field: activities_completed."}), 400
+
+    # Rule 6: student_engagement_summary — required, non-empty after strip
+    engagement_raw = data.get("student_engagement_summary")
+    if not isinstance(engagement_raw, str) or not engagement_raw.strip():
+        return jsonify({"error": "Missing required field: student_engagement_summary."}), 400
+
+    # Rule 7: string length limits (checked against raw values, not stripped)
+    for field, limit in _EOD_STR_LIMITS.items():
+        val = data.get(field)
+        if val is not None and len(str(val)) > limit:
+            return jsonify({"error": f"Field '{field}' exceeds maximum length of {limit} characters."}), 400
+
+    # Rule 8: boolean fields — must be actual JSON booleans (not strings or integers)
+    for bool_field in ("injury_incident_flag", "followup_needed", "principal_communication_needed"):
+        val = data.get(bool_field)
+        if val is not None and not isinstance(val, bool):
+            return jsonify({"error": f"{bool_field} must be a boolean."}), 400
+
+    injury_incident_flag = data.get("injury_incident_flag", False)
+    followup_needed = data.get("followup_needed", False)
+    principal_communication_needed = data.get("principal_communication_needed", False)
+
+    # Rule 9: program_id — optional, positive integer if provided
+    program_id = data.get("program_id")
+    if program_id is not None:
+        if not isinstance(program_id, int) or isinstance(program_id, bool) or program_id <= 0:
+            return jsonify({"error": "program_id must be an integer."}), 400
+
+    # Rule 10: session_id — optional, positive integer if provided
+    session_id = data.get("session_id")
+    if session_id is not None:
+        if not isinstance(session_id, int) or isinstance(session_id, bool) or session_id <= 0:
+            return jsonify({"error": "session_id must be a positive integer."}), 400
+
+    # Rule 11: staff profile guard
+    staff_id = user.get("staff_id")
+    if not staff_id:
+        return jsonify({
+            "error": "Staff profile missing for this account. Contact your administrator."
+        }), 500
+
+    role = user["role"]
+
+    # Rule 12: school assignment guard — head/assistant/overseer must have a school
+    if role in ("head_coach", "assistant_coach", "coach_overseer"):
+        if not user.get("school_id"):
+            return jsonify({
+                "error": "You have no active school assignment. Contact your administrator."
+            }), 403
+
+    # Rule 13: head/assistant — school must match their active assignment
+    if role in ("head_coach", "assistant_coach"):
+        if school_id != user["school_id"]:
+            return jsonify({"error": "You are not assigned to this school."}), 403
+
+    # submitted_on_time — computed in Pacific time, not UTC.
+    # Backdated check uses Pacific calendar date to avoid false "late" at 00:00-03:00 UTC
+    # (which is still the prior evening in Pacific).
+    now_pacific = _now_pacific()
+    today_pacific = now_pacific.date()
+    if report_dt < today_pacific:
+        submitted_on_time = False
+    else:
+        deadline_pacific = now_pacific.replace(hour=20, minute=0, second=0, microsecond=0)
+        submitted_on_time = now_pacific <= deadline_pacific
+
+    # followup_needed override: injury forces followup — coach cannot override this direction
+    if injury_incident_flag:
+        followup_needed = True
+
+    attendance_summary = data.get("attendance_summary") or None
+    behavior_summary = data.get("behavior_summary") or None
+    success_story = data.get("success_story") or None
+    challenge_summary = data.get("challenge_summary") or None
+    notes = data.get("notes") or None
+
+    db = get_db()
+    try:
+        # Rule 14: coach_overseer — org-based school authorization
+        if role == "coach_overseer":
+            org_row = db.execute(
+                "SELECT organization_id FROM schools WHERE school_id = ?",
+                (user["school_id"],),
+            ).fetchone()
+            org_id = org_row["organization_id"] if org_row else None
+            if not org_id:
+                return jsonify({
+                    "error": "You have no active school assignment. Contact your administrator."
+                }), 403
+            target_sc = db.execute(
+                "SELECT organization_id FROM schools WHERE school_id = ?",
+                (school_id,),
+            ).fetchone()
+            if not target_sc or target_sc["organization_id"] != org_id:
+                return jsonify({"error": "School is not in your organization."}), 403
+
+        # Rule 15: program_id validation (if provided)
+        if program_id is not None:
+            prog_row = db.execute(
+                "SELECT program_id FROM programs"
+                " WHERE program_id = ? AND school_id = ? AND program_status = 'active'",
+                (program_id, school_id),
+            ).fetchone()
+            if not prog_row:
+                return jsonify({"error": "Program not found at this school."}), 400
+
+        # Rule 16: duplicate guard inside transaction — no DB UNIQUE constraint exists
+        dup_row = db.execute(
+            "SELECT eod_id FROM eod_reports"
+            " WHERE staff_id = ? AND school_id = ? AND report_date = ? AND deleted_at IS NULL"
+            " LIMIT 1",
+            (staff_id, school_id, report_date_raw),
+        ).fetchone()
+        if dup_row:
+            return jsonify({
+                "error": "An EOD report for this school and date has already been submitted.",
+                "existing_eod_id": dup_row["eod_id"],
+            }), 409
+
+        # Rule 17: session_id validation (if provided)
+        if session_id is not None:
+            sess_row = db.execute(
+                "SELECT session_id FROM sessions"
+                " WHERE session_id = ? AND school_id = ? AND session_date = ? AND deleted_at IS NULL",
+                (session_id, school_id, report_date_raw),
+            ).fetchone()
+            if not sess_row:
+                return jsonify({
+                    "error": "session_id does not match a session at this school on this date."
+                }), 400
+
+        created_at_val = now_utc()
+        cur = db.execute(
+            """INSERT INTO eod_reports
+               (school_id, staff_id, program_id, session_id, report_date,
+                activities_completed, student_engagement_summary, attendance_summary,
+                behavior_summary, success_story, challenge_summary, notes,
+                injury_incident_flag, followup_needed, principal_communication_needed,
+                submitted_on_time, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (school_id, staff_id, program_id, session_id, report_date_raw,
+             activities_raw, engagement_raw, attendance_summary,
+             behavior_summary, success_story, challenge_summary, notes,
+             injury_incident_flag, followup_needed, principal_communication_needed,
+             submitted_on_time, created_at_val),
+        )
+        new_eod_id = cur.lastrowid
+
+        audit(
+            db, user["user_id"], "INSERT", "eod_reports", new_eod_id,
+            new_values={
+                "school_id": school_id,
+                "report_date": report_date_raw,
+                "injury_incident_flag": injury_incident_flag,
+                "followup_needed": followup_needed,
+                "submitted_on_time": submitted_on_time,
+            },
+        )
+        db.commit()
+
+        # Post-commit: fetch display names for the confirmation banner (SOUL.md voice contract)
+        display_row = db.execute(
+            """SELECT er.eod_id, er.school_id, sc.school_name, er.staff_id,
+                      (u.first_name || ' ' || u.last_name) AS coach_name,
+                      er.program_id, er.report_date, er.activities_completed,
+                      er.student_engagement_summary, er.attendance_summary,
+                      er.behavior_summary, er.success_story, er.challenge_summary,
+                      er.notes, er.injury_incident_flag, er.followup_needed,
+                      er.principal_communication_needed, er.submitted_on_time,
+                      er.session_id, er.created_at
+               FROM eod_reports er
+               JOIN schools sc ON sc.school_id = er.school_id
+               LEFT JOIN staff_profiles sp ON sp.staff_id = er.staff_id
+               LEFT JOIN users u ON u.user_id = sp.user_id AND u.deleted_at IS NULL
+               WHERE er.eod_id = ?""",
+            (new_eod_id,),
+        ).fetchone()
+
+        return jsonify({"ok": True, "eod_report": serialize_eod_report(display_row)}), 201
+
+    except Exception as exc:
+        db.rollback()
+        print(f"create_eod_report ERROR: {exc}", file=sys.stderr, flush=True)
+        return jsonify({"error": "EOD report could not be saved — please try again or contact support."}), 500
+    finally:
+        db.close()
 
 
 # ===========================================================================

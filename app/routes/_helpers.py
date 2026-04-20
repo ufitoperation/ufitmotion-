@@ -101,6 +101,28 @@ def serialize_session(row: dict) -> dict:
     return {k: row[k] for k in ALL_FIELDS if k in row}
 
 
+def serialize_eod_report(row: dict) -> dict:
+    if row is None:
+        return {}
+    result = {}
+    for field in (
+        "eod_id", "school_id", "school_name", "staff_id", "coach_name",
+        "program_id", "report_date", "activities_completed", "student_engagement_summary",
+        "attendance_summary", "behavior_summary", "success_story", "challenge_summary",
+        "notes", "session_id", "created_at",
+    ):
+        if field in row.keys():
+            result[field] = row[field]
+    # SQLite stores booleans as 0/1 integers — convert to Python bool for JSON
+    for field in (
+        "injury_incident_flag", "followup_needed",
+        "principal_communication_needed", "submitted_on_time",
+    ):
+        if field in row.keys():
+            result[field] = bool(row[field])
+    return result
+
+
 def serialize_student(row: dict) -> dict:
     """
     Convert a students DB row to a public dict.

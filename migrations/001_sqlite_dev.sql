@@ -175,7 +175,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     session_status TEXT NOT NULL DEFAULT 'completed',
     total_students_present INTEGER DEFAULT 0,
     notes TEXT,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TEXT DEFAULT NULL
 );
 
 CREATE TABLE IF NOT EXISTS session_staff (

@@ -600,7 +600,7 @@ def make_eod_report(app):
     """
     created_ids = []
 
-    def _make(school_id, staff_id, report_date="2026-04-15", deleted_at=None):
+    def _make(school_id, staff_id, report_date="2026-04-15", deleted_at=None, program_id=None):
         with app.app_context():
             from app.database import get_db
             from app.routes._helpers import now_utc
@@ -610,9 +610,9 @@ def make_eod_report(app):
             cur = db.execute(
                 """INSERT INTO eod_reports
                    (school_id, staff_id, report_date, activities_completed,
-                    student_engagement_summary, created_at, deleted_at)
-                   VALUES (?, ?, ?, 'Test activities', 'Good engagement', ?, ?)""",
-                (school_id, staff_id, report_date, ts, deleted_at),
+                    student_engagement_summary, program_id, created_at, deleted_at)
+                   VALUES (?, ?, ?, 'Test activities', 'Good engagement', ?, ?, ?)""",
+                (school_id, staff_id, report_date, program_id, ts, deleted_at),
             )
             db.commit()
             eod_id = cur.lastrowid
