@@ -427,7 +427,10 @@ def _open_postgres(database_url: str) -> PostgresConnection:
 
 
 def _open_sqlite(db_path: str) -> _SQLiteConnection:
-    conn = sqlite3.connect(db_path)
+    # Detect SQLite URI format (e.g. "file:name?mode=memory&cache=shared") so
+    # tests can share a single in-memory database across connections.
+    is_uri = db_path.startswith("file:")
+    conn = sqlite3.connect(db_path, uri=is_uri, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")

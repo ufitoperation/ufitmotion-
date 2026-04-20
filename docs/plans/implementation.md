@@ -69,11 +69,21 @@ Verification checklist (client checks both):
 
 ## Week 2-3: Full Coach App ($1,000 milestone)
 
-### Phase 2A: Session Logging
-- POST /api/sessions — full implementation
-- Student attendance recording
+### Phase 2A: Session Logging — COMPLETE ✓
+**Status: Done** — POST /api/sessions + GET /api/sessions fully implemented, 32/32 tests green.
+
+- POST /api/sessions — full implementation (18-rule validation, atomic 4-table transaction, FERPA audit)
+- GET /api/sessions — paginated, role-scoped (school/region/org), eod_filed flag, N+1-free
+- Student attendance recording (student_session_attendance, all default to 'present')
 - Coach can select students from their school roster
-**Agent: planner** → **planner**
+- Reviews complete: python-reviewer, code-reviewer, security-reviewer, api-design
+
+Open notes (non-blocking, pre-production):
+- Rate limiting on POST /api/sessions (HIGH — security-reviewer)
+- 201 response should include Location header (LOW — api-design)
+- EOD bulk query should add date-range bounds for large histories (MEDIUM — code-reviewer)
+
+**Agent: spec-writer → tdd-guide → python-reviewer → code-reviewer → security-reviewer → api-design**
 
 ### Phase 2B: EOD Reports
 - Full EOD form: activities, engagement, behavior, incidents flag

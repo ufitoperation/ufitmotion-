@@ -88,6 +88,19 @@ def serialize_school(row: dict) -> dict:
     return {k: row[k] for k in SAFE_FIELDS if k in row}
 
 
+def serialize_session(row: dict) -> dict:
+    if row is None:
+        return {}
+    ALL_FIELDS = (
+        "session_id", "school_id", "school_name", "program_id", "program_name",
+        "session_date", "start_time", "end_time", "session_type", "location",
+        "planned_activity", "actual_activity", "student_group_name",
+        "session_status", "total_students_present", "notes", "created_at",
+        "coach_name",
+    )
+    return {k: row[k] for k in ALL_FIELDS if k in row}
+
+
 def serialize_student(row: dict) -> dict:
     """
     Convert a students DB row to a public dict.
