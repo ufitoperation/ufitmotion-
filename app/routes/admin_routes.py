@@ -62,23 +62,62 @@ admin_bp = Blueprint("admin", __name__)
 @admin_bp.route("/api/organizations", methods=["GET"])
 @admin_required
 def list_organizations():
-    """
-    TODO: Return paginated list of all organizations with school counts,
-    active contract status, and billing contact info.
-    Supports ?search=, ?status= query params.
-    """
-    return jsonify({"ok": True, "stub": True, "route": "GET /api/organizations"})
+    db = get_db()
+    try:
+        rows = db.execute(
+            """SELECT o.organization_id, o.organization_name, o.organization_type,
+                      o.contract_status, o.created_at,
+                      COUNT(s.school_id) AS school_count
+               FROM organizations o
+               LEFT JOIN schools s ON s.organization_id = o.organization_id
+                 AND s.deleted_at IS NULL AND s.active_status = 1
+               WHERE o.deleted_at IS NULL
+               GROUP BY o.organization_id
+               ORDER BY o.organization_name ASC"""
+        ).fetchall()
+        orgs = [dict(r) for r in rows]
+        return jsonify({"ok": True, "organizations": orgs, "total": len(orgs)})
+    finally:
+        db.close()
 
 
 @admin_bp.route("/api/organizations", methods=["POST"])
 @admin_required
 def create_organization():
-    """
-    TODO: Create a new organization.
-    Body: { organization_name, organization_type, billing_contact, billing_email, contract_status }
-    Validate required fields, check for duplicate names, insert, audit, return created row.
-    """
-    return jsonify({"ok": True, "stub": True, "route": "POST /api/organizations"}), 201
+    actor = current_user()
+    data = parse_json()
+    org_name = (data.get("organization_name") or "").strip()
+    if not org_name:
+        return jsonify({"error": "organization_name is required."}), 400
+
+    db = get_db()
+    try:
+        dup = db.execute(
+            "SELECT organization_id FROM organizations WHERE organization_name = ? AND deleted_at IS NULL",
+            (org_name,),
+        ).fetchone()
+        if dup:
+            return jsonify({"error": "An organization with that name already exists."}), 409
+
+        ts = now_utc()
+        cur = db.execute(
+            """INSERT INTO organizations
+               (organization_name, organization_type, contract_status, created_at)
+               VALUES (?, ?, ?, ?)""",
+            (org_name, data.get("organization_type", "district"),
+             data.get("contract_status", "active"), ts),
+        )
+        org_id = cur.lastrowid
+        audit(db, actor["user_id"] if actor else None, "INSERT", "organizations", org_id,
+              new_values={"organization_name": org_name})
+        db.commit()
+        org = db.execute(
+            "SELECT organization_id, organization_name, organization_type, contract_status, created_at FROM organizations WHERE organization_id = ?",
+            (org_id,),
+        ).fetchone()
+        return jsonify({"ok": True, "organization": dict(org)}), 201
+    finally:
+        db.close()
 
 
 # ===========================================================================
@@ -394,6 +433,33 @@ def create_user():
             )
 
         return jsonify({"ok": True, "user": serialize_user(dict(user))}), 201
+    finally:
+        db.close()
+
+
+@admin_bp.route("/api/users/<int:user_id>", methods=["PATCH"])
+@admin_required
+def update_user(user_id: int):
+    """Reset a user's password. Body: { password }"""
+    admin = current_user()
+    data = parse_json()
+    new_password = data.get("password") or ""
+    if len(new_password) < 8:
+        return jsonify({"error": "Password must be at least 8 characters."}), 400
+
+    db = get_db()
+    try:
+        row = db.execute(
+            "SELECT user_id FROM users WHERE user_id = ? AND deleted_at IS NULL",
+            (user_id,),
+        ).fetchone()
+        if not row:
+            return jsonify({"error": "User not found."}), 404
+        new_hash = generate_password_hash(new_password, method="pbkdf2:sha256")
+        db.execute("UPDATE users SET password_hash = ? WHERE user_id = ?", (new_hash, user_id))
+        db.commit()
+        audit(db, admin["user_id"], "admin_reset_password", "users", user_id)
+        return jsonify({"ok": True})
     finally:
         db.close()
 

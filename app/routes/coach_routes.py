@@ -1581,12 +1581,11 @@ def submit_assessment():
     if not isinstance(student_id, int) or isinstance(student_id, bool) or student_id <= 0:
         return jsonify({"error": "student_id must be a positive integer."}), 400
 
-    # Rule 3: window_id — required, positive integer
+    # Rule 3: window_id — optional, positive integer if provided
     window_id = data.get("window_id")
-    if window_id is None:
-        return jsonify({"error": "Missing required field: window_id."}), 400
-    if not isinstance(window_id, int) or isinstance(window_id, bool) or window_id <= 0:
-        return jsonify({"error": "window_id must be a positive integer."}), 400
+    if window_id is not None:
+        if not isinstance(window_id, int) or isinstance(window_id, bool) or window_id <= 0:
+            return jsonify({"error": "window_id must be a positive integer."}), 400
 
     # Rule 4: scores — required, non-empty list
     scores_raw = data.get("scores")
@@ -1684,17 +1683,18 @@ def submit_assessment():
             if org_id != target_org_id:
                 return jsonify({"error": "Student does not belong to a school in your organization."}), 403
 
-        # Rule 12: window validation
-        window_row = db.execute(
-            "SELECT window_id, school_id, status FROM assessment_windows WHERE window_id = ?",
-            (window_id,),
-        ).fetchone()
-        if not window_row:
-            return jsonify({"error": "Assessment window not found."}), 400
-        if window_row["status"] != "active":
-            return jsonify({"error": "Assessment window is not active."}), 400
-        if window_row["school_id"] != student_school_id:
-            return jsonify({"error": "Assessment window does not belong to the student's school."}), 400
+        # Rule 12: window validation (skipped when window_id is omitted)
+        if window_id is not None:
+            window_row = db.execute(
+                "SELECT window_id, school_id, status FROM assessment_windows WHERE window_id = ?",
+                (window_id,),
+            ).fetchone()
+            if not window_row:
+                return jsonify({"error": "Assessment window not found."}), 400
+            if window_row["status"] != "active":
+                return jsonify({"error": "Assessment window is not active."}), 400
+            if window_row["school_id"] != student_school_id:
+                return jsonify({"error": "Assessment window does not belong to the student's school."}), 400
 
         # Rule 13: skill_id validation
         for item in scores_raw:
@@ -1705,17 +1705,18 @@ def submit_assessment():
             if not skill_row:
                 return jsonify({"error": f"Invalid or inactive skill_id: {item['skill_id']}."}), 400
 
-        # Rule 14: duplicate assessment guard
-        dup_row = db.execute(
-            "SELECT assessment_id FROM assessments"
-            " WHERE student_id = ? AND window_id = ? AND deleted_at IS NULL LIMIT 1",
-            (student_id, window_id),
-        ).fetchone()
-        if dup_row:
-            return jsonify({
-                "error": "An assessment for this student and window already exists.",
-                "existing_assessment_id": dup_row["assessment_id"],
-            }), 409
+        # Rule 14: duplicate assessment guard (only when window_id is provided)
+        if window_id is not None:
+            dup_row = db.execute(
+                "SELECT assessment_id FROM assessments"
+                " WHERE student_id = ? AND window_id = ? AND deleted_at IS NULL LIMIT 1",
+                (student_id, window_id),
+            ).fetchone()
+            if dup_row:
+                return jsonify({
+                    "error": "An assessment for this student and window already exists.",
+                    "existing_assessment_id": dup_row["assessment_id"],
+                }), 409
 
         created_at_val = now_utc()
         cur = db.execute(

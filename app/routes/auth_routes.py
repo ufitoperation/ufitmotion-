@@ -131,6 +131,45 @@ def logout():
 
 
 # ---------------------------------------------------------------------------
+# POST /api/auth/change-password
+# ---------------------------------------------------------------------------
+@auth_bp.route("/api/auth/change-password", methods=["POST"])
+def change_password():
+    user = current_user()
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+
+    data = parse_json()
+    current_pw = data.get("current_password") or ""
+    new_pw = data.get("new_password") or ""
+
+    if not current_pw or not new_pw:
+        return jsonify({"error": "current_password and new_password are required."}), 400
+    if len(new_pw) < 8:
+        return jsonify({"error": "New password must be at least 8 characters."}), 400
+
+    db = get_db()
+    try:
+        row = db.execute(
+            "SELECT password_hash FROM users WHERE user_id = ? AND deleted_at IS NULL",
+            (user["user_id"],),
+        ).fetchone()
+        if not row or not check_password_hash(row["password_hash"], current_pw):
+            return jsonify({"error": "Current password is incorrect."}), 400
+
+        new_hash = generate_password_hash(new_pw, method="pbkdf2:sha256")
+        db.execute(
+            "UPDATE users SET password_hash = ? WHERE user_id = ?",
+            (new_hash, user["user_id"]),
+        )
+        db.commit()
+        audit(db, user["user_id"], "change_password", "users", user["user_id"])
+        return jsonify({"ok": True})
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
 # POST /api/auth/setup-admin
 # ---------------------------------------------------------------------------
 @auth_bp.route("/api/auth/setup-admin", methods=["POST"])

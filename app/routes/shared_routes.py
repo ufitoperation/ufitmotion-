@@ -99,6 +99,51 @@ def get_notifications():
 
 
 # ---------------------------------------------------------------------------
+# GET /api/skills
+# ---------------------------------------------------------------------------
+@shared_bp.route("/api/skills", methods=["GET"])
+@login_required
+def list_skills():
+    """Return all active skills grouped by domain. Used by assessment forms."""
+    db = get_db()
+    try:
+        domain_rows = db.execute(
+            """SELECT domain_id, domain_name, domain_type
+               FROM skill_domains
+               WHERE active_status = 1
+               ORDER BY domain_name ASC"""
+        ).fetchall()
+        skill_rows = db.execute(
+            """SELECT skill_id, domain_id, skill_name, grade_band, skill_description
+               FROM skills
+               WHERE active_status = 1
+               ORDER BY domain_id ASC, skill_name ASC"""
+        ).fetchall()
+
+        skill_map = {}
+        for s in skill_rows:
+            skill_map.setdefault(s["domain_id"], []).append({
+                "skill_id": s["skill_id"],
+                "skill_name": s["skill_name"],
+                "grade_band": s["grade_band"],
+                "skill_description": s["skill_description"],
+            })
+
+        domains = [
+            {
+                "domain_id": d["domain_id"],
+                "domain_name": d["domain_name"],
+                "domain_type": d["domain_type"],
+                "skills": skill_map.get(d["domain_id"], []),
+            }
+            for d in domain_rows
+        ]
+        return jsonify({"ok": True, "domains": domains})
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
 # POST /api/notifications/<id>/read
 # ---------------------------------------------------------------------------
 @shared_bp.route("/api/notifications/<int:notification_id>/read", methods=["POST"])

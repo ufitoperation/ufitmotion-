@@ -459,7 +459,7 @@ class TestCreateAssessment:
         assert resp.status_code == 400, f"Expected 400, got {resp.status_code}: {resp.data}"
         assert _json(resp)["error"] == "Missing required field: student_id."
 
-    def test_create_assessment_missing_window_id(
+    def test_create_assessment_without_window_id(
         self,
         authenticated_client,
         make_org,
@@ -470,7 +470,7 @@ class TestCreateAssessment:
         make_skill,
         monkeypatch,
     ):
-        """Missing window_id — 400."""
+        """window_id is optional — omitting it should succeed with 201."""
         org_id = make_org()
         school_id = make_school(org_id)
         coach = make_user_with_staff(role="head_coach", school_id=school_id)
@@ -486,8 +486,8 @@ class TestCreateAssessment:
                 "scores": [{"skill_id": skill_id, "raw_score": 3}],
             })
 
-        assert resp.status_code == 400, f"Expected 400, got {resp.status_code}: {resp.data}"
-        assert _json(resp)["error"] == "Missing required field: window_id."
+        assert resp.status_code == 201, f"Expected 201, got {resp.status_code}: {resp.data}"
+        assert _json(resp).get("ok") is True
 
     def test_create_assessment_missing_scores(
         self,
