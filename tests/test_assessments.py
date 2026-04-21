@@ -118,7 +118,7 @@ class TestCreateAssessment:
         assert scores[0].get("score_id") is not None
         assert scores[0].get("skill_id") == skill_id
         assert scores[0].get("raw_level") == 3
-        assert scores[0].get("normalized_score") == 3
+        assert scores[0].get("normalized_score") == 60  # raw_level 3 * 20 per spec
         assert scores[0].get("skill_name") is not None
 
         # Verify DB rows exist
@@ -141,7 +141,7 @@ class TestCreateAssessment:
             ).fetchone()
             assert score_row is not None, "assessment_scores row not found in DB"
             assert score_row["raw_level"] == 3
-            assert score_row["normalized_score"] == 3
+            assert score_row["normalized_score"] == 60  # raw_level 3 * 20 per spec
 
             audit_row = db.execute(
                 "SELECT * FROM audit_log WHERE table_name = 'assessments' AND record_id = ?",

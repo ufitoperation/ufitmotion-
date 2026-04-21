@@ -26,6 +26,11 @@ from app.routes._helpers import (
     serialize_assessment, serialize_assessment_score,
     serialize_eod_report, serialize_incident, serialize_session, serialize_student,
 )
+from app.routes._scoring import (
+    normalized_score as compute_normalized_score,
+    recalculate_student_summaries,
+    VALID_OBSERVATION_TAGS,
+)
 
 coach_bp = Blueprint("coach", __name__)
 
@@ -1604,6 +1609,10 @@ def submit_assessment():
             return jsonify({"error": "Each score must have skill_id (integer) and raw_score (integer 1-5)."}), 400
         if not isinstance(rs, int) or isinstance(rs, bool) or not (1 <= rs <= 5):
             return jsonify({"error": "Each score must have skill_id (integer) and raw_score (integer 1-5)."}), 400
+        obs_tag = item.get("observation_tag")
+        if obs_tag is not None and obs_tag not in VALID_OBSERVATION_TAGS:
+            valid = ", ".join(VALID_OBSERVATION_TAGS)
+            return jsonify({"error": f"Invalid observation_tag '{obs_tag}'. Must be one of: {valid}."}), 400
 
     # Rule 6: assessor_staff_id — optional, positive integer if provided
     assessor_staff_id = data.get("assessor_staff_id")
@@ -1732,15 +1741,33 @@ def submit_assessment():
         new_assessment_id = cur.lastrowid
 
         for item in scores_raw:
+            raw = item["raw_score"]
+            norm = compute_normalized_score(raw)  # server-computed: raw * 20
+            obs_tag = item.get("observation_tag")
+
+            # growth_flag: 1 if this score beats the student's most recent prior score for this skill
+            prev = db.execute(
+                """SELECT a_sc.normalized_score
+                   FROM assessment_scores a_sc
+                   JOIN assessments a ON a.assessment_id = a_sc.assessment_id
+                   WHERE a_sc.student_id = ? AND a_sc.skill_id = ? AND a.deleted_at IS NULL
+                   ORDER BY a_sc.created_at DESC LIMIT 1""",
+                (student_id, item["skill_id"]),
+            ).fetchone()
+            growth_flag = 1 if (prev and norm > prev["normalized_score"]) else 0
+
             db.execute(
                 """INSERT INTO assessment_scores
                    (assessment_id, student_id, skill_id, raw_level, normalized_score,
                     benchmark_id, observed_independence, observed_consistency,
-                    observed_accuracy, growth_flag, created_at)
-                   VALUES (?, ?, ?, ?, ?, NULL, 1, 0, 0, 0, ?)""",
+                    observed_accuracy, growth_flag, observation_tag, created_at)
+                   VALUES (?, ?, ?, ?, ?, NULL, 1, 0, 0, ?, ?, ?)""",
                 (new_assessment_id, student_id, item["skill_id"],
-                 item["raw_score"], item["raw_score"], created_at_val),
+                 raw, norm, growth_flag, obs_tag, created_at_val),
             )
+
+        # Recalculate all summary tables in the same transaction
+        recalculate_student_summaries(db, student_id, student_school_id)
 
         audit(
             db, user["user_id"], "INSERT", "assessments", new_assessment_id,
@@ -1894,5 +1921,306 @@ def my_students():
             print(f"AUDIT FAILURE in my_students: {exc}", file=sys.stderr, flush=True)
 
         return jsonify({"ok": True, "students": students, "count": len(students)})
+    finally:
+        db.close()
+
+
+# ===========================================================================
+# BEHAVIOR OBSERVATIONS  (TABLE 17)
+# Lightweight per-session SEL tracking — separate from formal assessments.
+# ===========================================================================
+
+@coach_bp.route("/api/behavior-observations", methods=["POST"])
+@coach_required
+def submit_behavior_observation():
+    user = current_user()
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+
+    data = parse_json()
+    student_id = data.get("student_id")
+    session_id = data.get("session_id")
+    observation_date = data.get("observation_date")
+
+    if not student_id or not isinstance(student_id, int) or student_id <= 0:
+        return jsonify({"error": "student_id is required."}), 400
+
+    score_fields = ("teamwork_score", "effort_score", "self_control_score",
+                    "listening_score", "sportsmanship_score", "confidence_score")
+    scores = {}
+    for field in score_fields:
+        val = data.get(field)
+        if val is not None:
+            if not isinstance(val, int) or not (1 <= val <= 5):
+                return jsonify({"error": f"{field} must be an integer 1–5."}), 400
+            scores[field] = val
+
+    if not scores:
+        return jsonify({"error": "At least one behavior score is required."}), 400
+
+    if observation_date:
+        try:
+            datetime.date.fromisoformat(str(observation_date))
+        except (ValueError, TypeError):
+            return jsonify({"error": "Invalid observation_date. Use YYYY-MM-DD."}), 400
+    else:
+        observation_date = _get_today().isoformat()
+
+    staff_id = user.get("staff_id")
+    if not staff_id:
+        return jsonify({"error": "Staff profile missing for this account."}), 500
+
+    db = get_db()
+    try:
+        student = db.execute(
+            "SELECT student_id, school_id FROM students WHERE student_id = ? AND active_status = 1 AND deleted_at IS NULL",
+            (student_id,),
+        ).fetchone()
+        if not student:
+            return jsonify({"error": "Student not found or not active."}), 404
+
+        school_id = student["school_id"]
+        if user["role"] in ("head_coach", "assistant_coach") and user.get("school_id") != school_id:
+            return jsonify({"error": "Student does not belong to your school."}), 403
+
+        if session_id is not None:
+            sess = db.execute("SELECT session_id FROM sessions WHERE session_id = ? AND deleted_at IS NULL", (session_id,)).fetchone()
+            if not sess:
+                return jsonify({"error": "Session not found."}), 404
+
+        cur = db.execute(
+            """INSERT INTO behavior_observations
+               (student_id, school_id, session_id, observed_by_staff_id, observation_date,
+                teamwork_score, effort_score, self_control_score, listening_score,
+                sportsmanship_score, confidence_score, notes, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (student_id, school_id, session_id, staff_id, observation_date,
+             scores.get("teamwork_score"), scores.get("effort_score"),
+             scores.get("self_control_score"), scores.get("listening_score"),
+             scores.get("sportsmanship_score"), scores.get("confidence_score"),
+             data.get("notes"), now_utc()),
+        )
+        audit(db, user["user_id"], "INSERT", "behavior_observations", cur.lastrowid,
+              new_values={"student_id": student_id, "session_id": session_id})
+        db.commit()
+        return jsonify({"ok": True, "behavior_observation_id": cur.lastrowid}), 201
+    finally:
+        db.close()
+
+
+@coach_bp.route("/api/behavior-observations", methods=["GET"])
+@coach_required
+def list_behavior_observations():
+    user = current_user()
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+
+    student_id = request.args.get("student_id", type=int)
+    session_id = request.args.get("session_id", type=int)
+    if not student_id:
+        return jsonify({"error": "student_id query param is required."}), 400
+
+    db = get_db()
+    try:
+        student = db.execute(
+            "SELECT school_id FROM students WHERE student_id = ? AND active_status = 1 AND deleted_at IS NULL",
+            (student_id,),
+        ).fetchone()
+        if not student:
+            return jsonify({"error": "Student not found."}), 404
+
+        if user["role"] in ("head_coach", "assistant_coach") and user.get("school_id") != student["school_id"]:
+            return jsonify({"error": "Student does not belong to your school."}), 403
+
+        sql = """
+            SELECT bo.*, (u.first_name || ' ' || u.last_name) AS observer_name
+            FROM behavior_observations bo
+            JOIN staff_profiles sp ON sp.staff_id = bo.observed_by_staff_id
+            JOIN users u ON u.user_id = sp.user_id AND u.deleted_at IS NULL
+            WHERE bo.student_id = ?
+        """
+        params = [student_id]
+        if session_id:
+            sql += " AND bo.session_id = ?"
+            params.append(session_id)
+        sql += " ORDER BY bo.observation_date DESC, bo.created_at DESC"
+
+        rows = db.execute(sql, params).fetchall()
+        return jsonify({"ok": True, "observations": [dict(r) for r in rows]})
+    finally:
+        db.close()
+
+
+# ===========================================================================
+# ASSESSMENT WINDOWS  (TABLE 14)
+# Coaches read windows; admins create them (see admin_routes.py).
+# ===========================================================================
+
+@coach_bp.route("/api/assessment-windows", methods=["GET"])
+@coach_required
+def list_assessment_windows():
+    user = current_user()
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+
+    school_id = request.args.get("school_id", type=int) or user.get("school_id")
+    if not school_id:
+        return jsonify({"error": "school_id is required."}), 400
+
+    if user["role"] in ("head_coach", "assistant_coach") and school_id != user.get("school_id"):
+        return jsonify({"error": "You can only view windows for your assigned school."}), 403
+
+    status_filter = request.args.get("status", "").strip()
+
+    db = get_db()
+    try:
+        sql = """
+            SELECT aw.window_id, aw.school_id, sc.school_name,
+                   aw.program_id, p.program_name,
+                   aw.window_name, aw.start_date, aw.end_date,
+                   aw.assessment_focus, aw.status, aw.created_at
+            FROM assessment_windows aw
+            JOIN schools sc ON sc.school_id = aw.school_id
+            LEFT JOIN programs p ON p.program_id = aw.program_id
+            WHERE aw.school_id = ?
+        """
+        params = [school_id]
+        if status_filter in ("upcoming", "active", "closed"):
+            sql += " AND aw.status = ?"
+            params.append(status_filter)
+        sql += " ORDER BY aw.start_date DESC"
+
+        rows = db.execute(sql, params).fetchall()
+        return jsonify({"ok": True, "windows": [dict(r) for r in rows]})
+    finally:
+        db.close()
+
+
+# ===========================================================================
+# COACH OBSERVATIONS  (TABLE 20)
+# Evaluators (head_coach, coach_overseer, admin) score coach performance.
+# ===========================================================================
+
+@coach_bp.route("/api/coach-observations", methods=["POST"])
+@coach_required
+def submit_coach_observation():
+    user = current_user()
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+
+    # Only head_coach and coach_overseer can evaluate from this portal
+    if user["role"] not in ("head_coach", "coach_overseer"):
+        return jsonify({"error": "Only head coaches and overseers can submit coach observations."}), 403
+
+    data = parse_json()
+    observed_staff_id = data.get("observed_staff_id")
+    school_id = data.get("school_id") or user.get("school_id")
+    observation_date = data.get("observation_date")
+
+    if not observed_staff_id or not isinstance(observed_staff_id, int) or observed_staff_id <= 0:
+        return jsonify({"error": "observed_staff_id is required."}), 400
+
+    if not school_id:
+        return jsonify({"error": "school_id is required."}), 400
+
+    score_fields = ("transitions_score", "engagement_score", "lesson_fidelity_score",
+                    "sel_language_score", "safety_score", "organization_score")
+    scores = {}
+    for field in score_fields:
+        val = data.get(field)
+        if val is not None:
+            if not isinstance(val, int) or not (1 <= val <= 5):
+                return jsonify({"error": f"{field} must be an integer 1–5."}), 400
+            scores[field] = val
+
+    if len(scores) < 6:
+        return jsonify({"error": "All 6 observation scores are required: " + ", ".join(score_fields)}), 400
+
+    if observation_date:
+        try:
+            datetime.date.fromisoformat(str(observation_date))
+        except (ValueError, TypeError):
+            return jsonify({"error": "Invalid observation_date. Use YYYY-MM-DD."}), 400
+    else:
+        observation_date = _get_today().isoformat()
+
+    staff_id = user.get("staff_id")
+    if not staff_id:
+        return jsonify({"error": "Staff profile missing for this account."}), 500
+
+    db = get_db()
+    try:
+        observed = db.execute(
+            "SELECT staff_id FROM staff_profiles WHERE staff_id = ? AND status = 'active'",
+            (observed_staff_id,),
+        ).fetchone()
+        if not observed:
+            return jsonify({"error": "Observed staff member not found."}), 404
+
+        if observed_staff_id == staff_id:
+            return jsonify({"error": "You cannot submit a self-observation."}), 400
+
+        cur = db.execute(
+            """INSERT INTO coach_observations
+               (observed_staff_id, evaluator_staff_id, school_id, observation_date,
+                transitions_score, engagement_score, lesson_fidelity_score,
+                sel_language_score, safety_score, organization_score,
+                notes, action_plan, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (observed_staff_id, staff_id, school_id, observation_date,
+             scores["transitions_score"], scores["engagement_score"],
+             scores["lesson_fidelity_score"], scores["sel_language_score"],
+             scores["safety_score"], scores["organization_score"],
+             data.get("notes"), data.get("action_plan"), now_utc()),
+        )
+        audit(db, user["user_id"], "INSERT", "coach_observations", cur.lastrowid,
+              new_values={"observed_staff_id": observed_staff_id, "school_id": school_id})
+        db.commit()
+
+        avg = round(sum(scores.values()) / 6, 1)
+        return jsonify({
+            "ok": True,
+            "coach_observation_id": cur.lastrowid,
+            "average_score": avg,
+        }), 201
+    finally:
+        db.close()
+
+
+@coach_bp.route("/api/coach-observations", methods=["GET"])
+@coach_required
+def list_coach_observations():
+    user = current_user()
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+
+    staff_id_filter = request.args.get("staff_id", type=int)
+    school_id_filter = request.args.get("school_id", type=int) or user.get("school_id")
+
+    db = get_db()
+    try:
+        sql = """
+            SELECT co.*,
+                   (ou.first_name || ' ' || ou.last_name) AS observed_name,
+                   (eu.first_name || ' ' || eu.last_name) AS evaluator_name,
+                   sc.school_name,
+                   ROUND((co.transitions_score + co.engagement_score + co.lesson_fidelity_score +
+                          co.sel_language_score + co.safety_score + co.organization_score) / 6.0, 1) AS average_score
+            FROM coach_observations co
+            JOIN staff_profiles osp ON osp.staff_id = co.observed_staff_id
+            JOIN users ou ON ou.user_id = osp.user_id AND ou.deleted_at IS NULL
+            JOIN staff_profiles esp ON esp.staff_id = co.evaluator_staff_id
+            JOIN users eu ON eu.user_id = esp.user_id AND eu.deleted_at IS NULL
+            JOIN schools sc ON sc.school_id = co.school_id
+            WHERE co.school_id = ?
+        """
+        params = [school_id_filter]
+        if staff_id_filter:
+            sql += " AND co.observed_staff_id = ?"
+            params.append(staff_id_filter)
+        sql += " ORDER BY co.observation_date DESC, co.created_at DESC"
+
+        rows = db.execute(sql, params).fetchall()
+        return jsonify({"ok": True, "observations": [dict(r) for r in rows]})
     finally:
         db.close()

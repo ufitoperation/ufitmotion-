@@ -320,12 +320,36 @@ def update_school(school_id: int):
 @admin_bp.route("/api/schools/<int:school_id>", methods=["DELETE"])
 @admin_required
 def delete_school(school_id: int):
-    """
-    TODO: Soft-delete a school (set deleted_at = NOW()).
-    Cascades to deactivate staff assignments and programs at that school.
-    Prevent delete if active students are enrolled.
-    """
-    return jsonify({"ok": True, "stub": True, "route": f"DELETE /api/schools/{school_id}"})
+    user = current_user()
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+
+    db = get_db()
+    try:
+        row = db.execute(
+            "SELECT school_id, school_name FROM schools WHERE school_id = ? AND deleted_at IS NULL",
+            (school_id,),
+        ).fetchone()
+        if not row:
+            return jsonify({"error": "School not found."}), 404
+
+        active_students = db.execute(
+            "SELECT COUNT(*) FROM students WHERE school_id = ? AND active_status = 1 AND deleted_at IS NULL",
+            (school_id,),
+        ).fetchone()[0]
+        if active_students > 0:
+            return jsonify({"error": f"Cannot delete school with {active_students} active student(s). Deactivate or transfer students first."}), 409
+
+        ts = now_utc()
+        db.execute("UPDATE schools SET deleted_at = ? WHERE school_id = ?", (ts, school_id))
+        db.execute("UPDATE staff_assignments SET active_status = 0 WHERE school_id = ?", (school_id,))
+        db.execute("UPDATE programs SET program_status = 'inactive' WHERE school_id = ?", (school_id,))
+        audit(db, user["user_id"], "DELETE", "schools", school_id,
+              old_values={"school_name": row["school_name"]})
+        db.commit()
+        return jsonify({"ok": True})
+    finally:
+        db.close()
 
 
 
@@ -543,80 +567,441 @@ def update_user(user_id: int):
 @admin_bp.route("/api/users/<int:user_id>", methods=["DELETE"])
 @admin_required
 def delete_user(user_id: int):
-    """
-    TODO: Soft-delete a user (set deleted_at = NOW(), active_status = FALSE).
-    Cannot delete self. Cannot delete last CEO.
-    Audit the deletion.
-    """
-    return jsonify({"ok": True, "stub": True, "route": f"DELETE /api/users/{user_id}"})
+    current = current_user()
+    if current is None:
+        return jsonify({"error": "Authentication required."}), 401
+
+    if current["user_id"] == user_id:
+        return jsonify({"error": "You cannot delete your own account."}), 409
+
+    db = get_db()
+    try:
+        row = db.execute(
+            "SELECT user_id, role, email FROM users WHERE user_id = ? AND deleted_at IS NULL",
+            (user_id,),
+        ).fetchone()
+        if not row:
+            return jsonify({"error": "User not found."}), 404
+
+        if row["role"] == "ceo":
+            remaining = db.execute(
+                "SELECT COUNT(*) FROM users WHERE role = 'ceo' AND deleted_at IS NULL"
+            ).fetchone()[0]
+            if remaining <= 1:
+                return jsonify({"error": "Cannot delete the last CEO account."}), 409
+
+        ts = now_utc()
+        db.execute(
+            "UPDATE users SET deleted_at = ?, active_status = 0 WHERE user_id = ?",
+            (ts, user_id),
+        )
+        db.execute(
+            "UPDATE staff_assignments SET active_status = 0 WHERE staff_id = (SELECT staff_id FROM staff_profiles WHERE user_id = ?)",
+            (user_id,),
+        )
+        audit(db, current["user_id"], "DELETE", "users", user_id,
+              old_values={"email": row["email"], "role": row["role"]})
+        db.commit()
+        return jsonify({"ok": True})
+    finally:
+        db.close()
 
 
 
 @admin_bp.route("/api/students", methods=["GET"])
 @admin_required
 def list_students():
-    """
-    TODO: Return paginated student list scoped to org (HARD RULE: no cross-org leakage).
-    Includes school_name, grade_level, active program enrollments.
-    Supports ?school_id=, ?grade_level=, ?search=, ?page=, ?per_page= query params.
-    """
-    return jsonify({"ok": True, "stub": True, "route": "GET /api/students"})
+    user = current_user()
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+
+    school_id = request.args.get("school_id", type=int)
+    grade_filter = request.args.get("grade_level", "").strip()[:10]
+    search_raw = request.args.get("search", "").strip()[:100]
+    page = max(1, request.args.get("page", 1, type=int))
+    per_page = min(100, max(1, request.args.get("per_page", 50, type=int)))
+    offset = (page - 1) * per_page
+
+    db = get_db()
+    try:
+        sql = """
+            SELECT s.student_id, s.student_first_name, s.student_last_name,
+                   s.grade_level, s.local_student_identifier, s.active_status,
+                   s.enrollment_start, sc.school_name, sc.school_id
+            FROM students s
+            JOIN schools sc ON sc.school_id = s.school_id
+            WHERE s.deleted_at IS NULL
+        """
+        params = []
+        if school_id:
+            sql += " AND s.school_id = ?"
+            params.append(school_id)
+        if grade_filter:
+            sql += " AND s.grade_level = ?"
+            params.append(grade_filter)
+        if search_raw:
+            sql += " AND (LOWER(s.student_first_name) LIKE ? OR LOWER(s.student_last_name) LIKE ?)"
+            p = f"%{search_raw.lower()}%"
+            params.extend([p, p])
+
+        total = db.execute(f"SELECT COUNT(*) FROM ({sql})", params).fetchone()[0]
+        sql += " ORDER BY sc.school_name, s.student_last_name, s.student_first_name LIMIT ? OFFSET ?"
+        params.extend([per_page, offset])
+        rows = db.execute(sql, params).fetchall()
+
+        return jsonify({
+            "ok": True,
+            "students": [serialize_student(r) for r in rows],
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+        })
+    finally:
+        db.close()
 
 
 @admin_bp.route("/api/students", methods=["POST"])
 @admin_required
 def create_student():
-    """
-    TODO: Create a new student record.
-    Body: { first_name, last_name, grade_level, school_id, gender, date_of_birth }
-    Validate school exists and belongs to an org the admin can see.
-    Audit the creation. Return serialized student.
-    """
-    return jsonify({"ok": True, "stub": True, "route": "POST /api/students"}), 201
+    user = current_user()
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+
+    data = parse_json()
+    first_name = (data.get("student_first_name") or data.get("first_name") or "").strip()
+    last_name = (data.get("student_last_name") or data.get("last_name") or "").strip()
+    grade_level = (data.get("grade_level") or "").strip()
+    school_id = data.get("school_id")
+    local_id = (data.get("local_student_identifier") or "").strip() or None
+    gender = (data.get("gender") or "").strip() or None
+    homeroom = (data.get("homeroom_teacher") or "").strip() or None
+    enrollment_start = data.get("enrollment_start") or now_utc()[:10]
+
+    if not first_name or not last_name:
+        return jsonify({"error": "student_first_name and student_last_name are required."}), 400
+    if not grade_level:
+        return jsonify({"error": "grade_level is required."}), 400
+    if not school_id or not isinstance(school_id, int):
+        return jsonify({"error": "school_id is required."}), 400
+
+    db = get_db()
+    try:
+        school = db.execute("SELECT school_id FROM schools WHERE school_id = ? AND deleted_at IS NULL", (school_id,)).fetchone()
+        if not school:
+            return jsonify({"error": "School not found."}), 404
+
+        cur = db.execute(
+            """INSERT INTO students
+               (school_id, student_first_name, student_last_name, local_student_identifier,
+                grade_level, homeroom_teacher, gender, active_status, enrollment_start, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)""",
+            (school_id, first_name, last_name, local_id,
+             grade_level, homeroom, gender, enrollment_start, now_utc()),
+        )
+        new_id = cur.lastrowid
+        audit(db, user["user_id"], "INSERT", "students", new_id,
+              new_values={"school_id": school_id, "name": f"{first_name} {last_name}", "grade": grade_level})
+        db.commit()
+
+        row = db.execute(
+            """SELECT s.*, sc.school_name FROM students s
+               JOIN schools sc ON sc.school_id = s.school_id
+               WHERE s.student_id = ?""",
+            (new_id,),
+        ).fetchone()
+        return jsonify({"ok": True, "student": serialize_student(row)}), 201
+    finally:
+        db.close()
 
 
 @admin_bp.route("/api/students/<int:student_id>", methods=["DELETE"])
 @admin_required
 def delete_student(student_id: int):
-    """
-    TODO: Soft-delete a student (set deleted_at = NOW(), active_status = FALSE).
-    Unenroll from active programs. Retain assessment history.
-    Audit the deletion.
-    """
-    return jsonify({"ok": True, "stub": True, "route": f"DELETE /api/students/{student_id}"})
+    user = current_user()
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+
+    db = get_db()
+    try:
+        row = db.execute(
+            "SELECT student_id FROM students WHERE student_id = ? AND deleted_at IS NULL", (student_id,)
+        ).fetchone()
+        if not row:
+            return jsonify({"error": "Student not found."}), 404
+
+        ts = now_utc()
+        db.execute(
+            "UPDATE students SET deleted_at = ?, active_status = 0 WHERE student_id = ?",
+            (ts, student_id),
+        )
+        db.execute(
+            "UPDATE student_program_enrollment SET status = 'inactive' WHERE student_id = ?",
+            (student_id,),
+        )
+        audit(db, user["user_id"], "DELETE", "students", student_id)
+        db.commit()
+        return jsonify({"ok": True})
+    finally:
+        db.close()
 
 
 
 @admin_bp.route("/api/programs", methods=["GET"])
 @admin_required
 def list_programs():
-    """
-    TODO: Return all programs with school name, coach count, student enrollment count,
-    start/end dates, and active status.
-    Supports ?school_id=, ?active=, ?search= query params.
-    """
-    return jsonify({"ok": True, "stub": True, "route": "GET /api/programs"})
+    user = current_user()
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+
+    school_id = request.args.get("school_id", type=int)
+    active_only = request.args.get("active", "").strip()
+    search_raw = request.args.get("search", "").strip()[:100]
+
+    db = get_db()
+    try:
+        sql = """
+            SELECT p.program_id, p.school_id, sc.school_name, p.program_name,
+                   p.program_type, p.service_model, p.grade_band, p.start_date,
+                   p.end_date, p.program_status, p.frequency, p.reporting_cycle, p.notes,
+                   (SELECT COUNT(*) FROM staff_assignments sa WHERE sa.program_id = p.program_id AND sa.active_status = 1) AS coach_count,
+                   (SELECT COUNT(*) FROM student_program_enrollment spe WHERE spe.program_id = p.program_id AND spe.status = 'active') AS student_count
+            FROM programs p
+            JOIN schools sc ON sc.school_id = p.school_id
+            WHERE sc.deleted_at IS NULL
+        """
+        params = []
+        if school_id:
+            sql += " AND p.school_id = ?"
+            params.append(school_id)
+        if active_only in ("1", "true"):
+            sql += " AND p.program_status = 'active'"
+        if search_raw:
+            sql += " AND LOWER(p.program_name) LIKE ?"
+            params.append(f"%{search_raw.lower()}%")
+        sql += " ORDER BY sc.school_name, p.program_name"
+
+        rows = db.execute(sql, params).fetchall()
+        return jsonify({"ok": True, "programs": [dict(r) for r in rows]})
+    finally:
+        db.close()
 
 
 @admin_bp.route("/api/programs", methods=["POST"])
 @admin_required
 def create_program():
-    """
-    TODO: Create a new PE program.
-    Body: { school_id, program_name, program_type, start_date, end_date, description }
-    Validate school exists. Insert. Audit. Return created program.
-    """
-    return jsonify({"ok": True, "stub": True, "route": "POST /api/programs"}), 201
+    user = current_user()
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+
+    data = parse_json()
+    school_id = data.get("school_id")
+    program_name = (data.get("program_name") or "").strip()
+    program_type = (data.get("program_type") or "pe_support").strip()
+    service_model = (data.get("service_model") or "").strip() or None
+    grade_band = (data.get("grade_band") or "").strip() or None
+    start_date = data.get("start_date")
+    end_date = data.get("end_date") or None
+    frequency = (data.get("frequency") or "").strip() or None
+    reporting_cycle = (data.get("reporting_cycle") or "quarterly").strip()
+    notes = (data.get("notes") or "").strip() or None
+
+    VALID_TYPES = ("pe_support", "lunch_sports", "after_school_sports", "psychomotor",
+                   "middle_school_skill_development", "tournament_program", "wellness_enrichment")
+
+    if not school_id or not isinstance(school_id, int):
+        return jsonify({"error": "school_id is required."}), 400
+    if not program_name:
+        return jsonify({"error": "program_name is required."}), 400
+    if not start_date:
+        return jsonify({"error": "start_date is required."}), 400
+    if program_type not in VALID_TYPES:
+        return jsonify({"error": f"Invalid program_type. Must be one of: {', '.join(VALID_TYPES)}."}), 400
+
+    db = get_db()
+    try:
+        school = db.execute("SELECT school_id FROM schools WHERE school_id = ? AND deleted_at IS NULL", (school_id,)).fetchone()
+        if not school:
+            return jsonify({"error": "School not found."}), 404
+
+        cur = db.execute(
+            """INSERT INTO programs
+               (school_id, program_name, program_type, service_model, grade_band,
+                start_date, end_date, frequency, program_status, reporting_cycle, notes, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)""",
+            (school_id, program_name, program_type, service_model, grade_band,
+             start_date, end_date, frequency, reporting_cycle, notes, now_utc()),
+        )
+        new_id = cur.lastrowid
+        audit(db, user["user_id"], "INSERT", "programs", new_id,
+              new_values={"school_id": school_id, "program_name": program_name, "program_type": program_type})
+        db.commit()
+
+        row = db.execute(
+            """SELECT p.*, sc.school_name FROM programs p
+               JOIN schools sc ON sc.school_id = p.school_id WHERE p.program_id = ?""",
+            (new_id,),
+        ).fetchone()
+        return jsonify({"ok": True, "program": dict(row)}), 201
+    finally:
+        db.close()
 
 
 @admin_bp.route("/api/programs/<int:program_id>", methods=["DELETE"])
 @admin_required
 def delete_program(program_id: int):
-    """
-    TODO: Soft-delete a program. Unenroll all students. Cancel future sessions.
-    Audit with full pre-delete snapshot.
-    """
-    return jsonify({"ok": True, "stub": True, "route": f"DELETE /api/programs/{program_id}"})
+    user = current_user()
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+
+    db = get_db()
+    try:
+        row = db.execute("SELECT program_id, program_name FROM programs WHERE program_id = ?", (program_id,)).fetchone()
+        if not row:
+            return jsonify({"error": "Program not found."}), 404
+
+        db.execute("UPDATE programs SET program_status = 'inactive' WHERE program_id = ?", (program_id,))
+        db.execute("UPDATE student_program_enrollment SET status = 'inactive' WHERE program_id = ?", (program_id,))
+        db.execute("UPDATE staff_assignments SET active_status = 0 WHERE program_id = ?", (program_id,))
+        audit(db, user["user_id"], "DELETE", "programs", program_id,
+              old_values={"program_name": row["program_name"]})
+        db.commit()
+        return jsonify({"ok": True})
+    finally:
+        db.close()
+
+
+# ===========================================================================
+# ASSESSMENT WINDOWS  (TABLE 14) — admin creates, coaches read
+# ===========================================================================
+
+@admin_bp.route("/api/assessment-windows", methods=["GET"])
+@admin_required
+def list_assessment_windows_admin():
+    user = current_user()
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+
+    school_id = request.args.get("school_id", type=int)
+    status_filter = request.args.get("status", "").strip()
+
+    db = get_db()
+    try:
+        sql = """
+            SELECT aw.*, sc.school_name, p.program_name
+            FROM assessment_windows aw
+            JOIN schools sc ON sc.school_id = aw.school_id
+            LEFT JOIN programs p ON p.program_id = aw.program_id
+            WHERE 1=1
+        """
+        params = []
+        if school_id:
+            sql += " AND aw.school_id = ?"
+            params.append(school_id)
+        if status_filter in ("upcoming", "active", "closed"):
+            sql += " AND aw.status = ?"
+            params.append(status_filter)
+        sql += " ORDER BY aw.start_date DESC"
+        rows = db.execute(sql, params).fetchall()
+        return jsonify({"ok": True, "windows": [dict(r) for r in rows]})
+    finally:
+        db.close()
+
+
+@admin_bp.route("/api/assessment-windows", methods=["POST"])
+@admin_required
+def create_assessment_window():
+    user = current_user()
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+
+    data = parse_json()
+    school_id = data.get("school_id")
+    program_id = data.get("program_id") or None
+    window_name = (data.get("window_name") or "").strip()
+    start_date = data.get("start_date")
+    end_date = data.get("end_date")
+    assessment_focus = (data.get("assessment_focus") or "").strip() or None
+    status = (data.get("status") or "upcoming").strip()
+
+    if not school_id or not isinstance(school_id, int):
+        return jsonify({"error": "school_id is required."}), 400
+    if not window_name:
+        return jsonify({"error": "window_name is required."}), 400
+    if not start_date or not end_date:
+        return jsonify({"error": "start_date and end_date are required."}), 400
+    if status not in ("upcoming", "active", "closed"):
+        return jsonify({"error": "status must be upcoming, active, or closed."}), 400
+
+    try:
+        s = datetime.date.fromisoformat(str(start_date))
+        e = datetime.date.fromisoformat(str(end_date))
+        if e < s:
+            return jsonify({"error": "end_date cannot be before start_date."}), 400
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid date format. Use YYYY-MM-DD."}), 400
+
+    db = get_db()
+    try:
+        school = db.execute("SELECT school_id FROM schools WHERE school_id = ? AND deleted_at IS NULL", (school_id,)).fetchone()
+        if not school:
+            return jsonify({"error": "School not found."}), 404
+
+        cur = db.execute(
+            """INSERT INTO assessment_windows
+               (school_id, program_id, window_name, start_date, end_date,
+                assessment_focus, status, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (school_id, program_id, window_name, start_date, end_date,
+             assessment_focus, status, now_utc()),
+        )
+        new_id = cur.lastrowid
+        audit(db, user["user_id"], "INSERT", "assessment_windows", new_id,
+              new_values={"school_id": school_id, "window_name": window_name, "status": status})
+        db.commit()
+        return jsonify({"ok": True, "window_id": new_id}), 201
+    finally:
+        db.close()
+
+
+@admin_bp.route("/api/assessment-windows/<int:window_id>", methods=["PATCH"])
+@admin_required
+def update_assessment_window(window_id: int):
+    user = current_user()
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+
+    data = parse_json()
+    db = get_db()
+    try:
+        row = db.execute("SELECT * FROM assessment_windows WHERE window_id = ?", (window_id,)).fetchone()
+        if not row:
+            return jsonify({"error": "Assessment window not found."}), 404
+
+        fields = {}
+        if "window_name" in data and data["window_name"]:
+            fields["window_name"] = data["window_name"].strip()
+        if "status" in data:
+            if data["status"] not in ("upcoming", "active", "closed"):
+                return jsonify({"error": "status must be upcoming, active, or closed."}), 400
+            fields["status"] = data["status"]
+        if "start_date" in data:
+            fields["start_date"] = data["start_date"]
+        if "end_date" in data:
+            fields["end_date"] = data["end_date"]
+        if "assessment_focus" in data:
+            fields["assessment_focus"] = data["assessment_focus"]
+
+        if not fields:
+            return jsonify({"error": "No fields to update."}), 400
+
+        set_clause = ", ".join(f"{k} = ?" for k in fields)
+        vals = list(fields.values()) + [window_id]
+        db.execute(f"UPDATE assessment_windows SET {set_clause} WHERE window_id = ?", vals)
+        audit(db, user["user_id"], "UPDATE", "assessment_windows", window_id, new_values=fields)
+        db.commit()
+        return jsonify({"ok": True})
+    finally:
+        db.close()
 
 
 

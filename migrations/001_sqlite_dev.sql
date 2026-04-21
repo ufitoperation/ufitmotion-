@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS schools (
     bell_schedule_notes TEXT,
     yard_notes TEXT,
     site_specific_rules TEXT,
+    contract_id INTEGER REFERENCES contracts(contract_id) ON DELETE SET NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at TEXT DEFAULT NULL
 );
@@ -63,7 +64,9 @@ CREATE TABLE IF NOT EXISTS users (
     password_reset_token TEXT,
     password_reset_expires_at TEXT,
     email_verified INTEGER NOT NULL DEFAULT 0,
-    email_verified_at TEXT
+    email_verified_at TEXT,
+    linked_staff_id INTEGER REFERENCES staff_profiles(staff_id) ON DELETE SET NULL,
+    linked_parent_id INTEGER REFERENCES parents(parent_id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS staff_profiles (
@@ -286,6 +289,7 @@ CREATE TABLE IF NOT EXISTS assessment_scores (
     observed_consistency INTEGER DEFAULT 0,
     observed_accuracy INTEGER DEFAULT 0,
     growth_flag INTEGER DEFAULT 0,
+    observation_tag TEXT,
     notes TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(assessment_id, skill_id)
