@@ -30,6 +30,8 @@ import datetime
 from zoneinfo import ZoneInfo
 from datetime import date, timedelta
 
+from typing import Optional
+
 from flask import Blueprint, jsonify, request
 from werkzeug.security import generate_password_hash
 
@@ -53,6 +55,19 @@ def _get_week_bounds() -> tuple:
     return week_start.isoformat(), week_end.isoformat()
 
 admin_bp = Blueprint("admin", __name__)
+
+
+def _get_org_scope(db, user) -> Optional[int]:
+    """Return org_id to scope queries by, or None for global (CEO) access."""
+    if user is None or user["role"] == "ceo":
+        return None
+    school_id = user.get("school_id")
+    if not school_id:
+        return None
+    row = db.execute(
+        "SELECT organization_id FROM schools WHERE school_id = ?", (school_id,)
+    ).fetchone()
+    return row["organization_id"] if row else None
 
 
 # ===========================================================================
@@ -1140,41 +1155,58 @@ def dashboard():
 @admin_bp.route("/api/admin/dashboard", methods=["GET"])
 @roles_required("ceo", "admin", "coach_overseer")
 def admin_dashboard():
+    user = current_user()
     week_start, week_end = _get_week_bounds()
     db = get_db()
     try:
+        org_id = _get_org_scope(db, user)
+        org_filter = "AND s.organization_id = ?" if org_id else ""
+        org_params = (org_id,) if org_id else ()
+
         active_schools = db.execute(
-            "SELECT COUNT(*) AS cnt FROM schools WHERE active_status=1 AND deleted_at IS NULL"
+            f"SELECT COUNT(*) AS cnt FROM schools s WHERE s.active_status=1 AND s.deleted_at IS NULL {org_filter}",
+            org_params,
         ).fetchone()["cnt"]
 
         active_coaches = db.execute(
-            """SELECT COUNT(*) AS cnt FROM users
-               WHERE role IN ('head_coach','assistant_coach')
-                 AND active_status=1 AND deleted_at IS NULL"""
+            f"""SELECT COUNT(*) AS cnt FROM users u
+               JOIN staff_profiles sp ON sp.user_id = u.user_id
+               JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status = 1
+               JOIN schools s ON s.school_id = sa.school_id
+               WHERE u.role IN ('head_coach','assistant_coach')
+                 AND u.active_status=1 AND u.deleted_at IS NULL
+                 {org_filter}""",
+            org_params,
         ).fetchone()["cnt"]
 
         sessions_this_week = db.execute(
-            """SELECT COUNT(*) AS cnt FROM sessions
-               WHERE session_date BETWEEN ? AND ? AND deleted_at IS NULL""",
-            (week_start, week_end),
+            f"""SELECT COUNT(*) AS cnt FROM sessions se
+               JOIN schools s ON s.school_id = se.school_id
+               WHERE se.session_date BETWEEN ? AND ? AND se.deleted_at IS NULL {org_filter}""",
+            (week_start, week_end) + org_params,
         ).fetchone()["cnt"]
 
+        # EOD compliance: expected = unique (staff_id, school_id, session_date) tuples
+        # so coaches at multiple schools count once per school per day.
         expected_row = db.execute(
-            """SELECT COUNT(*) AS cnt FROM (
-                 SELECT DISTINCT ss.staff_id, s.session_date
-                 FROM sessions s
-                 JOIN session_staff ss ON ss.session_id = s.session_id
-                 WHERE s.session_date BETWEEN ? AND ?
-                   AND s.deleted_at IS NULL
+            f"""SELECT COUNT(*) AS cnt FROM (
+                 SELECT DISTINCT ss.staff_id, se.school_id, se.session_date
+                 FROM sessions se
+                 JOIN session_staff ss ON ss.session_id = se.session_id
+                 JOIN schools s ON s.school_id = se.school_id
+                 WHERE se.session_date BETWEEN ? AND ?
+                   AND se.deleted_at IS NULL
+                   {org_filter}
                )""",
-            (week_start, week_end),
+            (week_start, week_end) + org_params,
         ).fetchone()
         expected = expected_row["cnt"] if expected_row else 0
 
         actual_row = db.execute(
-            """SELECT COUNT(*) AS cnt FROM eod_reports
-               WHERE report_date BETWEEN ? AND ? AND deleted_at IS NULL""",
-            (week_start, week_end),
+            f"""SELECT COUNT(*) AS cnt FROM eod_reports er
+               JOIN schools s ON s.school_id = er.school_id
+               WHERE er.report_date BETWEEN ? AND ? AND er.deleted_at IS NULL {org_filter}""",
+            (week_start, week_end) + org_params,
         ).fetchone()
         actual = actual_row["cnt"] if actual_row else 0
 
@@ -1184,8 +1216,10 @@ def admin_dashboard():
             eod_compliance_rate = 0.0
 
         open_incidents = db.execute(
-            """SELECT COUNT(*) AS cnt FROM incident_reports
-               WHERE status='open' AND deleted_at IS NULL"""
+            f"""SELECT COUNT(*) AS cnt FROM incident_reports ir
+               JOIN schools s ON s.school_id = ir.school_id
+               WHERE ir.status='open' AND ir.deleted_at IS NULL {org_filter}""",
+            org_params,
         ).fetchone()["cnt"]
 
         return jsonify({
@@ -1205,11 +1239,18 @@ def admin_dashboard():
 @admin_bp.route("/api/admin/schools", methods=["GET"])
 @roles_required("ceo", "admin", "coach_overseer")
 def admin_list_schools():
+    user = current_user()
     week_start, week_end = _get_week_bounds()
     db = get_db()
     try:
+        org_id = _get_org_scope(db, user)
+        org_filter = "AND s.organization_id = ?" if org_id else ""
+        params = [week_start, week_end]
+        if org_id:
+            params.append(org_id)
+
         rows = db.execute(
-            """SELECT
+            f"""SELECT
                  s.school_id, s.organization_id, s.region_id,
                  s.school_name, s.school_type, s.address, s.city, s.state,
                  s.zip_code, s.principal_name, s.principal_email,
@@ -1233,9 +1274,9 @@ def admin_list_schools():
                     AND e.deleted_at IS NULL
                  ) AS last_eod_date
                FROM schools s
-               WHERE s.active_status = 1 AND s.deleted_at IS NULL
+               WHERE s.active_status = 1 AND s.deleted_at IS NULL {org_filter}
                ORDER BY s.school_name ASC""",
-            (week_start, week_end),
+            params,
         ).fetchall()
 
         schools = []
@@ -1256,11 +1297,18 @@ def admin_list_schools():
 @admin_bp.route("/api/admin/coaches", methods=["GET"])
 @roles_required("ceo", "admin", "coach_overseer")
 def admin_list_coaches():
+    user = current_user()
     week_start, week_end = _get_week_bounds()
     db = get_db()
     try:
+        org_id = _get_org_scope(db, user)
+        org_filter = "AND s.organization_id = ?" if org_id else ""
+        params = [week_start, week_end, week_start, week_end, week_start, week_end]
+        if org_id:
+            params.append(org_id)
+
         rows = db.execute(
-            """SELECT
+            f"""SELECT
                  u.user_id, u.role, u.first_name, u.last_name, u.email,
                  u.active_status, u.created_at,
                  sp.staff_id, sp.position_title,
@@ -1289,8 +1337,9 @@ def admin_list_coaches():
                WHERE u.role IN ('head_coach','assistant_coach')
                  AND u.active_status = 1
                  AND u.deleted_at IS NULL
+                 {org_filter}
                ORDER BY u.last_name ASC, u.first_name ASC""",
-            (week_start, week_end, week_start, week_end, week_start, week_end),
+            params,
         ).fetchall()
 
         coaches = []
@@ -1311,6 +1360,7 @@ def admin_list_coaches():
 @admin_bp.route("/api/admin/incidents", methods=["GET"])
 @roles_required("ceo", "admin", "coach_overseer")
 def admin_incidents():
+    user = current_user()
     raw_weeks = request.args.get("weeks", "4")
     try:
         weeks = int(raw_weeks)
@@ -1328,32 +1378,38 @@ def admin_incidents():
 
     db = get_db()
     try:
+        org_id = _get_org_scope(db, user)
+        org_filter = "AND s.organization_id = ?" if org_id else ""
+        org_params = (org_id,) if org_id else ()
+
         total_row = db.execute(
-            """SELECT COUNT(*) AS cnt FROM incident_reports
-               WHERE report_date BETWEEN ? AND ? AND deleted_at IS NULL""",
-            (window_start_str, window_end_str),
+            f"""SELECT COUNT(*) AS cnt FROM incident_reports ir
+               JOIN schools s ON s.school_id = ir.school_id
+               WHERE ir.report_date BETWEEN ? AND ? AND ir.deleted_at IS NULL {org_filter}""",
+            (window_start_str, window_end_str) + org_params,
         ).fetchone()
         total = total_row["cnt"] if total_row else 0
 
         severity_rows = db.execute(
-            """SELECT severity_level, COUNT(*) AS cnt
-               FROM incident_reports
-               WHERE report_date BETWEEN ? AND ? AND deleted_at IS NULL
-               GROUP BY severity_level
+            f"""SELECT ir.severity_level, COUNT(*) AS cnt
+               FROM incident_reports ir
+               JOIN schools s ON s.school_id = ir.school_id
+               WHERE ir.report_date BETWEEN ? AND ? AND ir.deleted_at IS NULL {org_filter}
+               GROUP BY ir.severity_level
                ORDER BY cnt DESC""",
-            (window_start_str, window_end_str),
+            (window_start_str, window_end_str) + org_params,
         ).fetchall()
         by_severity = [{"severity_level": r["severity_level"], "count": r["cnt"]}
                        for r in severity_rows]
 
         school_rows = db.execute(
-            """SELECT ir.school_id, s.school_name, COUNT(*) AS cnt
+            f"""SELECT ir.school_id, s.school_name, COUNT(*) AS cnt
                FROM incident_reports ir
                JOIN schools s ON s.school_id = ir.school_id
-               WHERE ir.report_date BETWEEN ? AND ? AND ir.deleted_at IS NULL
+               WHERE ir.report_date BETWEEN ? AND ? AND ir.deleted_at IS NULL {org_filter}
                GROUP BY ir.school_id, s.school_name
                ORDER BY cnt DESC""",
-            (window_start_str, window_end_str),
+            (window_start_str, window_end_str) + org_params,
         ).fetchall()
         by_school = [{"school_id": r["school_id"], "school_name": r["school_name"], "count": r["cnt"]}
                      for r in school_rows]
@@ -1361,11 +1417,12 @@ def admin_incidents():
         # Build week list — N entries, zero-fill missing weeks
         week_counts = {}
         for week_rows in db.execute(
-            """SELECT report_date, COUNT(*) AS cnt
-               FROM incident_reports
-               WHERE report_date BETWEEN ? AND ? AND deleted_at IS NULL
-               GROUP BY report_date""",
-            (window_start_str, window_end_str),
+            f"""SELECT ir.report_date, COUNT(*) AS cnt
+               FROM incident_reports ir
+               JOIN schools s ON s.school_id = ir.school_id
+               WHERE ir.report_date BETWEEN ? AND ? AND ir.deleted_at IS NULL {org_filter}
+               GROUP BY ir.report_date""",
+            (window_start_str, window_end_str) + org_params,
         ).fetchall():
             d = datetime.date.fromisoformat(week_rows["report_date"])
             # Align to Monday of that week

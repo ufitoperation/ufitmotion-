@@ -18,6 +18,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.auth import current_user, ADMIN_ROLES, COACH_ROLES, SCHOOL_ROLES
 from app.database import get_db
+from app.extensions import limiter
 from app.routes._helpers import audit, now_utc, parse_json, serialize_user
 
 auth_bp = Blueprint("auth", __name__)
@@ -39,6 +40,7 @@ PORTAL_ROLES: dict[str, tuple[str, ...]] = {
 # POST /api/auth/login
 # ---------------------------------------------------------------------------
 @auth_bp.route("/api/auth/login", methods=["POST"])
+@limiter.limit("10 per minute")
 def login():
     """
     Authenticate a user.
@@ -256,6 +258,7 @@ def get_session():
 # POST /api/auth/forgot-password
 # ---------------------------------------------------------------------------
 @auth_bp.route("/api/auth/forgot-password", methods=["POST"])
+@limiter.limit("5 per minute")
 def forgot_password():
     """
     Generate a password reset token and store it in the database.
@@ -305,6 +308,7 @@ def forgot_password():
 # POST /api/auth/reset-password
 # ---------------------------------------------------------------------------
 @auth_bp.route("/api/auth/reset-password", methods=["POST"])
+@limiter.limit("10 per minute")
 def reset_password():
     """
     Validate a reset token and update the user's password.

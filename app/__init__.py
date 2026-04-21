@@ -1,6 +1,9 @@
+import logging
+import traceback
 from datetime import timedelta
 from flask import Flask, g, jsonify, request
 from app.config import get_config
+from app.extensions import limiter
 
 
 def create_app(config=None):
@@ -8,6 +11,8 @@ def create_app(config=None):
     cfg = config or get_config()
     app.config["UFIT_CONFIG"] = cfg
     app.config["SECRET_KEY"] = cfg.SECRET_KEY
+
+    limiter.init_app(app)
 
     # FERPA / OWASP session hardening
     app.config["SESSION_COOKIE_HTTPONLY"] = True
@@ -55,6 +60,11 @@ def create_app(config=None):
                 "max-age=31536000; includeSubDomains"
             )
         return response
+
+    @app.errorhandler(Exception)
+    def handle_unhandled_exception(e):
+        app.logger.error("Unhandled exception: %s\n%s", e, traceback.format_exc())
+        return jsonify({"error": "An unexpected error occurred."}), 500
 
     @app.route("/api/health")
     def health():
