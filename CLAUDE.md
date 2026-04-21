@@ -10,10 +10,11 @@ Follow these steps at the start of every session, in order:
 
 1. Read `SOUL.md` — understand the project's identity, values, and constraints before anything else.
 2. Read `AGENTS.md` — load the role directory and sequential protocol so you know which agent to invoke for each task type.
-3. Check `.sessions/handoffs/` — find the latest handoff file that is NOT marked superseded. Load its open tasks, decisions, and context.
-4. Run `glob .claude/agents/*` — confirm which agent definitions are present and available.
-5. Run `git log --oneline -5` — orient to the current branch state and recent commits.
-6. If the loaded handoff lists skills to invoke at session start, invoke them now via the Skill tool before proceeding.
+3. **Read `docs/requirements-external.md`** — this is the product specification (scoring formulas, table definitions, reporting outputs). All scoring, assessment, and reporting work must conform to it.
+4. Check `.sessions/handoffs/` — find the latest handoff file that is NOT marked superseded. Load its open tasks, decisions, and context.
+5. Run `glob .claude/agents/*` — confirm which agent definitions are present and available.
+6. Run `git log --oneline -5` — orient to the current branch state and recent commits.
+7. If the loaded handoff lists skills to invoke at session start, invoke them now via the Skill tool before proceeding.
 
 ---
 
@@ -64,7 +65,7 @@ Feature-type routing shortcuts:
 **Tech stack:**
 - Backend: Flask (Python 3.12)
 - Database: PostgreSQL via Supabase
-- Hosting: Railway
+- Hosting: Render (migrated from Railway)
 - Frontend: Vanilla JS (no framework)
 - Auth: Flask session-based with role checks
 
