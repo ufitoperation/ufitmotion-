@@ -213,12 +213,12 @@ def setup_admin():
         if dup:
             return jsonify({"error": "An account with that email already exists."}), 409
 
-        password_hash = generate_password_hash(password)
+        password_hash = generate_password_hash(password, method="pbkdf2:sha256")
         cur = db.execute(
             """INSERT INTO users (role, first_name, last_name, email, password_hash,
-                                  active_status, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, TRUE, ?, ?)""",
-            (role, first_name, last_name, email, password_hash, now_utc(), now_utc()),
+                                  active_status, created_at)
+               VALUES (?, ?, ?, ?, ?, TRUE, ?)""",
+            (role, first_name, last_name, email, password_hash, now_utc()),
         )
         new_id = cur.lastrowid
         db.commit()
@@ -228,7 +228,11 @@ def setup_admin():
             (new_id,),
         ).fetchone()
 
-        return jsonify({"ok": True, "user": serialize_user(user)}), 201
+        return jsonify({"ok": True, "user": {
+            "user_id": user["user_id"], "role": user["role"],
+            "first_name": user["first_name"], "last_name": user["last_name"],
+            "email": user["email"], "active_status": user["active_status"],
+        }}), 201
     finally:
         db.close()
 
@@ -280,9 +284,9 @@ def forgot_password():
             expires_at = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
             db.execute(
                 """UPDATE users
-                   SET password_reset_token = ?, password_reset_expires_at = ?, updated_at = ?
+                   SET password_reset_token = ?, password_reset_expires_at = ?
                    WHERE user_id = ?""",
-                (token, expires_at, now_utc(), row["user_id"]),
+                (token, expires_at, row["user_id"]),
             )
             db.commit()
 
@@ -345,15 +349,14 @@ def reset_password():
             if datetime.now(timezone.utc) > expires_dt:
                 return jsonify({"error": "Reset token has expired. Please request a new one."}), 400
 
-        new_hash = generate_password_hash(password)
+        new_hash = generate_password_hash(password, method="pbkdf2:sha256")
         db.execute(
             """UPDATE users
                SET password_hash = ?,
                    password_reset_token = NULL,
-                   password_reset_expires_at = NULL,
-                   updated_at = ?
+                   password_reset_expires_at = NULL
                WHERE user_id = ?""",
-            (new_hash, now_utc(), row["user_id"]),
+            (new_hash, row["user_id"]),
         )
         db.commit()
 

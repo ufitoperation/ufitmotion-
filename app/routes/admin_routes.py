@@ -127,12 +127,36 @@ def create_organization():
 @admin_bp.route("/api/schools", methods=["GET"])
 @admin_required
 def list_schools():
-    """
-    TODO: Return all active schools with organization name, region name,
-    student count, coach count, and active program count.
-    Supports ?org_id=, ?region_id=, ?search= query params.
-    """
-    return jsonify({"ok": True, "stub": True, "route": "GET /api/schools"})
+    search = (request.args.get("search") or "").strip()[:100]
+    org_id_raw = request.args.get("org_id")
+    db = get_db()
+    try:
+        params = []
+        where = "WHERE s.deleted_at IS NULL AND s.active_status = 1"
+        if search:
+            where += " AND (s.school_name LIKE ? OR s.city LIKE ?)"
+            params += [f"%{search}%", f"%{search}%"]
+        if org_id_raw:
+            where += " AND s.organization_id = ?"
+            params.append(int(org_id_raw))
+        rows = db.execute(
+            f"""SELECT s.school_id, s.school_name, s.school_type, s.city, s.state,
+                       o.organization_name,
+                       COUNT(DISTINCT sa.staff_id) AS coach_count,
+                       COUNT(DISTINCT st.student_id) AS student_count
+                FROM schools s
+                LEFT JOIN organizations o ON o.organization_id = s.organization_id
+                LEFT JOIN staff_assignments sa ON sa.school_id = s.school_id AND sa.active_status = 1
+                LEFT JOIN students st ON st.school_id = s.school_id
+                    AND st.active_status = 1 AND st.deleted_at IS NULL
+                {where}
+                GROUP BY s.school_id
+                ORDER BY s.school_name ASC""",
+            params,
+        ).fetchall()
+        return jsonify({"ok": True, "schools": [dict(r) for r in rows], "total": len(rows)})
+    finally:
+        db.close()
 
 
 @admin_bp.route("/api/schools", methods=["POST"])
@@ -308,13 +332,58 @@ def delete_school(school_id: int):
 @admin_bp.route("/api/users", methods=["GET"])
 @admin_required
 def list_users():
-    """
-    TODO: Return paginated list of all staff users (all roles except parent).
-    Includes role, assigned school, position_title, active_status.
-    Supports ?role=, ?school_id=, ?search=, ?page=, ?per_page= query params.
-    Strips password_hash and auth_uid from all rows.
-    """
-    return jsonify({"ok": True, "stub": True, "route": "GET /api/users"})
+    search = (request.args.get("search") or "").strip()[:100]
+    role_filter = (request.args.get("role") or "").strip()
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+        per_page = min(100, max(1, int(request.args.get("per_page", 50))))
+    except (ValueError, TypeError):
+        return jsonify({"error": "page and per_page must be positive integers."}), 422
+
+    db = get_db()
+    try:
+        where = "WHERE u.deleted_at IS NULL"
+        params = []
+        if search:
+            where += " AND (u.first_name LIKE ? OR u.last_name LIKE ? OR u.email LIKE ?)"
+            params += [f"%{search}%", f"%{search}%", f"%{search}%"]
+        if role_filter:
+            where += " AND u.role = ?"
+            params.append(role_filter)
+
+        total = db.execute(
+            f"SELECT COUNT(*) AS cnt FROM users u {where}", params
+        ).fetchone()["cnt"]
+
+        offset = (page - 1) * per_page
+        rows = db.execute(
+            f"""SELECT u.user_id, u.role, u.first_name, u.last_name, u.email,
+                       u.active_status, u.created_at,
+                       sp.position_title, s.school_id, s.school_name
+                FROM users u
+                LEFT JOIN staff_profiles sp ON sp.user_id = u.user_id
+                LEFT JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status = 1
+                LEFT JOIN schools s ON s.school_id = sa.school_id
+                {where}
+                ORDER BY u.last_name ASC, u.first_name ASC
+                LIMIT ? OFFSET ?""",
+            params + [per_page, offset],
+        ).fetchall()
+
+        users = [
+            {
+                "user_id": r["user_id"], "role": r["role"],
+                "first_name": r["first_name"], "last_name": r["last_name"],
+                "email": r["email"], "active_status": r["active_status"],
+                "position_title": r["position_title"],
+                "school_id": r["school_id"], "school_name": r["school_name"],
+                "created_at": r["created_at"],
+            }
+            for r in rows
+        ]
+        return jsonify({"ok": True, "users": users, "total": total, "page": page, "per_page": per_page})
+    finally:
+        db.close()
 
 
 @admin_bp.route("/api/users", methods=["POST"])
@@ -343,7 +412,7 @@ def create_user():
 
     valid_roles = (
         "ceo", "admin", "coach_overseer", "site_coordinator",
-        "head_coach", "assistant_coach", "principal", "school_staff",
+        "head_coach", "assistant_coach", "principal", "school_staff", "parent",
     )
     if role not in valid_roles:
         return jsonify({"error": f"role must be one of: {', '.join(valid_roles)}."}), 400
@@ -387,7 +456,14 @@ def create_user():
         new_user_id = cur.lastrowid
 
         staff_id = None
-        if role != "parent":
+        if role == "parent":
+            db.execute(
+                """INSERT INTO parents
+                   (user_id, first_name, last_name, email, portal_access_status, created_at)
+                   VALUES (?, ?, ?, ?, 1, ?)""",
+                (new_user_id, first_name, last_name, email, ts),
+            )
+        else:
             sp_cur = db.execute(
                 """INSERT INTO staff_profiles
                    (user_id, position_title, status, created_at)
