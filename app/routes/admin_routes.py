@@ -1035,7 +1035,8 @@ def trigger_eod_alerts():
       { ok, alerts_sent, skipped_already_alerted, coaches_flagged: [{staff_id, coach_name}] }
     """
     now = _now_pacific()
-    today = now.date().isoformat()
+    today = now.date().isoformat()          # Pacific date — used for session_date queries
+    today_utc = now_utc()[:10]              # UTC date prefix — used for created_at idempotency
 
     db = get_db()
     try:
@@ -1075,8 +1076,8 @@ def trigger_eod_alerts():
                      AND notification_type = 'eod_late'
                      AND related_table = 'staff_profiles'
                      AND related_id = ?
-                     AND DATE(created_at) = ?""",
-                (user_id, staff_id, today),
+                     AND SUBSTR(created_at, 1, 10) = ?""",
+                (user_id, staff_id, today_utc),
             ).fetchone()
 
             if existing:

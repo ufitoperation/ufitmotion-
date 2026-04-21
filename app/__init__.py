@@ -21,8 +21,10 @@ def create_app(config=None):
     from app.routes.coach_routes import coach_bp
     from app.routes.shared_routes import shared_bp
     from app.routes.pages import pages_bp
+    from app.routes.principal_routes import principal_bp
+    from app.routes.parent_routes import parent_bp
 
-    for bp in [auth_bp, admin_bp, coach_bp, shared_bp, pages_bp]:
+    for bp in [auth_bp, admin_bp, coach_bp, shared_bp, pages_bp, principal_bp, parent_bp]:
         app.register_blueprint(bp)
 
     @app.teardown_appcontext
