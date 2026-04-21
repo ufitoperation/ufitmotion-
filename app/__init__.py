@@ -1,9 +1,22 @@
+import json
 import logging
 import traceback
 from datetime import timedelta
 from flask import Flask, g, jsonify, request
 from app.config import get_config
 from app.extensions import limiter
+
+
+class _JSONFormatter(logging.Formatter):
+    def format(self, record):
+        payload = {
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+        if record.exc_info:
+            payload["exc"] = self.formatException(record.exc_info)
+        return json.dumps(payload)
 
 
 def create_app(config=None):
@@ -13,6 +26,12 @@ def create_app(config=None):
     app.config["SECRET_KEY"] = cfg.SECRET_KEY
 
     limiter.init_app(app)
+
+    if not app.debug:
+        handler = logging.StreamHandler()
+        handler.setFormatter(_JSONFormatter())
+        app.logger.addHandler(handler)
+        app.logger.setLevel(logging.INFO)
 
     # FERPA / OWASP session hardening
     app.config["SESSION_COOKIE_HTTPONLY"] = True
