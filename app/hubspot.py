@@ -24,7 +24,6 @@ def _headers() -> dict:
 
 
 def upsert_contact(email: str, props: dict) -> dict:
-    """Create or update a HubSpot contact by email address."""
     resp = httpx.post(
         f"{_BASE}/crm/v3/objects/contacts",
         headers=_headers(),
@@ -57,7 +56,6 @@ def sync_principal_to_hubspot(
     org_id: int,
     org_name: str,
 ) -> None:
-    """Sync a principal's contact info to HubSpot CRM."""
     upsert_contact(
         email=email,
         props={

@@ -47,7 +47,6 @@ def _now_pacific() -> datetime.datetime:
 
 
 def _get_week_bounds() -> tuple:
-    """Return (week_start_str, week_end_str) for the current Mon–Sun Pacific week."""
     today = _now_pacific().date()
     week_start = today - datetime.timedelta(days=today.weekday())  # Monday
     week_end = week_start + datetime.timedelta(days=6)             # Sunday
@@ -159,7 +158,6 @@ def create_school():
             (school_id,),
         ).fetchone()
 
-        # HubSpot: sync principal if email provided
         if principal_email and principal_name:
             parts = principal_name.split(" ", 1)
             trigger_principal_sync(
@@ -237,7 +235,6 @@ def update_school(school_id: int):
             (school_id,),
         ).fetchone()
 
-        # HubSpot sync if we now have both name and email
         new_email = updates.get("principal_email", school["principal_email"])
         new_name = updates.get("principal_name", school["principal_name"])
         if new_email and new_name:
@@ -268,9 +265,6 @@ def delete_school(school_id: int):
     return jsonify({"ok": True, "stub": True, "route": f"DELETE /api/schools/{school_id}"})
 
 
-# ===========================================================================
-# USERS
-# ===========================================================================
 
 @admin_bp.route("/api/users", methods=["GET"])
 @admin_required
@@ -330,7 +324,6 @@ def create_user():
         if dup:
             return jsonify({"error": "An account with that email already exists."}), 409
 
-        # Validate school if provided
         school = None
         if school_id:
             school = db.execute(
@@ -354,7 +347,6 @@ def create_user():
         )
         new_user_id = cur.lastrowid
 
-        # Staff profile for all non-parent roles
         staff_id = None
         if role != "parent":
             sp_cur = db.execute(
@@ -390,7 +382,6 @@ def create_user():
             (new_user_id,),
         ).fetchone()
 
-        # HubSpot sync for principals
         if role == "principal" and school and email:
             trigger_principal_sync(
                 email=email,
@@ -418,9 +409,6 @@ def delete_user(user_id: int):
     return jsonify({"ok": True, "stub": True, "route": f"DELETE /api/users/{user_id}"})
 
 
-# ===========================================================================
-# STUDENTS
-# ===========================================================================
 
 @admin_bp.route("/api/students", methods=["GET"])
 @admin_required
@@ -456,9 +444,6 @@ def delete_student(student_id: int):
     return jsonify({"ok": True, "stub": True, "route": f"DELETE /api/students/{student_id}"})
 
 
-# ===========================================================================
-# PROGRAMS
-# ===========================================================================
 
 @admin_bp.route("/api/programs", methods=["GET"])
 @admin_required
@@ -492,9 +477,6 @@ def delete_program(program_id: int):
     return jsonify({"ok": True, "stub": True, "route": f"DELETE /api/programs/{program_id}"})
 
 
-# ===========================================================================
-# REPORTS
-# ===========================================================================
 
 @admin_bp.route("/api/reports", methods=["GET"])
 @admin_required
@@ -512,9 +494,6 @@ def list_reports():
     return jsonify({"ok": True, "stub": True, "route": "GET /api/reports"})
 
 
-# ===========================================================================
-# DASHBOARD
-# ===========================================================================
 
 @admin_bp.route("/api/dashboard", methods=["GET"])
 @admin_required
@@ -630,9 +609,6 @@ def dashboard():
         db.close()
 
 
-# ===========================================================================
-# PHASE 3A — ADMIN ANALYTICS
-# ===========================================================================
 
 @admin_bp.route("/api/admin/dashboard", methods=["GET"])
 @roles_required("ceo", "admin", "coach_overseer")
@@ -656,7 +632,6 @@ def admin_dashboard():
             (week_start, week_end),
         ).fetchone()["cnt"]
 
-        # EOD compliance: actual / expected, capped at 1.0
         expected_row = db.execute(
             """SELECT COUNT(*) AS cnt FROM (
                  SELECT DISTINCT ss.staff_id, s.session_date
@@ -906,12 +881,10 @@ def admin_students_growth():
 
     db = get_db()
     try:
-        # Total active students
         total_students = db.execute(
             "SELECT COUNT(*) AS cnt FROM students WHERE active_status=1 AND deleted_at IS NULL"
         ).fetchone()["cnt"]
 
-        # Assessed students (with optional window filter)
         if window_id is not None:
             assessed_students = db.execute(
                 """SELECT COUNT(DISTINCT student_id) AS cnt
@@ -923,7 +896,6 @@ def admin_students_growth():
                 "SELECT COUNT(DISTINCT student_id) AS cnt FROM assessments WHERE deleted_at IS NULL"
             ).fetchone()["cnt"]
 
-        # by_school: all active schools, left-join assessed counts
         school_rows = db.execute(
             "SELECT school_id, school_name FROM schools WHERE active_status=1 AND deleted_at IS NULL ORDER BY school_name ASC"
         ).fetchall()
@@ -967,7 +939,6 @@ def admin_students_growth():
             for r in school_rows
         ]
 
-        # by_skill_domain — avg raw_level per domain
         if window_id is not None:
             domain_rows = db.execute(
                 """SELECT sd.domain_id AS skill_domain_id, sd.domain_name,
@@ -1017,9 +988,6 @@ def admin_students_growth():
         db.close()
 
 
-# ===========================================================================
-# EOD COMPLIANCE ALERTS
-# ===========================================================================
 
 @admin_bp.route("/api/admin/eod-alerts", methods=["POST"])
 @roles_required("ceo", "admin", "coach_overseer")
@@ -1030,9 +998,6 @@ def trigger_eod_alerts():
 
     Intended to be called at 20:00 Pacific by a scheduler (cron/Railway).
     Safe to call multiple times — idempotent per coach per calendar day.
-
-    Returns:
-      { ok, alerts_sent, skipped_already_alerted, coaches_flagged: [{staff_id, coach_name}] }
     """
     now = _now_pacific()
     today = now.date().isoformat()          # Pacific date — used for session_date queries
@@ -1040,7 +1005,6 @@ def trigger_eod_alerts():
 
     db = get_db()
     try:
-        # Find coaches who had a session today but no EOD submitted today.
         missing_rows = db.execute(
             """SELECT DISTINCT sp.staff_id,
                       u.user_id,

@@ -32,7 +32,6 @@ def _get_week_bounds() -> tuple:
 
 
 def _resolve_school_id(db, user_id: int):
-    """Return the school_id for this principal from their active staff assignment, or None."""
     row = db.execute(
         """SELECT sa.school_id
            FROM staff_assignments sa
@@ -46,9 +45,6 @@ def _resolve_school_id(db, user_id: int):
     return row["school_id"] if row else None
 
 
-# ---------------------------------------------------------------------------
-# GET /api/principal/dashboard
-# ---------------------------------------------------------------------------
 
 @principal_bp.route("/api/principal/dashboard", methods=["GET"])
 @roles_required("principal", "school_staff")
@@ -66,7 +62,6 @@ def principal_dashboard():
 
         week_start, week_end = _get_week_bounds()
 
-        # School basic info
         school_row = db.execute(
             """SELECT school_id, school_name, school_type, city, state
                FROM schools
@@ -74,7 +69,6 @@ def principal_dashboard():
             (school_id,),
         ).fetchone()
 
-        # Sessions this week
         sessions_this_week = db.execute(
             """SELECT COUNT(*) AS cnt FROM sessions
                WHERE school_id = ?
@@ -83,7 +77,6 @@ def principal_dashboard():
             (school_id, week_start, week_end),
         ).fetchone()["cnt"]
 
-        # Students total
         students_total = db.execute(
             """SELECT COUNT(*) AS cnt FROM students
                WHERE school_id = ?
@@ -92,7 +85,6 @@ def principal_dashboard():
             (school_id,),
         ).fetchone()["cnt"]
 
-        # Students assessed (at least one non-deleted assessment)
         students_assessed = db.execute(
             """SELECT COUNT(DISTINCT a.student_id) AS cnt
                FROM assessments a
@@ -101,7 +93,6 @@ def principal_dashboard():
             (school_id,),
         ).fetchone()["cnt"]
 
-        # EOD compliance rate
         expected_row = db.execute(
             """SELECT COUNT(*) AS cnt
                FROM (
@@ -126,7 +117,6 @@ def principal_dashboard():
 
         eod_compliance_rate = round(min(1.0, actual / expected), 2) if expected > 0 else 0.0
 
-        # Open incidents
         open_incidents = db.execute(
             """SELECT COUNT(*) AS cnt FROM incident_reports
                WHERE school_id = ?
@@ -135,7 +125,6 @@ def principal_dashboard():
             (school_id,),
         ).fetchone()["cnt"]
 
-        # Coaches at this school
         coach_rows = db.execute(
             """SELECT DISTINCT u.user_id, u.first_name, u.last_name, u.role
                FROM users u
@@ -177,9 +166,6 @@ def principal_dashboard():
         db.close()
 
 
-# ---------------------------------------------------------------------------
-# GET /api/principal/students
-# ---------------------------------------------------------------------------
 
 @principal_bp.route("/api/principal/students", methods=["GET"])
 @roles_required("principal", "school_staff")
@@ -190,7 +176,6 @@ def principal_students():
     """
     user = current_user()
 
-    # Validate query params
     try:
         page = int(request.args.get("page", 1))
         if page < 1:

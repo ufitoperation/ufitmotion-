@@ -15,9 +15,6 @@ from app.database import get_db
 parent_bp = Blueprint("parent", __name__)
 
 
-# ---------------------------------------------------------------------------
-# GET /api/parent/student
-# ---------------------------------------------------------------------------
 
 @parent_bp.route("/api/parent/student", methods=["GET"])
 @roles_required("parent")
@@ -40,7 +37,6 @@ def parent_student():
 
         parent_id = parent_row["parent_id"]
 
-        # Fetch all children in one query
         child_rows = db.execute(
             """SELECT
                    s.student_id,
@@ -64,7 +60,6 @@ def parent_student():
         student_ids = [r["student_id"] for r in child_rows]
         placeholders = ",".join("?" * len(student_ids))
 
-        # Batch-fetch recent session attendance for all children
         attendance_rows = db.execute(
             f"""SELECT
                     ssa.student_id,
@@ -79,7 +74,6 @@ def parent_student():
             student_ids,
         ).fetchall()
 
-        # Batch-fetch assessment summary for all children
         score_rows = db.execute(
             f"""SELECT
                     asco.student_id,
@@ -96,8 +90,8 @@ def parent_student():
             student_ids,
         ).fetchall()
 
-        # Partition attendance by student_id (keep first 10 per student)
-        attendance_by_student: dict = {}
+        # keep first 10 sessions per student
+        attendance_by_student = {}
         for row in attendance_rows:
             sid = row["student_id"]
             if sid not in attendance_by_student:
@@ -109,8 +103,7 @@ def parent_student():
                     "attendance_status": row["attendance_status"],
                 })
 
-        # Partition assessment summary by student_id
-        summary_by_student: dict = {}
+        summary_by_student = {}
         for row in score_rows:
             sid = row["student_id"]
             if sid not in summary_by_student:
