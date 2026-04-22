@@ -1,0 +1,22 @@
+-- Step 2: Add Google Form fields to eod_reports
+-- Safe to re-run: IF NOT EXISTS on every column.
+
+ALTER TABLE eod_reports ADD COLUMN IF NOT EXISTS incident_report_filed BOOLEAN DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN IF NOT EXISTS school_concerns TEXT DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN IF NOT EXISTS school_concerns_resolved BOOLEAN DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN IF NOT EXISTS school_concerns_notes TEXT DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN IF NOT EXISTS schedule_changes TEXT DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN IF NOT EXISTS coaches_clocked_in BOOLEAN DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN IF NOT EXISTS late_arrivals TEXT DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN IF NOT EXISTS coaches_in_uniform BOOLEAN DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN IF NOT EXISTS verbal_warnings TEXT DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN IF NOT EXISTS hr_app_issues TEXT DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN IF NOT EXISTS coaches_setup_ready BOOLEAN DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN IF NOT EXISTS equipment_accounted BOOLEAN DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN IF NOT EXISTS transitions_orderly BOOLEAN DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN IF NOT EXISTS safety_hazards TEXT DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN IF NOT EXISTS yard_supervised BOOLEAN DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN IF NOT EXISTS curriculum_followed BOOLEAN DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN IF NOT EXISTS equipment_requests TEXT DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN IF NOT EXISTS principal_communication_notes TEXT DEFAULT NULL;
+ALTER TABLE eod_reports ADD COLUMN IF NOT EXISTS ufit_standards_notes TEXT DEFAULT NULL;
