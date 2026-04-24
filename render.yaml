@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: ufit-motion
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn "app:create_app()" --workers 1 --threads 4
+    healthCheckPath: /api/health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: UFIT_SECRET_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: HUBSPOT_API_KEY
+        sync: false
+      - key: HUBSPOT_WEBHOOK_SECRET
+        sync: false
+      - key: UFIT_APP_BASE_URL
+        sync: false
+
+  - type: cron
+    name: ufit-coach-score-recalc
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    schedule: "0 2 * * *"
+    startCommand: python scripts/recalculate_coach_scores.py
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: APP_ENV
+        value: production
