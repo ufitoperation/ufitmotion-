@@ -165,6 +165,10 @@ ol {
   color: var(--color-text-secondary);
 }
 
+.text-muted { color: var(--color-text-secondary); }
+.text-success { color: #16A34A; }
+.text-danger  { color: var(--color-danger); }
+
 /* ============================================================
    4. LAYOUT — APP SHELL
    ============================================================ */
@@ -185,7 +189,7 @@ ol {
   z-index: 200;
   overflow-y: auto;
   overflow-x: hidden;
-  transition: transform var(--transition);
+  transition: width 200ms ease, transform var(--transition);
 }
 
 .main-content {
@@ -836,6 +840,14 @@ table.data-table tbody tr:hover td {
   background-color: #F8FAFC;
 }
 
+table.data-table tbody tr.clickable-row {
+  cursor: pointer;
+}
+
+table.data-table tbody tr.clickable-row:hover td {
+  background-color: #EFF6FF;
+}
+
 table.data-table .td-actions {
   display: flex;
   align-items: center;
@@ -1162,7 +1174,7 @@ table.data-table .td-actions {
    14. TOP NAV EXTRAS
    ============================================================ */
 .hamburger-btn {
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: center;
   width: 44px;
@@ -1428,6 +1440,79 @@ table.data-table .td-actions {
 }
 
 /* ============================================================
+   17b. MODAL
+   ============================================================ */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: fadeIn 150ms ease-out;
+}
+
+.modal {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  width: 100%;
+  max-width: 620px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.modal-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.modal-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--color-border);
+  flex-shrink: 0;
+  background: var(--color-surface);
+}
+
+@media (max-width: 768px) {
+  .modal {
+    max-width: 100%;
+    max-height: 95vh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    align-self: flex-end;
+    margin-bottom: 0;
+  }
+
+  .modal-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+}
+
+/* ============================================================
    18. SIDEBAR OVERLAY (mobile)
    ============================================================ */
 .sidebar-overlay {
@@ -1577,11 +1662,7 @@ table.data-table .td-actions {
     padding-bottom: 76px; /* room for mobile-nav */
   }
 
-  /* Show hamburger and mobile nav */
-  .hamburger-btn {
-    display: flex;
-  }
-
+  /* Show mobile nav */
   .mobile-nav {
     display: flex;
   }
@@ -1657,10 +1738,48 @@ table.data-table .td-actions {
   }
 }
 
+/* ============================================================
+   21b. SIDEBAR COLLAPSE (desktop)
+   ============================================================ */
+.sidebar.collapsed {
+  width: 64px;
+}
+.sidebar.collapsed .nav-item-label,
+.sidebar.collapsed .nav-logo-subtitle,
+.sidebar.collapsed .nav-logo-motion,
+.sidebar.collapsed .sidebar-user-name,
+.sidebar.collapsed .sidebar-user-role {
+  display: none;
+}
+.sidebar.collapsed .nav-item {
+  justify-content: center;
+  padding: 12px 8px;
+  margin: 1px 4px;
+}
+.sidebar.collapsed .nav-logo {
+  padding: 16px 8px 6px;
+  align-items: center;
+  justify-content: center;
+}
+.sidebar.collapsed .nav-logo-text {
+  justify-content: center;
+}
+.sidebar.collapsed .nav-logo-ufit {
+  display: none;
+}
+.sidebar.collapsed .sidebar-footer {
+  padding: 12px 8px;
+}
+.sidebar.collapsed .sidebar-user {
+  justify-content: center;
+}
+.sidebar-collapsed .main-content {
+  margin-left: 64px;
+}
+
 @media (min-width: 769px) {
-  /* Ensure sidebar always visible on desktop */
   .sidebar {
-    transform: none !important;
+    transform: none;
   }
 
   .sidebar-overlay {
