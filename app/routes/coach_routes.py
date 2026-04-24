@@ -874,7 +874,7 @@ def create_eod_report():
     if report_dt < today_pacific:
         submitted_on_time = False
     else:
-        deadline_pacific = now_pacific.replace(hour=20, minute=0, second=0, microsecond=0)
+        deadline_pacific = now_pacific.replace(hour=18, minute=0, second=0, microsecond=0)
         submitted_on_time = now_pacific <= deadline_pacific
 
     # followup_needed override: injury forces followup — coach cannot override this direction
@@ -1154,7 +1154,7 @@ def list_incidents():
         " ir.report_date, ir.incident_type, ir.severity_level,"
         " ir.description, ir.immediate_action_taken,"
         " ir.school_notified, ir.family_notified, ir.escalated_to_supervisor,"
-        " ir.status, ir.resolution_notes, ir.created_at"
+        " ir.status, ir.resolution_notes, ir.admin_response, ir.acknowledged_at, ir.created_at"
         + base_join
         + " ORDER BY ir.report_date DESC, ir.incident_id DESC"
         + " LIMIT ? OFFSET ?",
@@ -2222,5 +2222,38 @@ def list_coach_observations():
 
         rows = db.execute(sql, params).fetchall()
         return jsonify({"ok": True, "observations": [dict(r) for r in rows]})
+    finally:
+        db.close()
+
+
+@coach_bp.route("/api/coach/my-score", methods=["GET"])
+@coach_required
+def my_score():
+    """Returns the requesting coach's rolling 30-day scorecard."""
+    user = current_user()
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+
+    staff_id  = user.get("staff_id")
+    school_id = user.get("school_id")
+    if not staff_id or not school_id:
+        return jsonify({"error": "No active staff assignment."}), 403
+
+    from app.routes._coach_scoring import calculate_coach_score, rolling_period
+    period_start, period_end = rolling_period()
+
+    db = get_db()
+    try:
+        scorecard = calculate_coach_score(db, staff_id, school_id, period_start, period_end)
+        snapshots = db.execute(
+            "SELECT * FROM coach_performance_snapshots"
+            " WHERE staff_id=? AND school_id=? ORDER BY period_end DESC LIMIT 12",
+            (staff_id, school_id),
+        ).fetchall()
+        return jsonify({
+            "ok": True,
+            "scorecard": scorecard,
+            "snapshots": [dict(r) for r in snapshots],
+        })
     finally:
         db.close()
