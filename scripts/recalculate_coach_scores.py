@@ -42,12 +42,15 @@ def run():
                     " WHERE staff_id=?",
                     (sc["overall_score"], sc["performance_band"], now_utc(), row["staff_id"]),
                 )
+                db.commit()
                 updated += 1
             except Exception as exc:
                 print(f"  ERROR staff_id={row['staff_id']}: {exc}")
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
                 errors += 1
-
-        db.commit()
         print(f"Recalculated: {updated} updated, {errors} errors ({period_start} to {period_end})")
 
 

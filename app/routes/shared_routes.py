@@ -209,6 +209,17 @@ def student_progress(student_id: int):
         if role in ("head_coach", "assistant_coach", "principal", "school_staff"):
             if user.get("school_id") != student["school_id"]:
                 return jsonify({"error": "Access denied."}), 403
+        elif role == "coach_overseer":
+            overseer_org = db.execute(
+                "SELECT organization_id FROM schools WHERE school_id = ? AND deleted_at IS NULL",
+                (user.get("school_id"),),
+            ).fetchone()
+            student_org = db.execute(
+                "SELECT organization_id FROM schools WHERE school_id = ? AND deleted_at IS NULL",
+                (student["school_id"],),
+            ).fetchone()
+            if not overseer_org or not student_org or overseer_org["organization_id"] != student_org["organization_id"]:
+                return jsonify({"error": "Access denied."}), 403
 
         overall = db.execute(
             """SELECT overall_score, performance_band, growth_amount,

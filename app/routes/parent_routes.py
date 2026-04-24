@@ -11,6 +11,7 @@ from flask import Blueprint, jsonify
 
 from app.auth import current_user, roles_required
 from app.database import get_db
+from app.routes._helpers import audit
 
 parent_bp = Blueprint("parent", __name__)
 
@@ -126,6 +127,8 @@ def parent_student():
             for r in child_rows
         ]
 
+        audit(db, user["user_id"], "READ", "students", None,
+              new_values={"scope": "parent_children", "count": len(children)})
         return jsonify({"ok": True, "children": children})
     except Exception:
         logging.exception("parent_student route error")

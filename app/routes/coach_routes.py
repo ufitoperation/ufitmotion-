@@ -210,6 +210,7 @@ def list_sessions():
             FROM sessions se
             JOIN schools sc ON sc.school_id = se.school_id
             WHERE se.session_date >= ? AND se.session_date <= ?
+              AND se.deleted_at IS NULL
               {scope_sql}
               {school_filter_sql}
         """
@@ -231,6 +232,7 @@ def list_sessions():
             LEFT JOIN staff_profiles sp2 ON sp2.staff_id = ss.staff_id
             LEFT JOIN users u ON u.user_id = sp2.user_id
             WHERE se.session_date >= ? AND se.session_date <= ?
+              AND se.deleted_at IS NULL
               {scope_sql}
               {school_filter_sql}
             ORDER BY se.session_date DESC, se.session_id DESC
@@ -741,9 +743,11 @@ def list_eod_reports():
         )
         rows = db.execute(main_sql, main_params).fetchall()
 
+        serialized = [serialize_eod_report(r) for r in rows]
         return jsonify({
             "ok": True,
-            "eod_reports": [serialize_eod_report(r) for r in rows],
+            "reports": serialized,
+            "eod_reports": serialized,
             "total": total,
             "page": page,
             "per_page": per_page,
@@ -1551,6 +1555,8 @@ def list_assessments():
                 serialize_assessment(row, [serialize_assessment_score(sr) for sr in score_rows])
             )
 
+        audit(db, user["user_id"], "READ", "assessments", None,
+              new_values={"scope": "coach_list", "total": total})
         return jsonify({
             "ok": True,
             "assessments": assessments_out,
@@ -2046,6 +2052,8 @@ def list_behavior_observations():
         sql += " ORDER BY bo.observation_date DESC, bo.created_at DESC"
 
         rows = db.execute(sql, params).fetchall()
+        audit(db, user["user_id"], "READ", "behavior_observations", None,
+              new_values={"scope": "coach_list", "count": len(rows)})
         return jsonify({"ok": True, "observations": [dict(r) for r in rows]})
     finally:
         db.close()

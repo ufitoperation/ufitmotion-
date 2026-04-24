@@ -13,6 +13,7 @@ from flask import Blueprint, jsonify, request
 
 from app.auth import current_user, roles_required
 from app.database import get_db
+from app.routes._helpers import audit
 
 _PACIFIC = ZoneInfo("America/Los_Angeles")
 
@@ -143,6 +144,8 @@ def principal_dashboard():
             for r in coach_rows
         ]
 
+        audit(db, user["user_id"], "READ", "students", None,
+              new_values={"scope": "principal_dashboard", "school_id": school_id})
         return jsonify({
             "ok": True,
             "school": {
@@ -258,6 +261,8 @@ def principal_students():
             for r in rows
         ]
 
+        audit(db, user["user_id"], "READ", "students", None,
+              new_values={"scope": "principal_roster", "school_id": school_id, "total": total})
         return jsonify({
             "ok": True,
             "page": page,

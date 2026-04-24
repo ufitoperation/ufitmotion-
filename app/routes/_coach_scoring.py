@@ -147,14 +147,20 @@ def _outcomes_pillar(db, school_id: int,
                       period_start: date, period_end: date) -> dict:
     ps, pe = period_start.isoformat(), period_end.isoformat()
 
-    # Average skill growth
+    # Average skill growth — scoped to students assessed within the period
     growth_row = db.execute(
         "SELECT AVG(sds.current_domain_score - sds.baseline_domain_score) AS avg_growth"
         " FROM student_domain_summary sds"
         " JOIN students s ON s.student_id = sds.student_id"
         " WHERE s.school_id=? AND s.deleted_at IS NULL"
-        " AND sds.baseline_domain_score IS NOT NULL AND sds.current_domain_score IS NOT NULL",
-        (school_id,),
+        " AND sds.baseline_domain_score IS NOT NULL AND sds.current_domain_score IS NOT NULL"
+        " AND EXISTS ("
+        "   SELECT 1 FROM assessments a"
+        "   WHERE a.student_id = sds.student_id"
+        "     AND a.assessment_date BETWEEN ? AND ?"
+        "     AND a.deleted_at IS NULL"
+        " )",
+        (school_id, ps, pe),
     ).fetchone()
     avg_growth = growth_row["avg_growth"] if growth_row else None
     if avg_growth is not None:
@@ -240,6 +246,8 @@ def calculate_coach_score(db, staff_id: int, school_id: int,
     Returns full scorecard dict for a coach over the given period.
     All scores are 0-100. None means insufficient data for that pillar.
     """
+    if period_start > period_end:
+        raise ValueError(f"period_start ({period_start}) must be <= period_end ({period_end})")
     c   = _compliance_pillar(db, staff_id, school_id, period_start, period_end)
     o   = _outcomes_pillar(db, school_id, period_start, period_end)
     obs = _observations_pillar(db, staff_id, school_id, period_start, period_end)

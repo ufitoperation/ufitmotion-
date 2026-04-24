@@ -97,7 +97,9 @@ def serialize_session(row: dict) -> dict:
         "session_status", "total_students_present", "notes", "created_at",
         "coach_name",
     )
-    return {k: row[k] for k in ALL_FIELDS if k in row}
+    result = {k: row[k] for k in ALL_FIELDS if k in row}
+    result["student_count"] = result.get("total_students_present")
+    return result
 
 
 def serialize_eod_report(row: dict) -> dict:

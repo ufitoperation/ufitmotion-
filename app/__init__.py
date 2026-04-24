@@ -82,7 +82,10 @@ def create_app(config=None):
 
     @app.errorhandler(Exception)
     def handle_unhandled_exception(e):
-        app.logger.error("Unhandled exception: %s\n%s", e, traceback.format_exc())
+        if cfg.APP_ENV == "production":
+            app.logger.error("Unhandled exception: %s — %s", type(e).__name__, str(e))
+        else:
+            app.logger.error("Unhandled exception: %s\n%s", e, traceback.format_exc())
         return jsonify({"error": "An unexpected error occurred."}), 500
 
     @app.route("/api/health")

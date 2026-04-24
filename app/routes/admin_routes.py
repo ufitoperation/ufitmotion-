@@ -1253,6 +1253,7 @@ def dashboard():
                 """SELECT COUNT(*) AS cnt FROM incident_reports ir
                    JOIN schools sc ON sc.school_id = ir.school_id
                    WHERE ir.status NOT IN ('resolved', 'closed')
+                     AND ir.deleted_at IS NULL
                      AND sc.organization_id = ?""",
                 (org_id,),
             ).fetchone() or {}).get("cnt", 0)
