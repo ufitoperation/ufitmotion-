@@ -72,7 +72,6 @@ def serialize_school(row: dict) -> dict:
         return {}
     SAFE_FIELDS = (
         "school_id",
-        "organization_id",
         "region_id",
         "school_name",
         "school_type",
@@ -172,6 +171,7 @@ def serialize_incident(row: dict) -> dict:
         "session_id", "student_id",
         "report_date", "incident_type", "severity_level",
         "description", "immediate_action_taken", "resolution_notes",
+        "admin_response", "acknowledged_at",
         "status", "created_at",
     ):
         if field in row.keys():

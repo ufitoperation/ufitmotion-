@@ -30,6 +30,8 @@ import datetime
 from zoneinfo import ZoneInfo
 from datetime import date, timedelta
 
+_date = date
+
 from typing import Optional
 
 from flask import Blueprint, jsonify, request
@@ -38,7 +40,9 @@ from werkzeug.security import generate_password_hash
 from app.auth import admin_required, current_user, roles_required
 from app.database import get_db
 from app.hubspot import trigger_principal_sync
+from app.routes._hubspot import notify_school_created
 from app.routes._helpers import audit, now_utc, parse_json, serialize_school, serialize_student, serialize_user
+from app.routes._coach_scoring import calculate_coach_score, rolling_period, coach_performance_band
 
 _PACIFIC = ZoneInfo("America/Los_Angeles")
 
@@ -58,8 +62,8 @@ admin_bp = Blueprint("admin", __name__)
 
 
 def _get_org_scope(db, user) -> Optional[int]:
-    """Return org_id to scope queries by, or None for global (CEO) access."""
-    if user is None or user["role"] == "ceo":
+    """Return org_id to scope queries by, or None for global access."""
+    if user is None or user["role"] in ("ceo", "admin"):
         return None
     school_id = user.get("school_id")
     if not school_id:
@@ -247,6 +251,8 @@ def create_school():
                 org_id=org["organization_id"],
                 org_name=org["organization_name"],
             )
+
+        notify_school_created(dict(school))
 
         return jsonify({"ok": True, "school": serialize_school(school)}), 201
     finally:
@@ -901,6 +907,7 @@ def list_assessment_windows_admin():
 
     db = get_db()
     try:
+        org_id = _get_org_scope(db, user)
         sql = """
             SELECT aw.*, sc.school_name, p.program_name
             FROM assessment_windows aw
@@ -909,6 +916,9 @@ def list_assessment_windows_admin():
             WHERE 1=1
         """
         params = []
+        if org_id is not None:
+            sql += " AND sc.organization_id = ?"
+            params.append(org_id)
         if school_id:
             sql += " AND aw.school_id = ?"
             params.append(school_id)
@@ -1023,17 +1033,155 @@ def update_assessment_window(window_id: int):
 @admin_bp.route("/api/reports", methods=["GET"])
 @admin_required
 def list_reports():
-    """
-    TODO: Return list of available reports:
-      - EOD report submissions by coach and date range
-      - Incident reports by school/severity
-      - Student assessment score summaries
-      - Coach session compliance (sessions filed vs. scheduled)
-      - School progress reports
-    Accepts ?type=, ?school_id=, ?from=, ?to= query params.
-    Each report type returns aggregated rows, not raw data.
-    """
-    return jsonify({"ok": True, "stub": True, "route": "GET /api/reports"})
+    user = current_user()
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+
+    report_type = request.args.get("type", "eod_compliance").strip()
+    school_id = request.args.get("school_id", type=int)
+    date_from = request.args.get("from", (date.today() - timedelta(days=30)).isoformat())
+    date_to = request.args.get("to", date.today().isoformat())
+
+    try:
+        datetime.date.fromisoformat(date_from)
+        datetime.date.fromisoformat(date_to)
+    except ValueError:
+        return jsonify({"error": "Invalid date format. Use YYYY-MM-DD."}), 400
+
+    db = get_db()
+    try:
+        org_id = _get_org_scope(db, user)
+        org_filter = "AND s.organization_id = ?" if org_id else ""
+        org_params = [org_id] if org_id else []
+
+        school_filter = "AND er.school_id = ?" if school_id else ""
+        school_params = [school_id] if school_id else []
+
+        if report_type == "eod_compliance":
+            rows = db.execute(
+                f"""
+                SELECT
+                    sp.staff_id,
+                    u.first_name || ' ' || u.last_name AS coach_name,
+                    sc.school_name,
+                    COUNT(DISTINCT er.report_date) AS eod_submitted,
+                    SUM(CASE WHEN er.submitted_on_time = 1 THEN 1 ELSE 0 END) AS on_time,
+                    SUM(CASE WHEN er.submitted_on_time = 0 THEN 1 ELSE 0 END) AS late,
+                    COUNT(DISTINCT se.session_date) AS sessions_logged
+                FROM staff_profiles sp
+                JOIN users u ON u.user_id = sp.user_id
+                JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status = 1
+                JOIN schools sc ON sc.school_id = sa.school_id {org_filter}
+                LEFT JOIN eod_reports er
+                    ON er.staff_id = sp.staff_id
+                    AND er.report_date BETWEEN ? AND ?
+                    AND er.deleted_at IS NULL
+                    {school_filter}
+                LEFT JOIN sessions se
+                    ON se.school_id = sa.school_id
+                    AND se.session_date BETWEEN ? AND ?
+                    AND se.deleted_at IS NULL
+                WHERE u.role IN ('head_coach', 'assistant_coach')
+                  AND u.active_status = 1
+                  AND u.deleted_at IS NULL
+                GROUP BY sp.staff_id, u.first_name, u.last_name, sc.school_name
+                ORDER BY sc.school_name, coach_name
+                """,
+                org_params + [date_from, date_to] + school_params + [date_from, date_to],
+            ).fetchall()
+            return jsonify({
+                "ok": True, "type": "eod_compliance",
+                "from": date_from, "to": date_to,
+                "rows": [dict(r) for r in rows],
+            })
+
+        elif report_type == "sessions":
+            rows = db.execute(
+                f"""
+                SELECT
+                    sc.school_name,
+                    COUNT(*) AS total_sessions,
+                    SUM(se.total_students_present) AS total_attendance,
+                    ROUND(AVG(se.total_students_present), 1) AS avg_attendance,
+                    COUNT(DISTINCT se.session_date) AS active_days
+                FROM sessions se
+                JOIN schools sc ON sc.school_id = se.school_id
+                WHERE se.session_date BETWEEN ? AND ?
+                  AND se.deleted_at IS NULL
+                  {org_filter}
+                  {school_filter}
+                GROUP BY sc.school_id, sc.school_name
+                ORDER BY sc.school_name
+                """,
+                [date_from, date_to] + org_params + school_params,
+            ).fetchall()
+            return jsonify({
+                "ok": True, "type": "sessions",
+                "from": date_from, "to": date_to,
+                "rows": [dict(r) for r in rows],
+            })
+
+        elif report_type == "incidents":
+            rows = db.execute(
+                f"""
+                SELECT
+                    sc.school_name,
+                    ir.severity_level,
+                    ir.incident_type,
+                    COUNT(*) AS count,
+                    SUM(CASE WHEN ir.status = 'open' THEN 1 ELSE 0 END) AS open_count,
+                    SUM(CASE WHEN ir.status = 'resolved' THEN 1 ELSE 0 END) AS resolved_count
+                FROM incident_reports ir
+                JOIN schools sc ON sc.school_id = ir.school_id
+                WHERE ir.report_date BETWEEN ? AND ?
+                  {org_filter}
+                  {school_filter.replace('er.school_id', 'ir.school_id')}
+                GROUP BY sc.school_id, sc.school_name, ir.severity_level, ir.incident_type
+                ORDER BY sc.school_name, ir.severity_level
+                """,
+                [date_from, date_to] + org_params + ([school_id] if school_id else []),
+            ).fetchall()
+            return jsonify({
+                "ok": True, "type": "incidents",
+                "from": date_from, "to": date_to,
+                "rows": [dict(r) for r in rows],
+            })
+
+        elif report_type == "student_growth":
+            rows = db.execute(
+                f"""
+                SELECT
+                    sc.school_name,
+                    COUNT(DISTINCT sos.student_id) AS students_with_scores,
+                    ROUND(AVG(sos.overall_score), 1) AS avg_score,
+                    ROUND(AVG(sos.growth_amount), 1) AS avg_growth,
+                    SUM(CASE WHEN sos.performance_band = 'Advanced' THEN 1 ELSE 0 END) AS advanced,
+                    SUM(CASE WHEN sos.performance_band = 'Proficient' THEN 1 ELSE 0 END) AS proficient,
+                    SUM(CASE WHEN sos.performance_band = 'On Track' THEN 1 ELSE 0 END) AS on_track,
+                    SUM(CASE WHEN sos.performance_band = 'Developing' THEN 1 ELSE 0 END) AS developing,
+                    SUM(CASE WHEN sos.performance_band = 'Emerging' THEN 1 ELSE 0 END) AS emerging
+                FROM student_overall_summary sos
+                JOIN students st ON st.student_id = sos.student_id
+                JOIN schools sc ON sc.school_id = st.school_id
+                WHERE st.active_status = 1 AND st.deleted_at IS NULL
+                  {org_filter}
+                  {('AND sc.school_id = ?' if school_id else '')}
+                GROUP BY sc.school_id, sc.school_name
+                ORDER BY sc.school_name
+                """,
+                org_params + ([school_id] if school_id else []),
+            ).fetchall()
+            return jsonify({
+                "ok": True, "type": "student_growth",
+                "from": date_from, "to": date_to,
+                "rows": [dict(r) for r in rows],
+            })
+
+        else:
+            return jsonify({"error": f"Unknown report type '{report_type}'."}), 400
+
+    finally:
+        db.close()
 
 
 
@@ -1312,6 +1460,7 @@ def admin_list_coaches():
                  u.user_id, u.role, u.first_name, u.last_name, u.email,
                  u.active_status, u.created_at,
                  sp.staff_id, sp.position_title,
+                 sp.rolling_score, sp.rolling_band,
                  s.school_id, s.school_name,
                  (SELECT COUNT(*) FROM eod_reports e
                   WHERE e.staff_id = sp.staff_id
@@ -1348,11 +1497,114 @@ def admin_list_coaches():
             coach["eod_submissions_this_week"] = r["eod_submissions_this_week"]
             coach["late_submissions_this_week"] = r["late_submissions_this_week"]
             coach["incidents_filed_this_week"] = r["incidents_filed_this_week"]
+            coach["rolling_score"] = r["rolling_score"]
+            coach["rolling_band"] = r["rolling_band"]
             coaches.append(coach)
 
         return jsonify({"ok": True, "coaches": coaches, "total": len(coaches)})
     except Exception:
         return jsonify({"error": "Could not load coaches — please try again or contact support."}), 500
+    finally:
+        db.close()
+
+
+@admin_bp.route("/api/admin/coaches/<int:staff_id>/score", methods=["GET"])
+@admin_required
+def get_coach_score(staff_id: int):
+    user = current_user()
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+
+    from_str = request.args.get("from")
+    to_str   = request.args.get("to")
+    try:
+        period_start = _date.fromisoformat(from_str) if from_str else rolling_period()[0]
+        period_end   = _date.fromisoformat(to_str)   if to_str   else rolling_period()[1]
+    except ValueError:
+        return jsonify({"error": "Invalid date format. Use YYYY-MM-DD."}), 400
+
+    db = get_db()
+    try:
+        org_id = _get_org_scope(db, user)
+        staff = db.execute(
+            "SELECT sp.staff_id, sp.user_id, sa.school_id"
+            " FROM staff_profiles sp"
+            " JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status=1"
+            " JOIN schools sc ON sc.school_id = sa.school_id"
+            " WHERE sp.staff_id=? AND sp.deleted_at IS NULL"
+            + (" AND sc.organization_id=?" if org_id else ""),
+            (staff_id, org_id) if org_id else (staff_id,),
+        ).fetchone()
+        if not staff:
+            return jsonify({"error": "Coach not found."}), 404
+
+        school_id = staff["school_id"]
+        scorecard = calculate_coach_score(db, staff_id, school_id, period_start, period_end)
+
+        snapshots = db.execute(
+            "SELECT * FROM coach_performance_snapshots"
+            " WHERE staff_id=? AND school_id=? ORDER BY period_end DESC LIMIT 12",
+            (staff_id, school_id),
+        ).fetchall()
+
+        return jsonify({
+            "ok": True,
+            "scorecard": scorecard,
+            "snapshots": [dict(r) for r in snapshots],
+        })
+    finally:
+        db.close()
+
+
+@admin_bp.route("/api/admin/coaches/<int:staff_id>/score/freeze", methods=["POST"])
+@admin_required
+def freeze_coach_score(staff_id: int):
+    """Save a point-in-time snapshot of a coach's score."""
+    user = current_user()
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+
+    data = request.get_json(silent=True) or {}
+    try:
+        period_start = _date.fromisoformat(data.get("period_start") or rolling_period()[0].isoformat())
+        period_end   = _date.fromisoformat(data.get("period_end")   or rolling_period()[1].isoformat())
+    except ValueError:
+        return jsonify({"error": "Invalid date format."}), 400
+    window_id = data.get("window_id")
+
+    db = get_db()
+    try:
+        org_id = _get_org_scope(db, user)
+        staff = db.execute(
+            "SELECT sp.staff_id, sa.school_id FROM staff_profiles sp"
+            " JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status=1"
+            " JOIN schools sc ON sc.school_id = sa.school_id"
+            " WHERE sp.staff_id=? AND sp.deleted_at IS NULL"
+            + (" AND sc.organization_id=?" if org_id else ""),
+            (staff_id, org_id) if org_id else (staff_id,),
+        ).fetchone()
+        if not staff:
+            return jsonify({"error": "Coach not found."}), 404
+
+        school_id = staff["school_id"]
+        sc = calculate_coach_score(db, staff_id, school_id, period_start, period_end)
+
+        cur = db.execute(
+            "INSERT INTO coach_performance_snapshots"
+            " (staff_id, school_id, window_id, period_start, period_end,"
+            "  compliance_score, outcomes_score, observations_score, overall_score,"
+            "  performance_band, eod_ontime_rate, session_log_rate,"
+            "  incident_file_rate, assessment_part_rate)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (staff_id, school_id, window_id,
+             period_start.isoformat(), period_end.isoformat(),
+             sc["compliance_score"], sc["outcomes_score"], sc["observations_score"],
+             sc["overall_score"], sc["performance_band"],
+             sc["eod_ontime_rate"], sc["session_log_rate"],
+             sc["incident_file_rate"], sc["assessment_part_rate"]),
+        )
+        db.commit()
+        return jsonify({"ok": True, "snapshot_id": cur.lastrowid, "scorecard": sc}), 201
     finally:
         db.close()
 
@@ -1450,6 +1702,114 @@ def admin_incidents():
         db.close()
 
 
+@admin_bp.route("/api/admin/incidents/list", methods=["GET"])
+@roles_required("ceo", "admin", "coach_overseer")
+def admin_incidents_list():
+    """Full paginated incident list with resolution status."""
+    user = current_user()
+    status_filter = request.args.get("status", "").strip()
+    school_id = request.args.get("school_id", type=int)
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+        per_page = min(50, max(1, int(request.args.get("per_page", 25))))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid pagination params."}), 400
+
+    db = get_db()
+    try:
+        org_id = _get_org_scope(db, user)
+        filters, params = ["ir.deleted_at IS NULL"], []
+        if org_id:
+            filters.append("s.organization_id = ?"); params.append(org_id)
+        if status_filter in ("open", "resolved"):
+            filters.append("ir.status = ?"); params.append(status_filter)
+        if school_id:
+            filters.append("ir.school_id = ?"); params.append(school_id)
+
+        where = " AND ".join(filters)
+        total = db.execute(
+            f"SELECT COUNT(*) AS cnt FROM incident_reports ir JOIN schools s ON s.school_id = ir.school_id WHERE {where}",
+            params,
+        ).fetchone()["cnt"]
+
+        rows = db.execute(
+            f"""SELECT ir.incident_id, ir.report_date, ir.incident_type, ir.severity_level,
+                       ir.description, ir.immediate_action_taken, ir.status,
+                       ir.admin_response, ir.resolution_notes, ir.acknowledged_at,
+                       ir.school_notified, ir.family_notified,
+                       s.school_name,
+                       u.first_name || ' ' || u.last_name AS reporter_name,
+                       st.student_first_name || ' ' || st.student_last_name AS student_name
+                FROM incident_reports ir
+                JOIN schools s ON s.school_id = ir.school_id
+                JOIN staff_profiles sp ON sp.staff_id = ir.reported_by_staff_id
+                JOIN users u ON u.user_id = sp.user_id
+                LEFT JOIN students st ON st.student_id = ir.student_id
+                WHERE {where}
+                ORDER BY
+                    CASE ir.status WHEN 'open' THEN 0 ELSE 1 END,
+                    CASE ir.severity_level WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+                    ir.report_date DESC
+                LIMIT ? OFFSET ?""",
+            params + [per_page, (page - 1) * per_page],
+        ).fetchall()
+
+        return jsonify({"ok": True, "total": total, "page": page, "per_page": per_page,
+                        "incidents": [dict(r) for r in rows]})
+    finally:
+        db.close()
+
+
+@admin_bp.route("/api/admin/incidents/<int:incident_id>", methods=["PATCH"])
+@roles_required("ceo", "admin", "coach_overseer")
+def resolve_incident(incident_id: int):
+    """Resolve or reopen an incident with admin response."""
+    user = current_user()
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+    data = parse_json()
+    new_status = data.get("status", "").strip()
+    if new_status not in ("open", "resolved"):
+        return jsonify({"error": "status must be 'open' or 'resolved'."}), 400
+
+    db = get_db()
+    try:
+        row = db.execute(
+            "SELECT incident_id, school_id FROM incident_reports WHERE incident_id = ? AND deleted_at IS NULL",
+            (incident_id,),
+        ).fetchone()
+        if not row:
+            return jsonify({"error": "Incident not found."}), 404
+
+        org_id = _get_org_scope(db, user)
+        if org_id:
+            school = db.execute("SELECT organization_id FROM schools WHERE school_id = ?", (row["school_id"],)).fetchone()
+            if not school or school["organization_id"] != org_id:
+                return jsonify({"error": "Access denied."}), 403
+
+        fields = {"status": new_status}
+        if data.get("admin_response") is not None:
+            fields["admin_response"] = str(data["admin_response"])[:2000]
+        if data.get("resolution_notes") is not None:
+            fields["resolution_notes"] = str(data["resolution_notes"])[:2000]
+        if new_status == "resolved":
+            fields["acknowledged_at"] = now_utc()
+            fields["acknowledged_by"] = user["user_id"]
+
+        set_clause = ", ".join(f"{k} = ?" for k in fields)
+        db.execute(
+            f"UPDATE incident_reports SET {set_clause} WHERE incident_id = ?",
+            list(fields.values()) + [incident_id],
+        )
+        audit(db, user["user_id"], "UPDATE", "incident_reports", incident_id,
+              new_values={"status": new_status})
+        db.commit()
+        updated = db.execute("SELECT * FROM incident_reports WHERE incident_id = ?", (incident_id,)).fetchone()
+        return jsonify({"ok": True, "incident": dict(updated)})
+    finally:
+        db.close()
+
+
 @admin_bp.route("/api/admin/students/growth", methods=["GET"])
 @roles_required("ceo", "admin", "coach_overseer")
 def admin_students_growth():
@@ -1463,53 +1823,83 @@ def admin_students_growth():
         except (ValueError, TypeError):
             return jsonify({"error": "window_id must be a positive integer."}), 400
 
+    user = current_user()
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+
     db = get_db()
     try:
+        org_id = _get_org_scope(db, user)
+
+        # Build org filter fragments
+        if org_id is not None:
+            org_student_filter = " AND school_id IN (SELECT school_id FROM schools WHERE organization_id=?)"
+            org_school_filter = " AND organization_id=?"
+            org_assess_filter = (
+                " AND school_id IN (SELECT school_id FROM schools WHERE organization_id=?)"
+            )
+            org_p = [org_id]
+        else:
+            org_student_filter = org_school_filter = org_assess_filter = ""
+            org_p = []
+
         total_students = db.execute(
             "SELECT COUNT(*) AS cnt FROM students WHERE active_status=1 AND deleted_at IS NULL"
+            + org_student_filter,
+            org_p,
         ).fetchone()["cnt"]
 
         if window_id is not None:
             assessed_students = db.execute(
-                """SELECT COUNT(DISTINCT student_id) AS cnt
-                   FROM assessments WHERE deleted_at IS NULL AND window_id=?""",
-                (window_id,),
+                "SELECT COUNT(DISTINCT student_id) AS cnt FROM assessments WHERE deleted_at IS NULL AND window_id=?"
+                + org_assess_filter,
+                [window_id] + org_p,
             ).fetchone()["cnt"]
         else:
             assessed_students = db.execute(
                 "SELECT COUNT(DISTINCT student_id) AS cnt FROM assessments WHERE deleted_at IS NULL"
+                + org_assess_filter,
+                org_p,
             ).fetchone()["cnt"]
 
         school_rows = db.execute(
-            "SELECT school_id, school_name FROM schools WHERE active_status=1 AND deleted_at IS NULL ORDER BY school_name ASC"
+            "SELECT school_id, school_name FROM schools WHERE active_status=1 AND deleted_at IS NULL"
+            + org_school_filter
+            + " ORDER BY school_name ASC",
+            org_p,
         ).fetchall()
 
         if window_id is not None:
             assessed_by_school = {
                 r["school_id"]: r["cnt"]
                 for r in db.execute(
-                    """SELECT school_id, COUNT(DISTINCT student_id) AS cnt
-                       FROM assessments WHERE deleted_at IS NULL AND window_id=?
-                       GROUP BY school_id""",
-                    (window_id,),
+                    "SELECT school_id, COUNT(DISTINCT student_id) AS cnt FROM assessments"
+                    " WHERE deleted_at IS NULL AND window_id=?"
+                    + org_assess_filter
+                    + " GROUP BY school_id",
+                    [window_id] + org_p,
                 ).fetchall()
             }
         else:
             assessed_by_school = {
                 r["school_id"]: r["cnt"]
                 for r in db.execute(
-                    """SELECT school_id, COUNT(DISTINCT student_id) AS cnt
-                       FROM assessments WHERE deleted_at IS NULL
-                       GROUP BY school_id"""
+                    "SELECT school_id, COUNT(DISTINCT student_id) AS cnt FROM assessments"
+                    " WHERE deleted_at IS NULL"
+                    + org_assess_filter
+                    + " GROUP BY school_id",
+                    org_p,
                 ).fetchall()
             }
 
         total_by_school = {
             r["school_id"]: r["cnt"]
             for r in db.execute(
-                """SELECT school_id, COUNT(*) AS cnt
-                   FROM students WHERE active_status=1 AND deleted_at IS NULL
-                   GROUP BY school_id"""
+                "SELECT school_id, COUNT(*) AS cnt FROM students"
+                " WHERE active_status=1 AND deleted_at IS NULL"
+                + org_student_filter
+                + " GROUP BY school_id",
+                org_p,
             ).fetchall()
         }
 
