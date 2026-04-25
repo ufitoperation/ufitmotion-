@@ -92,7 +92,8 @@ def list_organizations():
                  AND s.deleted_at IS NULL AND s.active_status = 1
                WHERE o.deleted_at IS NULL
                GROUP BY o.organization_id
-               ORDER BY o.organization_name ASC"""
+               ORDER BY o.organization_name ASC
+               LIMIT 500"""
         ).fetchall()
         orgs = [dict(r) for r in rows]
         return jsonify({"ok": True, "organizations": orgs, "total": len(orgs)})
@@ -568,8 +569,8 @@ def create_user():
                       sp.staff_id, sp.position_title,
                       s.school_id, s.school_name
                FROM users u
-               LEFT JOIN staff_profiles sp ON sp.user_id = u.user_id
-               LEFT JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status = 1
+               LEFT JOIN staff_profiles sp ON sp.user_id = u.user_id AND sp.deleted_at IS NULL
+               LEFT JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status = 1 AND sa.deleted_at IS NULL
                LEFT JOIN schools s ON s.school_id = sa.school_id
                WHERE u.user_id = ?""",
             (new_user_id,),
@@ -856,7 +857,7 @@ def list_programs():
         if search_raw:
             sql += " AND LOWER(p.program_name) LIKE ?"
             params.append(f"%{search_raw.lower()}%")
-        sql += " ORDER BY sc.school_name, p.program_name"
+        sql += " ORDER BY sc.school_name, p.program_name LIMIT 500"
 
         rows = db.execute(sql, params).fetchall()
         return jsonify({"ok": True, "programs": [dict(r) for r in rows]})
@@ -883,6 +884,7 @@ def create_program():
     reporting_cycle = (data.get("reporting_cycle") or "quarterly").strip()
     notes = (data.get("notes") or "").strip()[:1000] or None
 
+    VALID_REPORTING_CYCLES = ("weekly", "biweekly", "monthly", "quarterly")
     VALID_TYPES = ("pe_support", "lunch_sports", "after_school_sports", "psychomotor",
                    "middle_school_skill_development", "tournament_program", "wellness_enrichment")
 
@@ -902,6 +904,8 @@ def create_program():
         return jsonify({"error": "Invalid date format. Use YYYY-MM-DD."}), 400
     if program_type not in VALID_TYPES:
         return jsonify({"error": f"Invalid program_type. Must be one of: {', '.join(VALID_TYPES)}."}), 400
+    if reporting_cycle not in VALID_REPORTING_CYCLES:
+        return jsonify({"error": f"Invalid reporting_cycle. Must be one of: {', '.join(VALID_REPORTING_CYCLES)}."}), 400
 
     db = get_db()
     try:
@@ -992,7 +996,7 @@ def list_assessment_windows_admin():
         if status_filter in ("upcoming", "active", "closed"):
             sql += " AND aw.status = ?"
             params.append(status_filter)
-        sql += " ORDER BY aw.start_date DESC"
+        sql += " ORDER BY aw.start_date DESC LIMIT 500"
         rows = db.execute(sql, params).fetchall()
         return jsonify({"ok": True, "windows": [dict(r) for r in rows]})
     finally:
@@ -1088,9 +1092,10 @@ def update_assessment_window(window_id: int):
                 fields["end_date"] = str(data["end_date"])
             except (ValueError, TypeError):
                 return jsonify({"error": "Invalid end_date format. Use YYYY-MM-DD."}), 400
-        if "start_date" in fields and "end_date" in fields:
-            if fields["end_date"] < fields["start_date"]:
-                return jsonify({"error": "end_date cannot be before start_date."}), 400
+        eff_start = fields.get("start_date") or (row["start_date"] if row["start_date"] else None)
+        eff_end = fields.get("end_date") or (row["end_date"] if row["end_date"] else None)
+        if eff_start and eff_end and eff_end < eff_start:
+            return jsonify({"error": "end_date cannot be before start_date."}), 400
         if "assessment_focus" in data:
             fields["assessment_focus"] = str(data["assessment_focus"]).strip()[:500] if data["assessment_focus"] else None
 
@@ -1488,10 +1493,11 @@ def admin_list_schools():
                  s.zip_code, s.principal_name, s.principal_email,
                  s.active_status, s.created_at,
                  (SELECT COUNT(*) FROM users u
-                  JOIN staff_profiles sp ON sp.user_id = u.user_id
+                  JOIN staff_profiles sp ON sp.user_id = u.user_id AND sp.deleted_at IS NULL
                   JOIN staff_assignments sa ON sa.staff_id = sp.staff_id
                   WHERE sa.school_id = s.school_id
                     AND sa.active_status = 1
+                    AND sa.deleted_at IS NULL
                     AND u.role IN ('head_coach','assistant_coach')
                     AND u.active_status = 1
                     AND u.deleted_at IS NULL
@@ -1507,7 +1513,8 @@ def admin_list_schools():
                  ) AS last_eod_date
                FROM schools s
                WHERE s.active_status = 1 AND s.deleted_at IS NULL {org_filter}
-               ORDER BY s.school_name ASC""",
+               ORDER BY s.school_name ASC
+               LIMIT 500""",
             params,
         ).fetchall()
 
@@ -1571,7 +1578,8 @@ def admin_list_coaches():
                  AND u.active_status = 1
                  AND u.deleted_at IS NULL
                  {org_filter}
-               ORDER BY u.last_name ASC, u.first_name ASC""",
+               ORDER BY u.last_name ASC, u.first_name ASC
+               LIMIT 500""",
             params,
         ).fetchall()
 
@@ -1613,7 +1621,7 @@ def get_coach_score(staff_id: int):
         staff = db.execute(
             "SELECT sp.staff_id, sp.user_id, sa.school_id"
             " FROM staff_profiles sp"
-            " JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status=1"
+            " JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status=1 AND sa.deleted_at IS NULL"
             " JOIN schools sc ON sc.school_id = sa.school_id"
             " WHERE sp.staff_id=? AND sp.deleted_at IS NULL"
             + (" AND sc.organization_id=?" if org_id else ""),
@@ -1664,7 +1672,7 @@ def freeze_coach_score(staff_id: int):
         org_id = _get_org_scope(db, user)
         staff = db.execute(
             "SELECT sp.staff_id, sa.school_id FROM staff_profiles sp"
-            " JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status=1"
+            " JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status=1 AND sa.deleted_at IS NULL"
             " JOIN schools sc ON sc.school_id = sa.school_id"
             " WHERE sp.staff_id=? AND sp.deleted_at IS NULL"
             + (" AND sc.organization_id=?" if org_id else ""),

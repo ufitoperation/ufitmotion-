@@ -142,7 +142,8 @@ def serialize_assessment(row: dict, scores: list = None) -> dict:
         return {}
     result = {}
     for field in (
-        "assessment_id", "student_id", "school_id", "school_name",
+        "assessment_id", "student_id", "student_first_name", "student_last_name",
+        "school_id", "school_name",
         "window_id", "window_name", "assessed_by_staff_id", "assessor_name",
         "assessment_date", "assessment_method", "overall_assessment_notes", "created_at",
     ):

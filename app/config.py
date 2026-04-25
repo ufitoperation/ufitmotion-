@@ -19,6 +19,8 @@ def get_config() -> Config:
         raise RuntimeError("UFIT_SECRET_KEY must be set in production")
     if not secret_key:
         secret_key = "dev-insecure-key-change-me"
+    if env == "production" and not os.environ.get("DATABASE_URL"):
+        raise RuntimeError("DATABASE_URL must be set in production")
     return Config(
         SECRET_KEY=secret_key,
         DATABASE_URL=os.environ.get("DATABASE_URL"),

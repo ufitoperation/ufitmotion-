@@ -1,5 +1,5 @@
 from functools import wraps
-from flask import jsonify, session
+from flask import g, jsonify, session
 
 COACH_ROLES = ("head_coach", "assistant_coach", "site_coordinator", "coach_overseer")
 ADMIN_ROLES = ("ceo", "admin")
@@ -8,11 +8,15 @@ ALL_STAFF_ROLES = ADMIN_ROLES + COACH_ROLES + SCHOOL_ROLES
 
 
 def current_user(connection=None):
-    """Return the logged-in user dict, or None."""
+    """Return the logged-in user dict, or None. Result is cached in flask.g for the request."""
     from app.database import get_db
+
+    if hasattr(g, "_current_user"):
+        return g._current_user
 
     user_id = session.get("user_id")
     if not user_id:
+        g._current_user = None
         return None
 
     owns = connection is None
@@ -33,7 +37,9 @@ def current_user(connection=None):
         ).fetchone()
         if user is None:
             session.pop("user_id", None)
+            g._current_user = None
             return None
+        g._current_user = user
         return user
     finally:
         if owns:

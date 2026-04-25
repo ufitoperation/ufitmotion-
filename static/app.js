@@ -1589,7 +1589,7 @@ async function loadAssessmentsPage(container) {
       <thead><tr><th>Date</th><th>Student</th><th>Method</th><th>Scores</th></tr></thead>
       <tbody>${items.map(a => `<tr>
         <td>${fmtDate(a.assessment_date)}</td>
-        <td>${esc(a.student_id)}</td>
+        <td>${a.student_last_name ? esc(a.student_last_name) + ', ' + esc(a.student_first_name) : esc(String(a.student_id))}</td>
         <td>${esc(a.assessment_method || 'observational')}</td>
         <td>${a.scores?.length ? a.scores.map(s => `${esc(s.skill_name || s.skill_id)}: ${s.raw_level}`).join(', ') : '—'}</td>
       </tr>`).join('')}

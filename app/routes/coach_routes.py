@@ -17,7 +17,7 @@ import math
 import re
 import sys
 from zoneinfo import ZoneInfo
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
 from app.auth import coach_required, current_user
 from app.database import get_db
@@ -266,7 +266,7 @@ def list_sessions():
         })
 
     except Exception as exc:
-        print(f"list_sessions ERROR: {exc}", file=sys.stderr, flush=True)
+        current_app.logger.error("list_sessions ERROR: %s", exc)
         return jsonify({"error": "Could not load sessions — please try again or contact support."}), 500
     finally:
         db.close()
@@ -547,7 +547,7 @@ def create_session():
 
     except Exception as exc:
         db.rollback()
-        print(f"create_session ERROR: {exc}", file=sys.stderr, flush=True)
+        current_app.logger.error("create_session ERROR: %s", exc)
         return jsonify({"error": "Session could not be saved — please try again or contact support."}), 500
     finally:
         db.close()
@@ -755,7 +755,7 @@ def list_eod_reports():
         })
 
     except Exception as exc:
-        print(f"list_eod_reports ERROR: {exc}", file=sys.stderr, flush=True)
+        current_app.logger.error("list_eod_reports ERROR: %s", exc)
         return jsonify({"error": "Could not load EOD reports — please try again or contact support."}), 500
     finally:
         db.close()
@@ -1038,7 +1038,7 @@ def create_eod_report():
 
     except Exception as exc:
         db.rollback()
-        print(f"create_eod_report ERROR: {exc}", file=sys.stderr, flush=True)
+        current_app.logger.error("create_eod_report ERROR: %s", exc)
         return jsonify({"error": "EOD report could not be saved — please try again or contact support."}), 500
     finally:
         db.close()
@@ -1508,6 +1508,29 @@ def list_assessments():
         student_filter_sql = ""
         student_filter_params: list = []
         if student_id_filter is not None:
+            stu_row = db.execute(
+                "SELECT school_id FROM students WHERE student_id = ? AND deleted_at IS NULL",
+                (student_id_filter,),
+            ).fetchone()
+            if not stu_row:
+                return jsonify({"error": "Student not found."}), 404
+            stu_school = stu_row["school_id"]
+            if role in ("head_coach", "assistant_coach") and stu_school != user.get("school_id"):
+                return jsonify({"error": "You do not have access to this student."}), 403
+            if role == "site_coordinator":
+                allowed = db.execute(
+                    "SELECT 1 FROM staff_assignments"
+                    " WHERE staff_id = ? AND school_id = ? AND active_status = 1",
+                    (staff_id, stu_school),
+                ).fetchone()
+                if not allowed:
+                    return jsonify({"error": "You do not have access to this student."}), 403
+            if role == "coach_overseer":
+                stu_org = db.execute(
+                    "SELECT organization_id FROM schools WHERE school_id = ?", (stu_school,)
+                ).fetchone()
+                if not stu_org or stu_org["organization_id"] != org_id:
+                    return jsonify({"error": "You do not have access to this student."}), 403
             student_filter_sql = "AND a.student_id = ?"
             student_filter_params = [student_id_filter]
 
@@ -1535,13 +1558,16 @@ def list_assessments():
         offset = (page - 1) * per_page
 
         main_sql = f"""
-            SELECT a.assessment_id, a.student_id, a.school_id, sc.school_name,
+            SELECT a.assessment_id, a.student_id,
+                   st.student_first_name, st.student_last_name,
+                   a.school_id, sc.school_name,
                    a.window_id, aw.window_name, a.assessed_by_staff_id,
                    (u.first_name || ' ' || u.last_name) AS assessor_name,
                    a.assessment_date, a.assessment_method,
                    a.overall_assessment_notes, a.created_at
             FROM assessments a
             JOIN schools sc ON sc.school_id = a.school_id
+            LEFT JOIN students st ON st.student_id = a.student_id
             LEFT JOIN assessment_windows aw ON aw.window_id = a.window_id
             LEFT JOIN staff_profiles sp ON sp.staff_id = a.assessed_by_staff_id
             LEFT JOIN users u ON u.user_id = sp.user_id AND u.deleted_at IS NULL
@@ -1582,7 +1608,7 @@ def list_assessments():
         })
 
     except Exception as exc:
-        print(f"list_assessments ERROR: {exc}", file=sys.stderr, flush=True)
+        current_app.logger.error("list_assessments ERROR: %s", exc)
         return jsonify({"error": "Could not load assessments — please try again or contact support."}), 500
     finally:
         db.close()
@@ -1662,7 +1688,10 @@ def submit_assessment():
     if notes is not None and len(str(notes)) > 2000:
         return jsonify({"error": "Field 'overall_assessment_notes' exceeds maximum length of 2000 characters."}), 400
 
-    assessment_method = data.get("assessment_method") or "observational"
+    assessment_method = (data.get("assessment_method") or "observational").strip()
+    VALID_ASSESSMENT_METHODS = ("observational", "performance", "direct")
+    if assessment_method not in VALID_ASSESSMENT_METHODS:
+        return jsonify({"error": f"Invalid assessment_method. Must be one of: {', '.join(VALID_ASSESSMENT_METHODS)}."}), 400
 
     # Rule 9: staff profile guard
     staff_id = user.get("staff_id")
@@ -1842,7 +1871,7 @@ def submit_assessment():
 
     except Exception as exc:
         db.rollback()
-        print(f"submit_assessment ERROR: {exc}", file=sys.stderr, flush=True)
+        current_app.logger.error("submit_assessment ERROR: %s", exc)
         return jsonify({"error": "Assessment could not be saved — please try again or contact support."}), 500
     finally:
         db.close()
@@ -1934,7 +1963,7 @@ def my_students():
             pattern = f"%{search}%"
             params.extend([pattern, pattern])
 
-        base_sql += " ORDER BY s.student_last_name ASC, s.student_first_name ASC"
+        base_sql += " ORDER BY s.student_last_name ASC, s.student_first_name ASC LIMIT 500"
 
         rows = db.execute(base_sql, params).fetchall()
         students = [serialize_student(r) for r in rows]
@@ -1947,7 +1976,7 @@ def my_students():
             )
             db.commit()
         except Exception as exc:  # noqa: BLE001
-            print(f"AUDIT FAILURE in my_students: {exc}", file=sys.stderr, flush=True)
+            current_app.logger.error("AUDIT FAILURE in my_students: %s", exc)
 
         return jsonify({"ok": True, "students": students, "count": len(students)})
     finally:
@@ -2013,7 +2042,10 @@ def submit_behavior_observation():
             return jsonify({"error": "Student does not belong to your school."}), 403
 
         if session_id is not None:
-            sess = db.execute("SELECT session_id FROM sessions WHERE session_id = ? AND deleted_at IS NULL", (session_id,)).fetchone()
+            sess = db.execute(
+                "SELECT session_id FROM sessions WHERE session_id = ? AND school_id = ? AND deleted_at IS NULL",
+                (session_id, school_id),
+            ).fetchone()
             if not sess:
                 return jsonify({"error": "Session not found."}), 404
 

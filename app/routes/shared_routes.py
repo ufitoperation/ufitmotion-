@@ -391,7 +391,7 @@ def hubspot_webhook():
                    (organization_id, school_name, school_type, city, state,
                     active_status, created_at)
                    VALUES (?, ?, 'elementary', ?, ?, 1, ?)""",
-                (org_id, company_name, city, state, now_utc()),
+                (org_id, company_name[:200], city[:100], state[:50], now_utc()),
             )
             db.commit()
             processed += 1
