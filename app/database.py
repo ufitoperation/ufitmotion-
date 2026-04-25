@@ -184,6 +184,8 @@ class PostgresConnection:
     as SQLiteConnection, including ? → %s conversion and RETURNING injection.
     """
 
+    backend = "postgres"
+
     def __init__(self, conn):
         self._conn = conn
         self._closed = False
@@ -269,6 +271,10 @@ class _BorrowedConnection:
     def __init__(self, real_conn):
         self._real = real_conn
 
+    @property
+    def backend(self):
+        return self._real.backend
+
     def execute(self, sql: str, params=()):
         return self._real.execute(sql, params)
 
@@ -294,6 +300,8 @@ class _SQLiteConnection:
     Wraps sqlite3.Connection to provide the same interface as PostgresConnection.
     Rows are returned as dicts via sqlite3.Row.
     """
+
+    backend = "sqlite"
 
     def __init__(self, conn: sqlite3.Connection):
         self._conn = conn

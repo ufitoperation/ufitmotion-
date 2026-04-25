@@ -453,14 +453,12 @@ CREATE TABLE IF NOT EXISTS student_overall_summary (
 
 CREATE TABLE IF NOT EXISTS notifications (
     notification_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
-    title TEXT,
-    body TEXT NOT NULL DEFAULT '',
-    notification_type TEXT NOT NULL DEFAULT 'system',
-    related_table TEXT,
-    related_id INTEGER,
+    recipient_user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    type TEXT NOT NULL DEFAULT 'system',
+    reference_table TEXT,
+    reference_id INTEGER,
+    message TEXT NOT NULL DEFAULT '',
     is_read INTEGER NOT NULL DEFAULT 0,
-    read_at TEXT DEFAULT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

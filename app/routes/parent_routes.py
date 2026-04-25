@@ -129,6 +129,7 @@ def parent_student():
 
         audit(db, user["user_id"], "READ", "students", None,
               new_values={"scope": "parent_children", "count": len(children)})
+        db.commit()
         return jsonify({"ok": True, "children": children})
     except Exception:
         logging.exception("parent_student route error")

@@ -9,7 +9,7 @@ from flask import Blueprint, jsonify, request
 
 from app.auth import current_user, login_required
 from app.database import get_db
-from app.routes._helpers import now_utc, serialize_school, serialize_user
+from app.routes._helpers import audit, now_utc, serialize_school, serialize_user
 
 shared_bp = Blueprint("shared", __name__)
 
@@ -78,10 +78,10 @@ def get_notifications():
     db = get_db()
     try:
         rows = db.execute(
-            """SELECT notification_id, title, body, notification_type,
-                      related_table, related_id, is_read, created_at
+            """SELECT notification_id, type, message,
+                      reference_table, reference_id, is_read, created_at
                FROM notifications
-               WHERE user_id = ? AND is_read = FALSE
+               WHERE recipient_user_id = ? AND is_read = FALSE
                ORDER BY created_at DESC
                LIMIT 50""",
             (user["user_id"],),
@@ -163,9 +163,9 @@ def mark_notification_read(notification_id: int):
     try:
         result = db.execute(
             """UPDATE notifications
-               SET is_read = TRUE, read_at = ?
-               WHERE notification_id = ? AND user_id = ?""",
-            (now_utc(), notification_id, user["user_id"]),
+               SET is_read = TRUE
+               WHERE notification_id = ? AND recipient_user_id = ?""",
+            (notification_id, user["user_id"]),
         )
         db.commit()
 
@@ -180,8 +180,8 @@ def mark_notification_read(notification_id: int):
 # ---------------------------------------------------------------------------
 # GET /api/students/<student_id>/progress
 # ---------------------------------------------------------------------------
-PROGRESS_ROLES = ("ceo", "admin", "coach_overseer", "head_coach",
-                  "assistant_coach", "principal", "school_staff")
+PROGRESS_ROLES = ("ceo", "admin", "coach_overseer", "site_coordinator",
+                  "head_coach", "assistant_coach", "principal", "school_staff")
 
 @shared_bp.route("/api/students/<int:student_id>/progress", methods=["GET"])
 @login_required
@@ -209,10 +209,15 @@ def student_progress(student_id: int):
         if role in ("head_coach", "assistant_coach", "principal", "school_staff"):
             if user.get("school_id") != student["school_id"]:
                 return jsonify({"error": "Access denied."}), 403
-        elif role == "coach_overseer":
+        elif role in ("coach_overseer", "site_coordinator"):
+            # Look up org via staff profile — these roles may not have a school_id in the session
             overseer_org = db.execute(
-                "SELECT organization_id FROM schools WHERE school_id = ? AND deleted_at IS NULL",
-                (user.get("school_id"),),
+                """SELECT s.organization_id FROM staff_profiles sp
+                   JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status = 1 AND sa.deleted_at IS NULL
+                   JOIN schools s ON s.school_id = sa.school_id AND s.deleted_at IS NULL
+                   WHERE sp.user_id = ? AND sp.deleted_at IS NULL
+                   LIMIT 1""",
+                (user["user_id"],),
             ).fetchone()
             student_org = db.execute(
                 "SELECT organization_id FROM schools WHERE school_id = ? AND deleted_at IS NULL",
@@ -222,8 +227,8 @@ def student_progress(student_id: int):
                 return jsonify({"error": "Access denied."}), 403
 
         overall = db.execute(
-            """SELECT overall_score, performance_band, growth_amount,
-                      baseline_overall_score, last_calculated_at
+            """SELECT overall_skill_score, overall_behavior_score, overall_ufit_score,
+                      participation_rate, readiness_band, latest_update
                FROM student_overall_summary WHERE student_id = ?""",
             (student_id,),
         ).fetchone()
@@ -231,7 +236,7 @@ def student_progress(student_id: int):
         domain_rows = db.execute(
             """SELECT sds.domain_id, sd.domain_name,
                       sds.current_domain_score, sds.baseline_domain_score,
-                      sds.growth_amount, sds.performance_band, sds.updated_at
+                      sds.growth_amount, sds.latest_update
                FROM student_domain_summary sds
                JOIN skill_domains sd ON sd.domain_id = sds.domain_id
                WHERE sds.student_id = ?
@@ -264,6 +269,9 @@ def student_progress(student_id: int):
             (student_id,),
         ).fetchall()
 
+        audit(db, user["user_id"], "READ", "students", student_id,
+              new_values={"scope": "student_progress"})
+        db.commit()
         return jsonify({
             "ok": True,
             "student": dict(student),

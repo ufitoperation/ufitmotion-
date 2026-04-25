@@ -10,6 +10,7 @@ All passwords are hashed with werkzeug.security (PBKDF2-SHA256).
 Password reset tokens are stored in the users table and expire after 1 hour.
 """
 
+import hashlib
 import secrets
 from datetime import datetime, timezone, timedelta
 
@@ -70,7 +71,8 @@ def login():
                 """SELECT u.user_id, u.role, u.first_name, u.last_name, u.email,
                           u.password_hash, u.active_status, u.auth_uid,
                           sp.staff_id, sp.position_title,
-                          s.school_id, s.school_name
+                          s.school_id, s.school_name,
+                          sa.program_id
                    FROM users u
                    LEFT JOIN staff_profiles sp ON sp.user_id = u.user_id
                    LEFT JOIN staff_assignments sa
@@ -136,6 +138,7 @@ def logout():
 # POST /api/auth/change-password
 # ---------------------------------------------------------------------------
 @auth_bp.route("/api/auth/change-password", methods=["POST"])
+@limiter.limit("5 per minute")
 def change_password():
     user = current_user()
     if user is None:
@@ -164,8 +167,8 @@ def change_password():
             "UPDATE users SET password_hash = ? WHERE user_id = ?",
             (new_hash, user["user_id"]),
         )
-        db.commit()
         audit(db, user["user_id"], "change_password", "users", user["user_id"])
+        db.commit()
         return jsonify({"ok": True})
     finally:
         db.close()
@@ -175,6 +178,7 @@ def change_password():
 # POST /api/auth/setup-admin
 # ---------------------------------------------------------------------------
 @auth_bp.route("/api/auth/setup-admin", methods=["POST"])
+@limiter.limit("3 per hour")
 def setup_admin():
     """
     Create the first CEO or admin account.
@@ -223,6 +227,8 @@ def setup_admin():
             (role, first_name, last_name, email, password_hash, now_utc()),
         )
         new_id = cur.lastrowid
+        audit(db, new_id, "INSERT", "users", new_id,
+              new_values={"role": role, "email": email, "action": "setup_admin"})
         db.commit()
 
         user = db.execute(
@@ -284,13 +290,16 @@ def forgot_password():
 
         if row:
             token = secrets.token_urlsafe(32)
+            token_hash = hashlib.sha256(token.encode()).hexdigest()
             expires_at = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
             db.execute(
                 """UPDATE users
                    SET password_reset_token = ?, password_reset_expires_at = ?
                    WHERE user_id = ?""",
-                (token, expires_at, row["user_id"]),
+                (token_hash, expires_at, row["user_id"]),
             )
+            audit(db, row["user_id"], "forgot_password", "users", row["user_id"],
+                  new_values={"action": "reset_token_issued", "ip": request.remote_addr})
             db.commit()
 
             # TODO: send reset email via configured email provider.
@@ -329,11 +338,12 @@ def reset_password():
 
     db = get_db()
     try:
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
         row = db.execute(
             """SELECT user_id, password_reset_expires_at
                FROM users
                WHERE password_reset_token = ? AND deleted_at IS NULL AND active_status = TRUE""",
-            (token,),
+            (token_hash,),
         ).fetchone()
 
         if row is None:
@@ -362,6 +372,7 @@ def reset_password():
                WHERE user_id = ?""",
             (new_hash, row["user_id"]),
         )
+        audit(db, row["user_id"], "reset_password", "users", row["user_id"])
         db.commit()
 
         return jsonify({"ok": True, "message": "Password updated successfully."})

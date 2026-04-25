@@ -171,13 +171,15 @@ def _seed_app_settings(db) -> None:
 
     ts = now_utc()
     inserted = 0
+    is_sqlite = getattr(db, "backend", "sqlite") == "sqlite"
+    upsert_sql = (
+        "INSERT OR IGNORE INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)"
+        if is_sqlite else
+        "INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT (key) DO NOTHING"
+    )
     for key, value, is_public in _DEFAULT_SETTINGS:
         try:
-            db.execute(
-                """INSERT OR IGNORE INTO app_settings (key, value, updated_at)
-                   VALUES (?, ?, ?)""",
-                (key, value, ts),
-            )
+            db.execute(upsert_sql, (key, value, ts))
             inserted += 1
         except Exception as exc:
             print(f"[seeds] Could not insert setting '{key}': {exc}", file=sys.stderr, flush=True)

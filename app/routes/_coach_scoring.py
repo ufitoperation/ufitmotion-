@@ -13,6 +13,11 @@ from datetime import date, timedelta
 from typing import Optional
 
 
+def _get_today() -> date:
+    """Return today's date. Module-level so tests can monkeypatch."""
+    return date.today()
+
+
 PILLAR_WEIGHTS = {"compliance": 0.35, "outcomes": 0.35, "observations": 0.30}
 
 
@@ -70,7 +75,8 @@ def _compliance_pillar(db, staff_id: int, school_id: int,
         " FROM sessions s"
         " JOIN session_staff ss ON ss.session_id = s.session_id"
         "  AND ss.staff_id=? AND ss.role='lead'"
-        " WHERE s.school_id=? AND s.session_date BETWEEN ? AND ?",
+        " WHERE s.school_id=? AND s.session_date BETWEEN ? AND ?"
+        " AND s.deleted_at IS NULL",
         (staff_id, school_id, ps, pe),
     ).fetchone()
     eod_days_row = db.execute(
@@ -174,7 +180,8 @@ def _outcomes_pillar(db, school_id: int,
         " SUM(CASE WHEN ssa.attendance_status='present' THEN 1 ELSE 0 END) AS present"
         " FROM student_session_attendance ssa"
         " JOIN sessions s ON s.session_id = ssa.session_id"
-        " WHERE s.school_id=? AND s.session_date BETWEEN ? AND ?",
+        " WHERE s.school_id=? AND s.session_date BETWEEN ? AND ?"
+        " AND s.deleted_at IS NULL",
         (school_id, ps, pe),
     ).fetchone()
     total_att = (att_row["total"] or 0) if att_row else 0
@@ -281,6 +288,6 @@ def calculate_coach_score(db, staff_id: int, school_id: int,
 
 def rolling_period() -> tuple:
     """Returns (start, end) for the trailing 30-day window."""
-    end = date.today()
+    end = _get_today()
     start = end - timedelta(days=30)
     return start, end

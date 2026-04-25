@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, date, timezone
 from decimal import Decimal
 from typing import Optional
-from flask import request
+from flask import request, current_app
 
 
 # ---------------------------------------------------------------------------
@@ -61,7 +61,6 @@ def serialize_user(row: dict) -> dict:
         "school_id",
         "school_name",
         "created_at",
-        "updated_at",
     )
     return {k: row[k] for k in SAFE_FIELDS if k in row}
 
@@ -250,8 +249,9 @@ def audit(
         # Commit is intentionally NOT called here — the caller controls the
         # transaction so that the audit entry and the main write are atomic.
     except Exception as exc:
-        # Log to stderr and re-raise — a missing audit entry is a FERPA §99.2(b)
-        # violation, so the calling route must handle this failure explicitly.
-        print(f"AUDIT FAILURE [{action} {table_name}:{record_id}]: {exc}",
-              file=sys.stderr, flush=True)
+        # Re-raise — a missing audit entry is a FERPA §99.2(b) violation.
+        try:
+            current_app.logger.error("AUDIT FAILURE [%s %s:%s]: %s", action, table_name, record_id, exc)
+        except RuntimeError:
+            print(f"AUDIT FAILURE [{action} {table_name}:{record_id}]: {exc}", file=sys.stderr, flush=True)
         raise

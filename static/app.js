@@ -43,7 +43,7 @@ function getPortal(user) {
   if (COACH_ROLES.has(r))  return 'coach';
   if (r === 'parent')      return 'parent';
   if (SCHOOL_ROLES.has(r)) return 'principal';
-  return 'admin';
+  return 'login';
 }
 
 /* ============================================================
@@ -117,6 +117,10 @@ async function api(method, path, body = null) {
   };
   if (body && method.toUpperCase() !== 'GET') opts.body = JSON.stringify(body);
   const res = await fetch(path, opts);
+  if (res.status === 401 && path !== '/api/auth/login') {
+    window.location.href = '/';
+    return;
+  }
   const ct = res.headers.get('content-type') || '';
   const data = ct.includes('application/json') ? await res.json() : { message: await res.text() };
   if (!res.ok) throw new Error(data?.error || data?.message || `Error ${res.status}`);
@@ -1030,13 +1034,13 @@ function openResolveIncidentModal(incident) {
       ${incident.resolution_notes ? `<div class="form-group"><label class="form-label">Resolution Notes</label><textarea class="form-input form-textarea" id="resolution-notes-field" rows="2">${esc(incident.resolution_notes)}</textarea></div>` : `<div class="form-group"><label class="form-label">Resolution Notes</label><textarea class="form-input form-textarea" id="resolution-notes-field" rows="2" placeholder="Optional internal notes…"></textarea></div>`}
       <div class="modal-footer">
         <button class="btn btn-ghost" type="button" onclick="closeModal()">Cancel</button>
-        ${isOpen ? `<button class="btn btn-primary" id="resolve-btn" onclick="submitIncidentResolution(${incident.incident_id}, 'resolved')">Mark Resolved</button>` : `<button class="btn btn-ghost btn-sm" onclick="submitIncidentResolution(${incident.incident_id}, 'open')">Reopen</button><button class="btn btn-primary" id="resolve-btn" onclick="submitIncidentResolution(${incident.incident_id}, 'resolved')">Update Notes</button>`}
+        ${isOpen ? `<button class="btn btn-primary" id="resolve-btn" onclick="submitIncidentResolution(${incident.incident_id}, 'resolved')">Mark Resolved</button>` : `<button class="btn btn-ghost btn-sm" id="reopen-btn" onclick="submitIncidentResolution(${incident.incident_id}, 'open')">Reopen</button><button class="btn btn-primary" id="resolve-btn" onclick="submitIncidentResolution(${incident.incident_id}, 'resolved')">Update Notes</button>`}
       </div>
     </div>`);
 }
 
 async function submitIncidentResolution(incidentId, status) {
-  const btn = document.getElementById('resolve-btn');
+  const btn = document.getElementById(status === 'open' ? 'reopen-btn' : 'resolve-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
   try {
     await api('PATCH', `/api/admin/incidents/${incidentId}`, {
@@ -1049,7 +1053,7 @@ async function submitIncidentResolution(incidentId, status) {
     loadIncidentsPage(document.getElementById('page-main'));
   } catch (err) {
     showAlert(err.message, 'error');
-    if (btn) { btn.disabled = false; btn.textContent = 'Mark Resolved'; }
+    if (btn) { btn.disabled = false; btn.textContent = status === 'open' ? 'Reopen' : 'Mark Resolved'; }
   }
 }
 
@@ -1256,11 +1260,10 @@ async function openLogSessionModal(onSuccess) {
           <input class="form-input" type="date" name="session_date" value="${todayStr}" required /></div>
         <div class="form-group"><label class="form-label">Type *</label>
           <select class="form-input form-select" name="session_type" required>
-            <option value="pe_class">PE Class</option>
-            <option value="after_school">After School</option>
-            <option value="recess">Recess</option>
-            <option value="sports">Sports</option>
-            <option value="other">Other</option>
+            <option value="regular">Regular</option>
+            <option value="enrichment">Enrichment</option>
+            <option value="makeup">Makeup</option>
+            <option value="assessment">Assessment</option>
           </select>
         </div>
       </div>
@@ -1279,8 +1282,15 @@ async function openLogSessionModal(onSuccess) {
     const fd = new FormData(e.target);
     const btn = document.getElementById('log-session-submit');
     btn.disabled = true; btn.innerHTML = '<span class="spinner spinner-white"></span>';
+    if (!state.user?.program_id) {
+      showAlert('No active program assigned to your account. Contact your administrator.', 'error');
+      btn.disabled = false; btn.innerHTML = 'Log Session';
+      return;
+    }
     try {
       await api('POST', '/api/sessions', {
+        school_id: state.user?.school_id,
+        program_id: state.user?.program_id,
         session_date: fd.get('session_date'),
         session_type: fd.get('session_type'),
         duration_minutes: parseInt(fd.get('duration_minutes')),
@@ -1347,22 +1357,12 @@ function openEodModal(onSuccess) {
     <form id="eod-form" class="modal-body form-stack">
       <div class="form-group"><label class="form-label">Report Date *</label>
         <input class="form-input" type="date" name="report_date" value="${todayStr}" required /></div>
-      <div class="form-group"><label class="form-label">Overall Activities</label>
-        <textarea class="form-input form-textarea" name="overall_activities" placeholder="What activities were covered?" rows="3"></textarea></div>
-      <div class="form-row">
-        <div class="form-group"><label class="form-label">Engagement Level (1–5)</label>
-          <select class="form-input form-select" name="student_engagement_level">
-            <option value="5">5 – Excellent</option><option value="4">4 – Good</option>
-            <option value="3" selected>3 – Average</option><option value="2">2 – Below Average</option><option value="1">1 – Poor</option>
-          </select></div>
-        <div class="form-group"><label class="form-label">Behavior (1–5)</label>
-          <select class="form-input form-select" name="behavior_rating">
-            <option value="5">5 – Excellent</option><option value="4">4 – Good</option>
-            <option value="3" selected>3 – Average</option><option value="2">2 – Below Average</option><option value="1">1 – Poor</option>
-          </select></div>
-      </div>
-      <div class="form-group"><label class="form-label">Coach Notes</label>
-        <textarea class="form-input form-textarea" name="coach_notes" placeholder="Any highlights, concerns, or follow-ups?" rows="3"></textarea></div>
+      <div class="form-group"><label class="form-label">Activities Completed *</label>
+        <textarea class="form-input form-textarea" name="activities_completed" placeholder="What activities were covered today?" rows="3" required></textarea></div>
+      <div class="form-group"><label class="form-label">Student Engagement Summary *</label>
+        <textarea class="form-input form-textarea" name="student_engagement_summary" placeholder="How engaged were students? Any highlights or challenges?" rows="2" required></textarea></div>
+      <div class="form-group"><label class="form-label">Ufit Standards Notes *</label>
+        <textarea class="form-input form-textarea" name="ufit_standards_notes" placeholder="Notes on Ufit curriculum and standards compliance" rows="2" required></textarea></div>
       <div class="modal-footer">
         <button class="btn btn-ghost" type="button" onclick="closeModal()">Cancel</button>
         <button class="btn btn-primary" type="submit" id="eod-submit">Submit Report</button>
@@ -1374,13 +1374,19 @@ function openEodModal(onSuccess) {
     const fd = new FormData(e.target);
     const btn = document.getElementById('eod-submit');
     btn.disabled = true; btn.innerHTML = '<span class="spinner spinner-white"></span>';
+    if (!state.user?.school_id) {
+      showAlert('No school assignment on your account. Contact your administrator.', 'error');
+      btn.disabled = false; btn.innerHTML = 'Submit Report';
+      return;
+    }
     try {
       await api('POST', '/api/eod-reports', {
+        school_id: state.user?.school_id,
+        program_id: state.user?.program_id || null,
         report_date: fd.get('report_date'),
-        overall_activities: fd.get('overall_activities').trim() || null,
-        student_engagement_level: parseInt(fd.get('student_engagement_level')),
-        behavior_rating: parseInt(fd.get('behavior_rating')),
-        coach_notes: fd.get('coach_notes').trim() || null,
+        activities_completed: fd.get('activities_completed').trim(),
+        student_engagement_summary: fd.get('student_engagement_summary').trim(),
+        ufit_standards_notes: fd.get('ufit_standards_notes').trim(),
       });
       closeModal();
       showAlert('EOD report submitted!', 'success');
@@ -1521,8 +1527,8 @@ function openFileIncidentModal(onSuccess) {
         </select></div>
       <div class="form-group"><label class="form-label">Description *</label>
         <textarea class="form-input form-textarea" name="description" rows="4" placeholder="Describe what happened…" required></textarea></div>
-      <div class="form-group"><label class="form-label">Action Taken</label>
-        <textarea class="form-input form-textarea" name="action_taken" rows="2" placeholder="What action was taken?"></textarea></div>
+      <div class="form-group"><label class="form-label">Immediate Action Taken *</label>
+        <textarea class="form-input form-textarea" name="immediate_action_taken" rows="2" placeholder="What action was taken immediately?" required></textarea></div>
       <div class="modal-footer">
         <button class="btn btn-ghost" type="button" onclick="closeModal()">Cancel</button>
         <button class="btn btn-danger" type="submit" id="incident-submit">File Report</button>
@@ -1536,11 +1542,12 @@ function openFileIncidentModal(onSuccess) {
     btn.disabled = true; btn.innerHTML = '<span class="spinner spinner-white"></span>';
     try {
       await api('POST', '/api/incidents', {
+        school_id: state.user?.school_id,
         report_date: fd.get('report_date'),
         severity_level: fd.get('severity_level'),
         incident_type: fd.get('incident_type'),
         description: fd.get('description').trim(),
-        action_taken: fd.get('action_taken').trim() || null,
+        immediate_action_taken: fd.get('immediate_action_taken').trim(),
       });
       closeModal();
       showAlert('Incident report filed.', 'success');
@@ -1681,11 +1688,16 @@ async function openNewAssessmentModal(onSuccess) {
     const fd = new FormData(e.target);
     const scores = skillsWithDomain
       .map(s => {
-        const raw_score = parseInt(fd.get(`skill_${s.skill_id}`), 10);
+        const raw_level = parseInt(fd.get(`skill_${s.skill_id}`), 10);
         const obs_tag = fd.get(`obs_tag_${s.skill_id}`) || null;
-        return { skill_id: s.skill_id, raw_score, observation_tag: obs_tag || undefined };
+        return { skill_id: s.skill_id, raw_level, observation_tag: obs_tag || undefined };
       })
-      .filter(s => !isNaN(s.raw_score));
+      .filter(s => !isNaN(s.raw_level));
+    if (scores.length === 0) {
+      showAlert('Please score at least one skill before submitting.', 'error');
+      btn.disabled = false; btn.innerHTML = 'Submit Assessment';
+      return;
+    }
     try {
       await api('POST', '/api/assessments', {
         student_id: parseInt(fd.get('student_id'), 10),
@@ -2237,7 +2249,7 @@ async function loadWindowsPage(container) {
       <td>${esc(w.start_date)} – ${esc(w.end_date)}</td>
       <td>${statusBadge(w.status)}</td>
       <td>
-        ${w.status !== 'closed' ? `<button class="btn btn-ghost btn-sm" onclick="patchWindow(${w.window_id},'${w.status === 'active' ? 'closed' : 'active'}')">
+        ${w.status !== 'closed' ? `<button class="btn btn-ghost btn-sm" onclick="patchWindow(${w.window_id},'${w.status === 'active' ? 'closed' : 'active'}',this)">
           ${w.status === 'active' ? 'Close' : 'Activate'}
         </button>` : ''}
       </td>
@@ -2312,13 +2324,15 @@ async function submitNewWindow(e) {
   }
 }
 
-async function patchWindow(windowId, newStatus) {
+async function patchWindow(windowId, newStatus, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
   try {
     await api('PATCH', `/api/assessment-windows/${windowId}`, { status: newStatus });
     showAlert(`Window ${newStatus}.`, 'success');
     loadWindowsPage(document.getElementById('page-main'));
   } catch (err) {
     showAlert(err.message, 'error');
+    if (btn) { btn.disabled = false; btn.textContent = newStatus === 'active' ? 'Activate' : 'Close'; }
   }
 }
 

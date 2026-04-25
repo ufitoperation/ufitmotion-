@@ -1092,19 +1092,34 @@ def list_incidents():
     status_filter = request.args.get("status")
     severity_filter = request.args.get("severity")
 
+    _VALID_STATUSES = frozenset(("open", "under_review", "in_progress", "resolved", "closed"))
+    _VALID_SEVERITIES = frozenset(("low", "medium", "high", "critical"))
+
     filter_sql = ""
     filter_params: list = []
 
     if from_date:
+        try:
+            datetime.date.fromisoformat(str(from_date))
+        except (ValueError, TypeError):
+            return jsonify({"error": "Invalid from date format. Use YYYY-MM-DD."}), 400
         filter_sql += " AND ir.report_date >= ?"
         filter_params.append(from_date)
     if to_date:
+        try:
+            datetime.date.fromisoformat(str(to_date))
+        except (ValueError, TypeError):
+            return jsonify({"error": "Invalid to date format. Use YYYY-MM-DD."}), 400
         filter_sql += " AND ir.report_date <= ?"
         filter_params.append(to_date)
     if status_filter:
+        if status_filter not in _VALID_STATUSES:
+            return jsonify({"error": f"Invalid status. Valid values: {', '.join(sorted(_VALID_STATUSES))}."}), 422
         filter_sql += " AND ir.status = ?"
         filter_params.append(status_filter)
     if severity_filter:
+        if severity_filter not in _VALID_SEVERITIES:
+            return jsonify({"error": f"Invalid severity. Valid values: {', '.join(sorted(_VALID_SEVERITIES))}."}), 422
         filter_sql += " AND ir.severity_level = ?"
         filter_params.append(severity_filter)
 
@@ -1306,17 +1321,16 @@ def create_incident():
         if severity_level == "critical":
             db.execute(
                 """INSERT INTO notifications
-                   (user_id, title, body, notification_type, related_table, related_id, created_at)
+                   (recipient_user_id, type, message, reference_table, reference_id, created_at)
                    SELECT DISTINCT u.user_id,
-                          'Critical Incident Filed',
+                          'incident_filed',
                           'A critical incident was filed at ' || sc.school_name || ' on ' || ?,
-                          'incident',
                           'incident_reports',
                           ?,
                           ?
                    FROM users u
                    JOIN staff_profiles sp ON sp.user_id = u.user_id
-                   JOIN staff_assignments sa ON sa.staff_id = sp.staff_id
+                   JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status = 1 AND sa.deleted_at IS NULL
                    JOIN schools sa_sc ON sa_sc.school_id = sa.school_id
                    JOIN schools sc ON sc.school_id = ?
                    WHERE u.role IN ('ceo', 'admin', 'coach_overseer')
@@ -1557,6 +1571,7 @@ def list_assessments():
 
         audit(db, user["user_id"], "READ", "assessments", None,
               new_values={"scope": "coach_list", "total": total})
+        db.commit()
         return jsonify({
             "ok": True,
             "assessments": assessments_out,
@@ -1701,7 +1716,7 @@ def submit_assessment():
         # Rule 12: window validation (skipped when window_id is omitted)
         if window_id is not None:
             window_row = db.execute(
-                "SELECT window_id, school_id, status FROM assessment_windows WHERE window_id = ?",
+                "SELECT window_id, school_id, status FROM assessment_windows WHERE window_id = ? AND deleted_at IS NULL",
                 (window_id,),
             ).fetchone()
             if not window_row:
@@ -1720,18 +1735,26 @@ def submit_assessment():
             if not skill_row:
                 return jsonify({"error": f"Invalid or inactive skill_id: {item['skill_id']}."}), 400
 
-        # Rule 14: duplicate assessment guard (only when window_id is provided)
+        # Rule 14: duplicate assessment guard
         if window_id is not None:
             dup_row = db.execute(
                 "SELECT assessment_id FROM assessments"
                 " WHERE student_id = ? AND window_id = ? AND deleted_at IS NULL LIMIT 1",
                 (student_id, window_id),
             ).fetchone()
-            if dup_row:
-                return jsonify({
-                    "error": "An assessment for this student and window already exists.",
-                    "existing_assessment_id": dup_row["assessment_id"],
-                }), 409
+        else:
+            dup_row = db.execute(
+                "SELECT assessment_id FROM assessments"
+                " WHERE student_id = ? AND assessment_date = ? AND window_id IS NULL"
+                " AND deleted_at IS NULL LIMIT 1",
+                (student_id, assessment_date_val),
+            ).fetchone()
+        if dup_row:
+            return jsonify({
+                "error": "An assessment for this student already exists"
+                         + (" for this window." if window_id else " on this date."),
+                "existing_assessment_id": dup_row["assessment_id"],
+            }), 409
 
         created_at_val = now_utc()
         cur = db.execute(
@@ -2004,7 +2027,7 @@ def submit_behavior_observation():
              scores.get("teamwork_score"), scores.get("effort_score"),
              scores.get("self_control_score"), scores.get("listening_score"),
              scores.get("sportsmanship_score"), scores.get("confidence_score"),
-             data.get("notes"), now_utc()),
+             (data.get("notes") or "")[:1000] or None, now_utc()),
         )
         audit(db, user["user_id"], "INSERT", "behavior_observations", cur.lastrowid,
               new_values={"student_id": student_id, "session_id": session_id})
@@ -2023,37 +2046,70 @@ def list_behavior_observations():
 
     student_id = request.args.get("student_id", type=int)
     session_id = request.args.get("session_id", type=int)
-    if not student_id:
-        return jsonify({"error": "student_id query param is required."}), 400
+    role = user["role"]
+    staff_id = user["staff_id"]
 
     db = get_db()
     try:
-        student = db.execute(
-            "SELECT school_id FROM students WHERE student_id = ? AND active_status = 1 AND deleted_at IS NULL",
-            (student_id,),
-        ).fetchone()
-        if not student:
-            return jsonify({"error": "Student not found."}), 404
-
-        if user["role"] in ("head_coach", "assistant_coach") and user.get("school_id") != student["school_id"]:
-            return jsonify({"error": "Student does not belong to your school."}), 403
-
         sql = """
-            SELECT bo.*, (u.first_name || ' ' || u.last_name) AS observer_name
+            SELECT bo.*,
+                   st.student_first_name, st.student_last_name,
+                   (u.first_name || ' ' || u.last_name) AS observer_name
             FROM behavior_observations bo
+            JOIN students st ON st.student_id = bo.student_id AND st.deleted_at IS NULL
             JOIN staff_profiles sp ON sp.staff_id = bo.observed_by_staff_id
             JOIN users u ON u.user_id = sp.user_id AND u.deleted_at IS NULL
-            WHERE bo.student_id = ?
+            WHERE bo.deleted_at IS NULL
         """
-        params = [student_id]
+        params: list = []
+
+        if student_id:
+            # Validate student access
+            student = db.execute(
+                "SELECT school_id FROM students WHERE student_id = ? AND active_status = 1 AND deleted_at IS NULL",
+                (student_id,),
+            ).fetchone()
+            if not student:
+                return jsonify({"error": "Student not found."}), 404
+            if role in ("head_coach", "assistant_coach") and user.get("school_id") != student["school_id"]:
+                return jsonify({"error": "Student does not belong to your school."}), 403
+            sql += " AND bo.student_id = ?"
+            params.append(student_id)
+        else:
+            # Scope to the coach's school(s) when no student filter is given.
+            if role in ("head_coach", "assistant_coach"):
+                school_id = user.get("school_id")
+                if not school_id:
+                    return jsonify({"error": "You have no active school assignment."}), 403
+                sql += " AND bo.school_id = ?"
+                params.append(school_id)
+            elif role == "site_coordinator":
+                sql += (" AND bo.school_id IN"
+                        " (SELECT school_id FROM staff_assignments"
+                        "  WHERE staff_id = ? AND active_status = 1)")
+                params.append(staff_id)
+            elif role == "coach_overseer":
+                overseer_school = user.get("school_id")
+                if not overseer_school:
+                    return jsonify({"error": "You have no active school assignment."}), 403
+                org_row = db.execute(
+                    "SELECT organization_id FROM schools WHERE school_id = ? AND deleted_at IS NULL",
+                    (overseer_school,),
+                ).fetchone()
+                if not org_row:
+                    return jsonify({"error": "You have no active school assignment."}), 403
+                sql += " AND bo.school_id IN (SELECT school_id FROM schools WHERE organization_id = ? AND deleted_at IS NULL)"
+                params.append(org_row["organization_id"])
+
         if session_id:
             sql += " AND bo.session_id = ?"
             params.append(session_id)
-        sql += " ORDER BY bo.observation_date DESC, bo.created_at DESC"
+        sql += " ORDER BY bo.observation_date DESC, bo.created_at DESC LIMIT 100"
 
         rows = db.execute(sql, params).fetchall()
         audit(db, user["user_id"], "READ", "behavior_observations", None,
               new_values={"scope": "coach_list", "count": len(rows)})
+        db.commit()
         return jsonify({"ok": True, "observations": [dict(r) for r in rows]})
     finally:
         db.close()
@@ -2090,7 +2146,7 @@ def list_assessment_windows():
             FROM assessment_windows aw
             JOIN schools sc ON sc.school_id = aw.school_id
             LEFT JOIN programs p ON p.program_id = aw.program_id
-            WHERE aw.school_id = ?
+            WHERE aw.school_id = ? AND aw.deleted_at IS NULL
         """
         params = [school_id]
         if status_filter in ("upcoming", "active", "closed"):
@@ -2179,7 +2235,8 @@ def submit_coach_observation():
              scores["transitions_score"], scores["engagement_score"],
              scores["lesson_fidelity_score"], scores["sel_language_score"],
              scores["safety_score"], scores["organization_score"],
-             data.get("notes"), data.get("action_plan"), now_utc()),
+             (data.get("notes") or "")[:2000] or None,
+             (data.get("action_plan") or "")[:2000] or None, now_utc()),
         )
         audit(db, user["user_id"], "INSERT", "coach_observations", cur.lastrowid,
               new_values={"observed_staff_id": observed_staff_id, "school_id": school_id})
@@ -2202,8 +2259,15 @@ def list_coach_observations():
     if user is None:
         return jsonify({"error": "Authentication required."}), 401
 
+    _OBS_READ_ROLES = ("head_coach", "coach_overseer", "ceo", "admin")
+    if user["role"] not in _OBS_READ_ROLES:
+        return jsonify({"error": "Access denied."}), 403
+
     staff_id_filter = request.args.get("staff_id", type=int)
     school_id_filter = request.args.get("school_id", type=int) or user.get("school_id")
+
+    if user["role"] in ("head_coach",) and school_id_filter != user.get("school_id"):
+        return jsonify({"error": "You can only view observations for your assigned school."}), 403
 
     db = get_db()
     try:
@@ -2220,13 +2284,13 @@ def list_coach_observations():
             JOIN staff_profiles esp ON esp.staff_id = co.evaluator_staff_id
             JOIN users eu ON eu.user_id = esp.user_id AND eu.deleted_at IS NULL
             JOIN schools sc ON sc.school_id = co.school_id
-            WHERE co.school_id = ?
+            WHERE co.school_id = ? AND co.deleted_at IS NULL
         """
         params = [school_id_filter]
         if staff_id_filter:
             sql += " AND co.observed_staff_id = ?"
             params.append(staff_id_filter)
-        sql += " ORDER BY co.observation_date DESC, co.created_at DESC"
+        sql += " ORDER BY co.observation_date DESC, co.created_at DESC LIMIT 200"
 
         rows = db.execute(sql, params).fetchall()
         return jsonify({"ok": True, "observations": [dict(r) for r in rows]})
@@ -2252,7 +2316,10 @@ def my_score():
 
     db = get_db()
     try:
-        scorecard = calculate_coach_score(db, staff_id, school_id, period_start, period_end)
+        try:
+            scorecard = calculate_coach_score(db, staff_id, school_id, period_start, period_end)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
         snapshots = db.execute(
             "SELECT * FROM coach_performance_snapshots"
             " WHERE staff_id=? AND school_id=? ORDER BY period_end DESC LIMIT 12",

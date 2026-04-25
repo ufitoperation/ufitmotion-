@@ -39,6 +39,8 @@ def _resolve_school_id(db, user_id: int):
            JOIN staff_profiles sp ON sp.staff_id = sa.staff_id
            WHERE sp.user_id = ?
              AND sa.active_status = 1
+             AND sa.deleted_at IS NULL
+             AND sp.deleted_at IS NULL
            ORDER BY sa.created_at DESC
            LIMIT 1""",
         (user_id,),
@@ -103,7 +105,7 @@ def principal_dashboard():
                  WHERE s.school_id = ?
                    AND s.session_date BETWEEN ? AND ?
                    AND s.deleted_at IS NULL
-               )""",
+               ) AS _expected""",
             (school_id, week_start, week_end),
         ).fetchone()
         expected = expected_row["cnt"] if expected_row else 0
@@ -129,10 +131,11 @@ def principal_dashboard():
         coach_rows = db.execute(
             """SELECT DISTINCT u.user_id, u.first_name, u.last_name, u.role
                FROM users u
-               JOIN staff_profiles sp ON sp.user_id = u.user_id
+               JOIN staff_profiles sp ON sp.user_id = u.user_id AND sp.deleted_at IS NULL
                JOIN staff_assignments sa ON sa.staff_id = sp.staff_id
                WHERE sa.school_id = ?
                  AND sa.active_status = 1
+                 AND sa.deleted_at IS NULL
                  AND u.active_status = 1
                  AND u.deleted_at IS NULL
                ORDER BY u.last_name ASC, u.first_name ASC""",
@@ -146,6 +149,7 @@ def principal_dashboard():
 
         audit(db, user["user_id"], "READ", "students", None,
               new_values={"scope": "principal_dashboard", "school_id": school_id})
+        db.commit()
         return jsonify({
             "ok": True,
             "school": {
@@ -203,7 +207,7 @@ def principal_students():
         if not school_id:
             return jsonify({"error": "No school assignment found for your account."}), 403
 
-        search_pattern = f"%{search}%" if search else "%"
+        search_pattern = f"%{search.lower()}%" if search else "%"
         offset = (page - 1) * per_page
 
         total_row = db.execute(
@@ -211,7 +215,7 @@ def principal_students():
                WHERE school_id = ?
                  AND active_status = 1
                  AND deleted_at IS NULL
-                 AND (student_first_name LIKE ? OR student_last_name LIKE ?)""",
+                 AND (LOWER(student_first_name) LIKE ? OR LOWER(student_last_name) LIKE ?)""",
             (school_id, search_pattern, search_pattern),
         ).fetchone()
         total = total_row["cnt"] if total_row else 0
@@ -241,7 +245,7 @@ def principal_students():
                WHERE s.school_id = ?
                  AND s.active_status = 1
                  AND s.deleted_at IS NULL
-                 AND (s.student_first_name LIKE ? OR s.student_last_name LIKE ?)
+                 AND (LOWER(s.student_first_name) LIKE ? OR LOWER(s.student_last_name) LIKE ?)
                GROUP BY s.student_id, s.student_first_name, s.student_last_name,
                         s.grade_level, latest_a.latest_assessment_date
                ORDER BY s.student_last_name ASC, s.student_first_name ASC
@@ -263,6 +267,7 @@ def principal_students():
 
         audit(db, user["user_id"], "READ", "students", None,
               new_values={"scope": "principal_roster", "school_id": school_id, "total": total})
+        db.commit()
         return jsonify({
             "ok": True,
             "page": page,

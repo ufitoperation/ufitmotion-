@@ -69,7 +69,7 @@ def _get_org_scope(db, user) -> Optional[int]:
     if not school_id:
         return None
     row = db.execute(
-        "SELECT organization_id FROM schools WHERE school_id = ?", (school_id,)
+        "SELECT organization_id FROM schools WHERE school_id = ? AND deleted_at IS NULL", (school_id,)
     ).fetchone()
     return row["organization_id"] if row else None
 
@@ -105,7 +105,7 @@ def list_organizations():
 def create_organization():
     actor = current_user()
     data = parse_json()
-    org_name = (data.get("organization_name") or "").strip()
+    org_name = (data.get("organization_name") or "").strip()[:200]
     if not org_name:
         return jsonify({"error": "organization_name is required."}), 400
 
@@ -119,12 +119,20 @@ def create_organization():
             return jsonify({"error": "An organization with that name already exists."}), 409
 
         ts = now_utc()
+        VALID_ORG_TYPES = ("school_district", "charter", "private", "district", "other")
+        VALID_CONTRACT_STATUSES = ("active", "inactive", "trial", "pending", "expired")
+        org_type = (data.get("organization_type") or "district").strip()[:50]
+        contract_status = (data.get("contract_status") or "active").strip()[:20]
+        if org_type not in VALID_ORG_TYPES:
+            org_type = "other"
+        if contract_status not in VALID_CONTRACT_STATUSES:
+            contract_status = "active"
+
         cur = db.execute(
             """INSERT INTO organizations
                (organization_name, organization_type, contract_status, created_at)
                VALUES (?, ?, ?, ?)""",
-            (org_name, data.get("organization_type", "district"),
-             data.get("contract_status", "active"), ts),
+            (org_name, org_type, contract_status, ts),
         )
         org_id = cur.lastrowid
         audit(db, actor["user_id"] if actor else None, "INSERT", "organizations", org_id,
@@ -153,8 +161,8 @@ def list_schools():
         params = []
         where = "WHERE s.deleted_at IS NULL AND s.active_status = 1"
         if search:
-            where += " AND (s.school_name LIKE ? OR s.city LIKE ?)"
-            params += [f"%{search}%", f"%{search}%"]
+            where += " AND (LOWER(s.school_name) LIKE ? OR LOWER(s.city) LIKE ?)"
+            params += [f"%{search.lower()}%", f"%{search.lower()}%"]
         if org_id_raw:
             where += " AND s.organization_id = ?"
             params.append(int(org_id_raw))
@@ -165,7 +173,7 @@ def list_schools():
                        COUNT(DISTINCT st.student_id) AS student_count
                 FROM schools s
                 LEFT JOIN organizations o ON o.organization_id = s.organization_id
-                LEFT JOIN staff_assignments sa ON sa.school_id = s.school_id AND sa.active_status = 1
+                LEFT JOIN staff_assignments sa ON sa.school_id = s.school_id AND sa.active_status = 1 AND sa.deleted_at IS NULL
                 LEFT JOIN students st ON st.school_id = s.school_id
                     AND st.active_status = 1 AND st.deleted_at IS NULL
                 {where}
@@ -189,7 +197,7 @@ def create_school():
     actor = current_user()
     data = parse_json()
     organization_id = data.get("organization_id")
-    school_name = (data.get("school_name") or "").strip()
+    school_name = (data.get("school_name") or "").strip()[:200]
     school_type = data.get("school_type", "elementary")
 
     if not organization_id or not school_name:
@@ -277,6 +285,19 @@ def update_school(school_id: int):
     if not updates:
         return jsonify({"error": "No updatable fields provided."}), 400
 
+    # Validate email format if provided
+    if "principal_email" in updates and updates["principal_email"]:
+        e = updates["principal_email"]
+        if "@" not in e or "." not in e.split("@")[-1]:
+            return jsonify({"error": "Invalid principal_email format."}), 400
+
+    # Enforce length limits
+    _FIELD_LIMITS = {"school_name": 200, "principal_name": 200, "principal_email": 254,
+                     "address": 300, "city": 100, "state": 50, "zip_code": 20}
+    for f, lim in _FIELD_LIMITS.items():
+        if f in updates and updates[f]:
+            updates[f] = str(updates[f]).strip()[:lim]
+
     db = get_db()
     try:
         school = db.execute(
@@ -290,6 +311,12 @@ def update_school(school_id: int):
         ).fetchone()
         if not school:
             return jsonify({"error": "School not found."}), 404
+
+        # Non-CEO admins can only update schools in their own org.
+        if actor and actor["role"] == "admin":
+            org_id = _get_org_scope(db, actor)
+            if org_id is not None and school["organization_id"] != org_id:
+                return jsonify({"error": "You do not have access to this school."}), 403
 
         # Build UPDATE using only the validated allowlist — never interpolate untrusted input.
         _COL_SQL = {
@@ -355,9 +382,9 @@ def delete_school(school_id: int):
             return jsonify({"error": "School not found."}), 404
 
         active_students = db.execute(
-            "SELECT COUNT(*) FROM students WHERE school_id = ? AND active_status = 1 AND deleted_at IS NULL",
+            "SELECT COUNT(*) AS cnt FROM students WHERE school_id = ? AND active_status = 1 AND deleted_at IS NULL",
             (school_id,),
-        ).fetchone()[0]
+        ).fetchone()["cnt"]
         if active_students > 0:
             return jsonify({"error": f"Cannot delete school with {active_students} active student(s). Deactivate or transfer students first."}), 409
 
@@ -365,6 +392,8 @@ def delete_school(school_id: int):
         db.execute("UPDATE schools SET deleted_at = ? WHERE school_id = ?", (ts, school_id))
         db.execute("UPDATE staff_assignments SET active_status = 0 WHERE school_id = ?", (school_id,))
         db.execute("UPDATE programs SET program_status = 'inactive' WHERE school_id = ?", (school_id,))
+        db.execute("UPDATE sessions SET deleted_at = ? WHERE school_id = ? AND deleted_at IS NULL", (ts, school_id))
+        db.execute("UPDATE eod_reports SET deleted_at = ? WHERE school_id = ? AND deleted_at IS NULL", (ts, school_id))
         audit(db, user["user_id"], "DELETE", "schools", school_id,
               old_values={"school_name": row["school_name"]})
         db.commit()
@@ -379,6 +408,10 @@ def delete_school(school_id: int):
 def list_users():
     search = (request.args.get("search") or "").strip()[:100]
     role_filter = (request.args.get("role") or "").strip()
+    _VALID_ROLES = frozenset(("ceo", "admin", "coach_overseer", "site_coordinator",
+                              "head_coach", "assistant_coach", "principal", "school_staff", "parent"))
+    if role_filter and role_filter not in _VALID_ROLES:
+        return jsonify({"error": f"Invalid role filter. Valid roles: {', '.join(sorted(_VALID_ROLES))}."}), 422
     try:
         page = max(1, int(request.args.get("page", 1)))
         per_page = min(100, max(1, int(request.args.get("per_page", 50))))
@@ -390,8 +423,8 @@ def list_users():
         where = "WHERE u.deleted_at IS NULL"
         params = []
         if search:
-            where += " AND (u.first_name LIKE ? OR u.last_name LIKE ? OR u.email LIKE ?)"
-            params += [f"%{search}%", f"%{search}%", f"%{search}%"]
+            where += " AND (LOWER(u.first_name) LIKE ? OR LOWER(u.last_name) LIKE ? OR LOWER(u.email) LIKE ?)"
+            params += [f"%{search.lower()}%", f"%{search.lower()}%", f"%{search.lower()}%"]
         if role_filter:
             where += " AND u.role = ?"
             params.append(role_filter)
@@ -406,8 +439,8 @@ def list_users():
                        u.active_status, u.created_at,
                        sp.position_title, s.school_id, s.school_name
                 FROM users u
-                LEFT JOIN staff_profiles sp ON sp.user_id = u.user_id
-                LEFT JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status = 1
+                LEFT JOIN staff_profiles sp ON sp.user_id = u.user_id AND sp.deleted_at IS NULL
+                LEFT JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status = 1 AND sa.deleted_at IS NULL
                 LEFT JOIN schools s ON s.school_id = sa.school_id
                 {where}
                 ORDER BY u.last_name ASC, u.first_name ASC
@@ -443,9 +476,9 @@ def create_user():
     actor = current_user()
     data = parse_json()
 
-    first_name = (data.get("first_name") or "").strip()
-    last_name = (data.get("last_name") or "").strip()
-    email = (data.get("email") or "").strip().lower()
+    first_name = (data.get("first_name") or "").strip()[:100]
+    last_name = (data.get("last_name") or "").strip()[:100]
+    email = (data.get("email") or "").strip().lower()[:254]
     role = (data.get("role") or "").strip()
     password = data.get("password") or ""
 
@@ -456,7 +489,7 @@ def create_user():
         return jsonify({"error": "Invalid email format."}), 400
 
     valid_roles = (
-        "ceo", "admin", "coach_overseer", "site_coordinator",
+        "coach_overseer", "site_coordinator",
         "head_coach", "assistant_coach", "principal", "school_staff", "parent",
     )
     if role not in valid_roles:
@@ -466,7 +499,7 @@ def create_user():
         return jsonify({"error": "Password must be at least 8 characters."}), 400
 
     school_id = data.get("school_id")
-    position_title = (data.get("position_title") or "").strip() or None
+    position_title = (data.get("position_title") or "").strip()[:200] or None
 
     db = get_db()
     try:
@@ -578,8 +611,8 @@ def update_user(user_id: int):
             return jsonify({"error": "User not found."}), 404
         new_hash = generate_password_hash(new_password, method="pbkdf2:sha256")
         db.execute("UPDATE users SET password_hash = ? WHERE user_id = ?", (new_hash, user_id))
-        db.commit()
         audit(db, admin["user_id"], "admin_reset_password", "users", user_id)
+        db.commit()
         return jsonify({"ok": True})
     finally:
         db.close()
@@ -606,14 +639,18 @@ def delete_user(user_id: int):
 
         if row["role"] == "ceo":
             remaining = db.execute(
-                "SELECT COUNT(*) FROM users WHERE role = 'ceo' AND deleted_at IS NULL"
-            ).fetchone()[0]
+                "SELECT COUNT(*) AS cnt FROM users WHERE role = 'ceo' AND deleted_at IS NULL"
+            ).fetchone()["cnt"]
             if remaining <= 1:
                 return jsonify({"error": "Cannot delete the last CEO account."}), 409
 
         ts = now_utc()
         db.execute(
             "UPDATE users SET deleted_at = ?, active_status = 0 WHERE user_id = ?",
+            (ts, user_id),
+        )
+        db.execute(
+            "UPDATE staff_profiles SET deleted_at = ? WHERE user_id = ?",
             (ts, user_id),
         )
         db.execute(
@@ -645,6 +682,8 @@ def list_students():
 
     db = get_db()
     try:
+        org_id = _get_org_scope(db, user)
+
         sql = """
             SELECT s.student_id, s.student_first_name, s.student_last_name,
                    s.grade_level, s.local_student_identifier, s.active_status,
@@ -654,6 +693,9 @@ def list_students():
             WHERE s.deleted_at IS NULL
         """
         params = []
+        if org_id is not None:
+            sql += " AND sc.organization_id = ?"
+            params.append(org_id)
         if school_id:
             sql += " AND s.school_id = ?"
             params.append(school_id)
@@ -665,11 +707,14 @@ def list_students():
             p = f"%{search_raw.lower()}%"
             params.extend([p, p])
 
-        total = db.execute(f"SELECT COUNT(*) FROM ({sql})", params).fetchone()[0]
+        total = db.execute(f"SELECT COUNT(*) AS cnt FROM ({sql}) AS _sub", params).fetchone()["cnt"]
         sql += " ORDER BY sc.school_name, s.student_last_name, s.student_first_name LIMIT ? OFFSET ?"
         params.extend([per_page, offset])
         rows = db.execute(sql, params).fetchall()
 
+        audit(db, user["user_id"], "READ", "students", None,
+              new_values={"scope": "admin_list", "org_id": org_id, "total": total})
+        db.commit()
         return jsonify({
             "ok": True,
             "students": [serialize_student(r) for r in rows],
@@ -689,14 +734,19 @@ def create_student():
         return jsonify({"error": "Authentication required."}), 401
 
     data = parse_json()
-    first_name = (data.get("student_first_name") or data.get("first_name") or "").strip()
-    last_name = (data.get("student_last_name") or data.get("last_name") or "").strip()
-    grade_level = (data.get("grade_level") or "").strip()
+    first_name = (data.get("student_first_name") or data.get("first_name") or "").strip()[:100]
+    last_name = (data.get("student_last_name") or data.get("last_name") or "").strip()[:100]
+    grade_level = (data.get("grade_level") or "").strip()[:20]
     school_id = data.get("school_id")
-    local_id = (data.get("local_student_identifier") or "").strip() or None
-    gender = (data.get("gender") or "").strip() or None
-    homeroom = (data.get("homeroom_teacher") or "").strip() or None
-    enrollment_start = data.get("enrollment_start") or now_utc()[:10]
+    local_id = (data.get("local_student_identifier") or "").strip()[:50] or None
+    gender = (data.get("gender") or "").strip()[:20] or None
+    homeroom = (data.get("homeroom_teacher") or "").strip()[:100] or None
+    enrollment_start_raw = data.get("enrollment_start") or now_utc()[:10]
+    try:
+        datetime.date.fromisoformat(str(enrollment_start_raw))
+        enrollment_start = str(enrollment_start_raw)
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid enrollment_start format. Use YYYY-MM-DD."}), 400
 
     if not first_name or not last_name:
         return jsonify({"error": "student_first_name and student_last_name are required."}), 400
@@ -707,9 +757,16 @@ def create_student():
 
     db = get_db()
     try:
-        school = db.execute("SELECT school_id FROM schools WHERE school_id = ? AND deleted_at IS NULL", (school_id,)).fetchone()
+        school = db.execute(
+            "SELECT school_id, organization_id FROM schools WHERE school_id = ? AND deleted_at IS NULL",
+            (school_id,),
+        ).fetchone()
         if not school:
             return jsonify({"error": "School not found."}), 404
+
+        org_id = _get_org_scope(db, user)
+        if org_id is not None and school["organization_id"] != org_id:
+            return jsonify({"error": "School does not belong to your organization."}), 403
 
         cur = db.execute(
             """INSERT INTO students
@@ -788,7 +845,7 @@ def list_programs():
                    (SELECT COUNT(*) FROM student_program_enrollment spe WHERE spe.program_id = p.program_id AND spe.status = 'active') AS student_count
             FROM programs p
             JOIN schools sc ON sc.school_id = p.school_id
-            WHERE sc.deleted_at IS NULL
+            WHERE sc.deleted_at IS NULL AND p.deleted_at IS NULL
         """
         params = []
         if school_id:
@@ -816,15 +873,15 @@ def create_program():
 
     data = parse_json()
     school_id = data.get("school_id")
-    program_name = (data.get("program_name") or "").strip()
+    program_name = (data.get("program_name") or "").strip()[:200]
     program_type = (data.get("program_type") or "pe_support").strip()
-    service_model = (data.get("service_model") or "").strip() or None
-    grade_band = (data.get("grade_band") or "").strip() or None
+    service_model = (data.get("service_model") or "").strip()[:100] or None
+    grade_band = (data.get("grade_band") or "").strip()[:50] or None
     start_date = data.get("start_date")
     end_date = data.get("end_date") or None
-    frequency = (data.get("frequency") or "").strip() or None
+    frequency = (data.get("frequency") or "").strip()[:100] or None
     reporting_cycle = (data.get("reporting_cycle") or "quarterly").strip()
-    notes = (data.get("notes") or "").strip() or None
+    notes = (data.get("notes") or "").strip()[:1000] or None
 
     VALID_TYPES = ("pe_support", "lunch_sports", "after_school_sports", "psychomotor",
                    "middle_school_skill_development", "tournament_program", "wellness_enrichment")
@@ -835,6 +892,14 @@ def create_program():
         return jsonify({"error": "program_name is required."}), 400
     if not start_date:
         return jsonify({"error": "start_date is required."}), 400
+    try:
+        s = datetime.date.fromisoformat(str(start_date))
+        if end_date:
+            e = datetime.date.fromisoformat(str(end_date))
+            if e < s:
+                return jsonify({"error": "end_date cannot be before start_date."}), 400
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid date format. Use YYYY-MM-DD."}), 400
     if program_type not in VALID_TYPES:
         return jsonify({"error": f"Invalid program_type. Must be one of: {', '.join(VALID_TYPES)}."}), 400
 
@@ -876,13 +941,15 @@ def delete_program(program_id: int):
 
     db = get_db()
     try:
-        row = db.execute("SELECT program_id, program_name FROM programs WHERE program_id = ?", (program_id,)).fetchone()
+        row = db.execute("SELECT program_id, program_name FROM programs WHERE program_id = ? AND deleted_at IS NULL", (program_id,)).fetchone()
         if not row:
             return jsonify({"error": "Program not found."}), 404
 
+        ts = now_utc()
         db.execute("UPDATE programs SET program_status = 'inactive' WHERE program_id = ?", (program_id,))
         db.execute("UPDATE student_program_enrollment SET status = 'inactive' WHERE program_id = ?", (program_id,))
         db.execute("UPDATE staff_assignments SET active_status = 0 WHERE program_id = ?", (program_id,))
+        db.execute("UPDATE sessions SET deleted_at = ? WHERE program_id = ? AND deleted_at IS NULL", (ts, program_id))
         audit(db, user["user_id"], "DELETE", "programs", program_id,
               old_values={"program_name": row["program_name"]})
         db.commit()
@@ -913,7 +980,7 @@ def list_assessment_windows_admin():
             FROM assessment_windows aw
             JOIN schools sc ON sc.school_id = aw.school_id
             LEFT JOIN programs p ON p.program_id = aw.program_id
-            WHERE 1=1
+            WHERE aw.deleted_at IS NULL
         """
         params = []
         if org_id is not None:
@@ -998,23 +1065,34 @@ def update_assessment_window(window_id: int):
     data = parse_json()
     db = get_db()
     try:
-        row = db.execute("SELECT * FROM assessment_windows WHERE window_id = ?", (window_id,)).fetchone()
+        row = db.execute("SELECT * FROM assessment_windows WHERE window_id = ? AND deleted_at IS NULL", (window_id,)).fetchone()
         if not row:
             return jsonify({"error": "Assessment window not found."}), 404
 
         fields = {}
         if "window_name" in data and data["window_name"]:
-            fields["window_name"] = data["window_name"].strip()
+            fields["window_name"] = str(data["window_name"]).strip()[:200]
         if "status" in data:
             if data["status"] not in ("upcoming", "active", "closed"):
                 return jsonify({"error": "status must be upcoming, active, or closed."}), 400
             fields["status"] = data["status"]
-        if "start_date" in data:
-            fields["start_date"] = data["start_date"]
-        if "end_date" in data:
-            fields["end_date"] = data["end_date"]
+        if "start_date" in data and data["start_date"]:
+            try:
+                datetime.date.fromisoformat(str(data["start_date"]))
+                fields["start_date"] = str(data["start_date"])
+            except (ValueError, TypeError):
+                return jsonify({"error": "Invalid start_date format. Use YYYY-MM-DD."}), 400
+        if "end_date" in data and data["end_date"]:
+            try:
+                datetime.date.fromisoformat(str(data["end_date"]))
+                fields["end_date"] = str(data["end_date"])
+            except (ValueError, TypeError):
+                return jsonify({"error": "Invalid end_date format. Use YYYY-MM-DD."}), 400
+        if "start_date" in fields and "end_date" in fields:
+            if fields["end_date"] < fields["start_date"]:
+                return jsonify({"error": "end_date cannot be before start_date."}), 400
         if "assessment_focus" in data:
-            fields["assessment_focus"] = data["assessment_focus"]
+            fields["assessment_focus"] = str(data["assessment_focus"]).strip()[:500] if data["assessment_focus"] else None
 
         if not fields:
             return jsonify({"error": "No fields to update."}), 400
@@ -1064,13 +1142,13 @@ def list_reports():
                     sp.staff_id,
                     u.first_name || ' ' || u.last_name AS coach_name,
                     sc.school_name,
-                    COUNT(DISTINCT er.report_date) AS eod_submitted,
+                    COUNT(DISTINCT er.eod_id) AS eod_submitted,
                     SUM(CASE WHEN er.submitted_on_time = 1 THEN 1 ELSE 0 END) AS on_time,
                     SUM(CASE WHEN er.submitted_on_time = 0 THEN 1 ELSE 0 END) AS late,
-                    COUNT(DISTINCT se.session_date) AS sessions_logged
+                    COUNT(DISTINCT se.session_id) AS sessions_logged
                 FROM staff_profiles sp
                 JOIN users u ON u.user_id = sp.user_id
-                JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status = 1
+                JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status = 1 AND sa.deleted_at IS NULL
                 JOIN schools sc ON sc.school_id = sa.school_id {org_filter}
                 LEFT JOIN eod_reports er
                     ON er.staff_id = sp.staff_id
@@ -1078,12 +1156,16 @@ def list_reports():
                     AND er.deleted_at IS NULL
                     {school_filter}
                 LEFT JOIN sessions se
-                    ON se.school_id = sa.school_id
+                    ON se.session_id IN (
+                        SELECT ss2.session_id FROM session_staff ss2
+                        WHERE ss2.staff_id = sp.staff_id
+                    )
                     AND se.session_date BETWEEN ? AND ?
                     AND se.deleted_at IS NULL
                 WHERE u.role IN ('head_coach', 'assistant_coach')
                   AND u.active_status = 1
                   AND u.deleted_at IS NULL
+                  AND sp.deleted_at IS NULL
                 GROUP BY sp.staff_id, u.first_name, u.last_name, sc.school_name
                 ORDER BY sc.school_name, coach_name
                 """,
@@ -1245,7 +1327,8 @@ def dashboard():
             sessions_count = (db.execute(
                 """SELECT COUNT(*) AS cnt FROM sessions se
                    JOIN schools sc ON sc.school_id = se.school_id
-                   WHERE se.session_date >= ? AND sc.organization_id = ?""",
+                   WHERE se.session_date >= ? AND sc.organization_id = ?
+                     AND se.deleted_at IS NULL""",
                 (thirty_days_ago, org_id),
             ).fetchone() or {}).get("cnt", 0)
 
@@ -1276,12 +1359,12 @@ def dashboard():
             ).fetchone() or {}).get("cnt", 0)
 
             sessions_count = (db.execute(
-                "SELECT COUNT(*) AS cnt FROM sessions WHERE session_date >= ?",
+                "SELECT COUNT(*) AS cnt FROM sessions WHERE session_date >= ? AND deleted_at IS NULL",
                 (thirty_days_ago,),
             ).fetchone() or {}).get("cnt", 0)
 
             open_incidents = (db.execute(
-                "SELECT COUNT(*) AS cnt FROM incident_reports WHERE status NOT IN ('resolved', 'closed')"
+                "SELECT COUNT(*) AS cnt FROM incident_reports WHERE status NOT IN ('resolved', 'closed') AND deleted_at IS NULL"
             ).fetchone() or {}).get("cnt", 0)
 
         return jsonify({
@@ -1480,9 +1563,9 @@ def admin_list_coaches():
                     AND ir.deleted_at IS NULL
                  ) AS incidents_filed_this_week
                FROM users u
-               LEFT JOIN staff_profiles sp ON sp.user_id = u.user_id
+               LEFT JOIN staff_profiles sp ON sp.user_id = u.user_id AND sp.deleted_at IS NULL
                LEFT JOIN staff_assignments sa ON sa.staff_id = sp.staff_id
-                          AND sa.active_status = 1
+                          AND sa.active_status = 1 AND sa.deleted_at IS NULL
                LEFT JOIN schools s ON s.school_id = sa.school_id
                WHERE u.role IN ('head_coach','assistant_coach')
                  AND u.active_status = 1
@@ -1540,7 +1623,10 @@ def get_coach_score(staff_id: int):
             return jsonify({"error": "Coach not found."}), 404
 
         school_id = staff["school_id"]
-        scorecard = calculate_coach_score(db, staff_id, school_id, period_start, period_end)
+        try:
+            scorecard = calculate_coach_score(db, staff_id, school_id, period_start, period_end)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
 
         snapshots = db.execute(
             "SELECT * FROM coach_performance_snapshots"
@@ -1588,7 +1674,23 @@ def freeze_coach_score(staff_id: int):
             return jsonify({"error": "Coach not found."}), 404
 
         school_id = staff["school_id"]
-        sc = calculate_coach_score(db, staff_id, school_id, period_start, period_end)
+
+        existing_snap = db.execute(
+            "SELECT snapshot_id FROM coach_performance_snapshots"
+            " WHERE staff_id=? AND school_id=? AND period_start=? AND period_end=?"
+            " LIMIT 1",
+            (staff_id, school_id, period_start.isoformat(), period_end.isoformat()),
+        ).fetchone()
+        if existing_snap:
+            return jsonify({
+                "error": "A snapshot for this period already exists.",
+                "existing_snapshot_id": existing_snap["snapshot_id"],
+            }), 409
+
+        try:
+            sc = calculate_coach_score(db, staff_id, school_id, period_start, period_end)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
 
         cur = db.execute(
             "INSERT INTO coach_performance_snapshots"
@@ -1770,8 +1872,8 @@ def resolve_incident(incident_id: int):
         return jsonify({"error": "Authentication required."}), 401
     data = parse_json()
     new_status = data.get("status", "").strip()
-    if new_status not in ("open", "resolved"):
-        return jsonify({"error": "status must be 'open' or 'resolved'."}), 400
+    if new_status not in ("open", "under_review", "resolved", "closed"):
+        return jsonify({"error": "status must be open, under_review, resolved, or closed."}), 400
 
     db = get_db()
     try:
@@ -1784,7 +1886,7 @@ def resolve_incident(incident_id: int):
 
         org_id = _get_org_scope(db, user)
         if org_id:
-            school = db.execute("SELECT organization_id FROM schools WHERE school_id = ?", (row["school_id"],)).fetchone()
+            school = db.execute("SELECT organization_id FROM schools WHERE school_id = ? AND deleted_at IS NULL", (row["school_id"],)).fetchone()
             if not school or school["organization_id"] != org_id:
                 return jsonify({"error": "Access denied."}), 403
 
@@ -1949,6 +2051,9 @@ def admin_students_growth():
             for r in domain_rows
         ]
 
+        audit(db, user["user_id"], "READ", "assessments", None,
+              new_values={"scope": "admin_students_growth", "window_id": window_id, "org_id": org_id})
+        db.commit()
         return jsonify({
             "ok": True,
             "window_id": window_id,
