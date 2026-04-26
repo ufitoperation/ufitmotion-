@@ -27,7 +27,7 @@ CREATE OR REPLACE FUNCTION _ufit_user_id()
 RETURNS INTEGER LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   SELECT user_id
   FROM users
-  WHERE auth_uid = auth.uid()::text
+  WHERE auth_uid = auth.uid()
     AND active_status = TRUE
     AND deleted_at IS NULL
   LIMIT 1
@@ -37,7 +37,7 @@ CREATE OR REPLACE FUNCTION _ufit_user_role()
 RETURNS TEXT LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   SELECT role
   FROM users
-  WHERE auth_uid = auth.uid()::text
+  WHERE auth_uid = auth.uid()
     AND active_status = TRUE
     AND deleted_at IS NULL
   LIMIT 1
@@ -49,7 +49,7 @@ RETURNS INTEGER LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS
   FROM users u
   JOIN staff_profiles sp ON sp.user_id = u.user_id
   JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status = TRUE
-  WHERE u.auth_uid = auth.uid()::text
+  WHERE u.auth_uid = auth.uid()
     AND u.active_status = TRUE
     AND u.deleted_at IS NULL
   LIMIT 1
@@ -62,7 +62,7 @@ RETURNS INTEGER LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS
   JOIN staff_profiles sp ON sp.user_id = u.user_id
   JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status = TRUE
   JOIN schools sc ON sc.school_id = sa.school_id
-  WHERE u.auth_uid = auth.uid()::text
+  WHERE u.auth_uid = auth.uid()
     AND u.active_status = TRUE
     AND u.deleted_at IS NULL
   LIMIT 1
@@ -75,7 +75,7 @@ RETURNS SETOF INTEGER LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pub
   FROM users u
   JOIN staff_profiles sp ON sp.user_id = u.user_id
   JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status = TRUE
-  WHERE u.auth_uid = auth.uid()::text
+  WHERE u.auth_uid = auth.uid()
     AND u.active_status = TRUE
     AND u.deleted_at IS NULL
 $$;

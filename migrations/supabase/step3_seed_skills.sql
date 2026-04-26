@@ -8,11 +8,11 @@
 -- ============================================================
 
 INSERT INTO skill_domains (domain_name, domain_type, grade_band, active_status, description) VALUES
-    ('Physical / Psychomotor', 'physical_psychomotor', 'K-8', 1,
+    ('Physical / Psychomotor', 'physical_psychomotor', 'K-8', TRUE,
         'Locomotor, balance, coordination, object control, agility, body control'),
-    ('Sports Fundamentals', 'sports_fundamentals', 'K-8', 1,
+    ('Sports Fundamentals', 'sports_fundamentals', 'K-8', TRUE,
         'Sport-specific movement skills: dribbling, passing, striking, defense'),
-    ('SEL / Behavior', 'sel_behavior', 'K-8', 1,
+    ('SEL / Behavior', 'sel_behavior', 'K-8', TRUE,
         'Teamwork, effort, self-control, listening, sportsmanship, confidence')
 ON CONFLICT DO NOTHING;
 
@@ -22,7 +22,7 @@ ON CONFLICT DO NOTHING;
 -- ============================================================
 
 INSERT INTO skills (domain_id, skill_name, grade_band, skill_description, assessment_type, active_status)
-SELECT d.domain_id, v.skill_name, v.grade_band, v.skill_description, 'observational', 1
+SELECT d.domain_id, v.skill_name, v.grade_band, v.skill_description, 'observational', TRUE
 FROM skill_domains d
 JOIN (
     SELECT 'run_with_control'    AS skill_name, 'K-2' AS grade_band, 'Running with coordinated arm/leg movement and directional control' AS skill_description
@@ -40,7 +40,7 @@ ON CONFLICT DO NOTHING;
 -- ============================================================
 
 INSERT INTO skills (domain_id, skill_name, grade_band, skill_description, assessment_type, active_status)
-SELECT d.domain_id, v.skill_name, v.grade_band, v.skill_description, 'observational', 1
+SELECT d.domain_id, v.skill_name, v.grade_band, v.skill_description, 'observational', TRUE
 FROM skill_domains d
 JOIN (
     SELECT 'dribble_with_control'          AS skill_name, '3-5' AS grade_band, 'Dribbling a ball with dominant hand while moving, maintaining possession' AS skill_description
@@ -57,7 +57,7 @@ ON CONFLICT DO NOTHING;
 -- ============================================================
 
 INSERT INTO skills (domain_id, skill_name, grade_band, skill_description, assessment_type, active_status)
-SELECT d.domain_id, v.skill_name, v.grade_band, v.skill_description, 'observational', 1
+SELECT d.domain_id, v.skill_name, v.grade_band, v.skill_description, 'observational', TRUE
 FROM skill_domains d
 JOIN (
     SELECT 'sport_decision_making' AS skill_name, '6-8' AS grade_band, 'Reading the play and choosing the highest-percentage action in real time' AS skill_description
@@ -74,7 +74,7 @@ ON CONFLICT DO NOTHING;
 -- ============================================================
 
 INSERT INTO skills (domain_id, skill_name, grade_band, sport_type, skill_description, assessment_type, active_status)
-SELECT d.domain_id, v.skill_name, v.grade_band, v.sport_type, v.skill_description, 'observational', 1
+SELECT d.domain_id, v.skill_name, v.grade_band, v.sport_type, v.skill_description, 'observational', TRUE
 FROM skill_domains d
 JOIN (
     SELECT 'soccer_fundamentals'     AS skill_name, 'K-8' AS grade_band, 'soccer'     AS sport_type, 'Dribbling, passing, trapping, and shooting with feet' AS skill_description
@@ -90,7 +90,7 @@ ON CONFLICT DO NOTHING;
 -- ============================================================
 
 INSERT INTO skills (domain_id, skill_name, grade_band, skill_description, assessment_type, active_status)
-SELECT d.domain_id, v.skill_name, 'K-8', v.skill_description, 'observational', 1
+SELECT d.domain_id, v.skill_name, 'K-8', v.skill_description, 'observational', TRUE
 FROM skill_domains d
 JOIN (
     SELECT 'teamwork'                       AS skill_name, 'Working cooperatively with teammates; sharing the ball and supporting others' AS skill_description
@@ -109,7 +109,7 @@ ON CONFLICT DO NOTHING;
 
 -- run_with_control
 INSERT INTO benchmarks (skill_id, grade_band, level_number, level_name, benchmark_description, observable_criteria, active_status)
-SELECT s.skill_id, 'K-2', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, 1
+SELECT s.skill_id, 'K-2', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, TRUE
 FROM skills s
 JOIN (
     SELECT 1 AS level_number, 'Beginning' AS level_name, 'Cannot maintain forward motion; trips or stops frequently' AS benchmark_description, 'Falls more than once per 10m; arms not used for balance' AS observable_criteria
@@ -122,7 +122,7 @@ ON CONFLICT DO NOTHING;
 
 -- hop_on_one_foot
 INSERT INTO benchmarks (skill_id, grade_band, level_number, level_name, benchmark_description, observable_criteria, active_status)
-SELECT s.skill_id, 'K-2', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, 1
+SELECT s.skill_id, 'K-2', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, TRUE
 FROM skills s
 JOIN (
     SELECT 1 AS level_number, 'Beginning' AS level_name, 'Cannot balance on one foot for 1 second' AS benchmark_description, 'Immediately puts foot down; grabs support' AS observable_criteria
@@ -135,7 +135,7 @@ ON CONFLICT DO NOTHING;
 
 -- skip_with_rhythm
 INSERT INTO benchmarks (skill_id, grade_band, level_number, level_name, benchmark_description, observable_criteria, active_status)
-SELECT s.skill_id, 'K-2', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, 1
+SELECT s.skill_id, 'K-2', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, TRUE
 FROM skills s
 JOIN (
     SELECT 1 AS level_number, 'Beginning' AS level_name, 'Cannot produce step-hop pattern; gallops or runs instead' AS benchmark_description, 'No airborne phase; both feet on ground simultaneously' AS observable_criteria
@@ -148,7 +148,7 @@ ON CONFLICT DO NOTHING;
 
 -- throw_underhand
 INSERT INTO benchmarks (skill_id, grade_band, level_number, level_name, benchmark_description, observable_criteria, active_status)
-SELECT s.skill_id, 'K-2', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, 1
+SELECT s.skill_id, 'K-2', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, TRUE
 FROM skills s
 JOIN (
     SELECT 1 AS level_number, 'Beginning' AS level_name, 'Pushes or drops ball; no pendulum swing' AS benchmark_description, 'No backswing; ball released early or late' AS observable_criteria
@@ -161,7 +161,7 @@ ON CONFLICT DO NOTHING;
 
 -- catch_two_hands
 INSERT INTO benchmarks (skill_id, grade_band, level_number, level_name, benchmark_description, observable_criteria, active_status)
-SELECT s.skill_id, 'K-2', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, 1
+SELECT s.skill_id, 'K-2', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, TRUE
 FROM skills s
 JOIN (
     SELECT 1 AS level_number, 'Beginning' AS level_name, 'Turns away or closes eyes; does not track ball' AS benchmark_description, 'Head turns away; traps against body or misses entirely' AS observable_criteria
@@ -174,7 +174,7 @@ ON CONFLICT DO NOTHING;
 
 -- balance_on_one_foot
 INSERT INTO benchmarks (skill_id, grade_band, level_number, level_name, benchmark_description, observable_criteria, active_status)
-SELECT s.skill_id, 'K-2', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, 1
+SELECT s.skill_id, 'K-2', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, TRUE
 FROM skills s
 JOIN (
     SELECT 1 AS level_number, 'Beginning' AS level_name, 'Cannot hold one-foot balance for 1 second' AS benchmark_description, 'Immediate foot down; grabs wall or coach' AS observable_criteria
@@ -192,7 +192,7 @@ ON CONFLICT DO NOTHING;
 
 -- dribble_with_control
 INSERT INTO benchmarks (skill_id, grade_band, level_number, level_name, benchmark_description, observable_criteria, active_status)
-SELECT s.skill_id, '3-5', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, 1
+SELECT s.skill_id, '3-5', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, TRUE
 FROM skills s
 JOIN (
     SELECT 1 AS level_number, 'Beginning' AS level_name, 'Slaps ball; loses control immediately; looks at hand' AS benchmark_description, 'Ball bounces away within 2 dribbles; eyes down' AS observable_criteria
@@ -205,7 +205,7 @@ ON CONFLICT DO NOTHING;
 
 -- pass_to_target
 INSERT INTO benchmarks (skill_id, grade_band, level_number, level_name, benchmark_description, observable_criteria, active_status)
-SELECT s.skill_id, '3-5', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, 1
+SELECT s.skill_id, '3-5', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, TRUE
 FROM skills s
 JOIN (
     SELECT 1 AS level_number, 'Beginning' AS level_name, 'Pass misses target by 5+ feet; no follow-through' AS benchmark_description, 'Wild direction; no weight transfer; wrong foot forward' AS observable_criteria
@@ -218,7 +218,7 @@ ON CONFLICT DO NOTHING;
 
 -- strike_with_accuracy
 INSERT INTO benchmarks (skill_id, grade_band, level_number, level_name, benchmark_description, observable_criteria, active_status)
-SELECT s.skill_id, '3-5', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, 1
+SELECT s.skill_id, '3-5', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, TRUE
 FROM skills s
 JOIN (
     SELECT 1 AS level_number, 'Beginning' AS level_name, 'Misses ball or hits with wrong part of hand/foot' AS benchmark_description, 'Whiff or toe-kick; eyes not on contact point' AS observable_criteria
@@ -231,7 +231,7 @@ ON CONFLICT DO NOTHING;
 
 -- defensive_positioning_basic
 INSERT INTO benchmarks (skill_id, grade_band, level_number, level_name, benchmark_description, observable_criteria, active_status)
-SELECT s.skill_id, '3-5', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, 1
+SELECT s.skill_id, '3-5', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, TRUE
 FROM skills s
 JOIN (
     SELECT 1 AS level_number, 'Beginning' AS level_name, 'Stands upright; does not track ball or opponent' AS benchmark_description, 'No athletic stance; flat-footed; faces wrong direction' AS observable_criteria
@@ -244,7 +244,7 @@ ON CONFLICT DO NOTHING;
 
 -- change_direction_with_control
 INSERT INTO benchmarks (skill_id, grade_band, level_number, level_name, benchmark_description, observable_criteria, active_status)
-SELECT s.skill_id, '3-5', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, 1
+SELECT s.skill_id, '3-5', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, TRUE
 FROM skills s
 JOIN (
     SELECT 1 AS level_number, 'Beginning' AS level_name, 'Stops fully before changing direction; loses balance' AS benchmark_description, 'Full stop required; stumbles or falls on direction change' AS observable_criteria
@@ -262,7 +262,7 @@ ON CONFLICT DO NOTHING;
 
 -- sport_decision_making
 INSERT INTO benchmarks (skill_id, grade_band, level_number, level_name, benchmark_description, observable_criteria, active_status)
-SELECT s.skill_id, '6-8', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, 1
+SELECT s.skill_id, '6-8', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, TRUE
 FROM skills s
 JOIN (
     SELECT 1 AS level_number, 'Beginning' AS level_name, 'Does not scan; always plays to closest teammate or holds ball' AS benchmark_description, 'No head movement to scan; one-option player' AS observable_criteria
@@ -275,7 +275,7 @@ ON CONFLICT DO NOTHING;
 
 -- offensive_spacing
 INSERT INTO benchmarks (skill_id, grade_band, level_number, level_name, benchmark_description, observable_criteria, active_status)
-SELECT s.skill_id, '6-8', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, 1
+SELECT s.skill_id, '6-8', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, TRUE
 FROM skills s
 JOIN (
     SELECT 1 AS level_number, 'Beginning' AS level_name, 'Clusters near ball carrier; does not move without ball' AS benchmark_description, 'Ball-watching; stays within 3 feet of action' AS observable_criteria
@@ -288,7 +288,7 @@ ON CONFLICT DO NOTHING;
 
 -- defensive_recovery
 INSERT INTO benchmarks (skill_id, grade_band, level_number, level_name, benchmark_description, observable_criteria, active_status)
-SELECT s.skill_id, '6-8', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, 1
+SELECT s.skill_id, '6-8', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, TRUE
 FROM skills s
 JOIN (
     SELECT 1 AS level_number, 'Beginning' AS level_name, 'Stops after losing possession; does not track back' AS benchmark_description, 'No recovery sprint; watches play from original position' AS observable_criteria
@@ -301,7 +301,7 @@ ON CONFLICT DO NOTHING;
 
 -- combination_skills
 INSERT INTO benchmarks (skill_id, grade_band, level_number, level_name, benchmark_description, observable_criteria, active_status)
-SELECT s.skill_id, '6-8', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, 1
+SELECT s.skill_id, '6-8', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, TRUE
 FROM skills s
 JOIN (
     SELECT 1 AS level_number, 'Beginning' AS level_name, 'Executes only one skill at a time; full stop between actions' AS benchmark_description, 'Stops completely between receive and pass; no flow' AS observable_criteria
@@ -314,7 +314,7 @@ ON CONFLICT DO NOTHING;
 
 -- game_application
 INSERT INTO benchmarks (skill_id, grade_band, level_number, level_name, benchmark_description, observable_criteria, active_status)
-SELECT s.skill_id, '6-8', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, 1
+SELECT s.skill_id, '6-8', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, TRUE
 FROM skills s
 JOIN (
     SELECT 1 AS level_number, 'Beginning' AS level_name, 'Skills break down immediately in game; does not engage with play' AS benchmark_description, 'Avoids contact; stands away from action; skills collapse' AS observable_criteria
@@ -332,7 +332,7 @@ ON CONFLICT DO NOTHING;
 
 -- soccer_fundamentals
 INSERT INTO benchmarks (skill_id, grade_band, level_number, level_name, benchmark_description, observable_criteria, active_status)
-SELECT s.skill_id, 'K-8', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, 1
+SELECT s.skill_id, 'K-8', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, TRUE
 FROM skills s
 JOIN (
     SELECT 1 AS level_number, 'Beginning' AS level_name, 'No sport-specific technique; does not engage with sport object' AS benchmark_description, 'Avoids or mishandles sport equipment' AS observable_criteria
@@ -345,7 +345,7 @@ ON CONFLICT DO NOTHING;
 
 -- basketball_fundamentals
 INSERT INTO benchmarks (skill_id, grade_band, level_number, level_name, benchmark_description, observable_criteria, active_status)
-SELECT s.skill_id, 'K-8', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, 1
+SELECT s.skill_id, 'K-8', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, TRUE
 FROM skills s
 JOIN (
     SELECT 1 AS level_number, 'Beginning' AS level_name, 'No basketball technique; loses ball immediately' AS benchmark_description, 'Slap dribble or no dribble; double dribble common' AS observable_criteria
@@ -358,7 +358,7 @@ ON CONFLICT DO NOTHING;
 
 -- football_fundamentals
 INSERT INTO benchmarks (skill_id, grade_band, level_number, level_name, benchmark_description, observable_criteria, active_status)
-SELECT s.skill_id, 'K-8', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, 1
+SELECT s.skill_id, 'K-8', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, TRUE
 FROM skills s
 JOIN (
     SELECT 1 AS level_number, 'Beginning' AS level_name, 'Cannot throw spiral; no route running concept' AS benchmark_description, 'Wobbly or dropped throw; runs random routes' AS observable_criteria
@@ -371,7 +371,7 @@ ON CONFLICT DO NOTHING;
 
 -- volleyball_fundamentals
 INSERT INTO benchmarks (skill_id, grade_band, level_number, level_name, benchmark_description, observable_criteria, active_status)
-SELECT s.skill_id, 'K-8', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, 1
+SELECT s.skill_id, 'K-8', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, TRUE
 FROM skills s
 JOIN (
     SELECT 1 AS level_number, 'Beginning' AS level_name, 'Cannot serve over net; no forearm pass form' AS benchmark_description, 'Serve fails to clear; arms swing rather than platform' AS observable_criteria
@@ -389,7 +389,7 @@ ON CONFLICT DO NOTHING;
 
 -- teamwork
 INSERT INTO benchmarks (skill_id, grade_band, level_number, level_name, benchmark_description, observable_criteria, active_status)
-SELECT s.skill_id, 'K-8', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, 1
+SELECT s.skill_id, 'K-8', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, TRUE
 FROM skills s
 JOIN (
     SELECT 1 AS level_number, 'Beginning' AS level_name, 'Refuses to work with others; takes ball/equipment alone' AS benchmark_description, 'Plays solo only; ignores teammates; refuses partner work' AS observable_criteria
@@ -402,7 +402,7 @@ ON CONFLICT DO NOTHING;
 
 -- effort
 INSERT INTO benchmarks (skill_id, grade_band, level_number, level_name, benchmark_description, observable_criteria, active_status)
-SELECT s.skill_id, 'K-8', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, 1
+SELECT s.skill_id, 'K-8', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, TRUE
 FROM skills s
 JOIN (
     SELECT 1 AS level_number, 'Beginning' AS level_name, 'Stands still; refuses to participate; walks when should run' AS benchmark_description, 'Disengaged; requires multiple redirections per activity' AS observable_criteria
@@ -415,7 +415,7 @@ ON CONFLICT DO NOTHING;
 
 -- self_control
 INSERT INTO benchmarks (skill_id, grade_band, level_number, level_name, benchmark_description, observable_criteria, active_status)
-SELECT s.skill_id, 'K-8', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, 1
+SELECT s.skill_id, 'K-8', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, TRUE
 FROM skills s
 JOIN (
     SELECT 1 AS level_number, 'Beginning' AS level_name, 'Frequent outbursts; unsafe behavior; cannot de-escalate' AS benchmark_description, '3+ redirection events per session; physical contact or yelling' AS observable_criteria
@@ -428,7 +428,7 @@ ON CONFLICT DO NOTHING;
 
 -- listening_following_directions
 INSERT INTO benchmarks (skill_id, grade_band, level_number, level_name, benchmark_description, observable_criteria, active_status)
-SELECT s.skill_id, 'K-8', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, 1
+SELECT s.skill_id, 'K-8', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, TRUE
 FROM skills s
 JOIN (
     SELECT 1 AS level_number, 'Beginning' AS level_name, 'Does not respond to directions; continues behavior when told to stop' AS benchmark_description, 'Requires 4+ repetitions; unsafe non-compliance present' AS observable_criteria
@@ -441,7 +441,7 @@ ON CONFLICT DO NOTHING;
 
 -- sportsmanship
 INSERT INTO benchmarks (skill_id, grade_band, level_number, level_name, benchmark_description, observable_criteria, active_status)
-SELECT s.skill_id, 'K-8', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, 1
+SELECT s.skill_id, 'K-8', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, TRUE
 FROM skills s
 JOIN (
     SELECT 1 AS level_number, 'Beginning' AS level_name, 'Disputes calls; taunts opponents; refuses to shake hands' AS benchmark_description, 'Verbal or physical negative reaction to outcomes' AS observable_criteria
@@ -454,7 +454,7 @@ ON CONFLICT DO NOTHING;
 
 -- confidence_participation
 INSERT INTO benchmarks (skill_id, grade_band, level_number, level_name, benchmark_description, observable_criteria, active_status)
-SELECT s.skill_id, 'K-8', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, 1
+SELECT s.skill_id, 'K-8', v.level_number, v.level_name, v.benchmark_description, v.observable_criteria, TRUE
 FROM skills s
 JOIN (
     SELECT 1 AS level_number, 'Beginning' AS level_name, 'Refuses to try; hides behind teammates; disengages from activity' AS benchmark_description, 'Non-participation; needs coaxing for every task' AS observable_criteria
