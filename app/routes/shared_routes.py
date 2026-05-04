@@ -9,6 +9,7 @@ from flask import Blueprint, jsonify, request
 
 from app.auth import current_user, login_required
 from app.database import get_db
+from app.extensions import limiter
 from app.routes._helpers import audit, now_utc, serialize_school, serialize_user
 
 shared_bp = Blueprint("shared", __name__)
@@ -32,20 +33,21 @@ def bootstrap():
     try:
         user = current_user(connection=db)
 
-        # Schools — all active schools ordered by name.
+        # Schools — all active schools ordered by name (capped at 1000 for safety).
         school_rows = db.execute(
             """SELECT school_id, organization_id, region_id, school_name, school_type,
                       address, city, state, zip_code,
                       principal_name, principal_email, active_status, created_at
                FROM schools
                WHERE active_status = TRUE AND deleted_at IS NULL
-               ORDER BY school_name ASC""",
+               ORDER BY school_name ASC
+               LIMIT 1000""",
         ).fetchall()
         schools = [serialize_school(r) for r in school_rows]
 
         # App settings — all key/value pairs.
         setting_rows = db.execute(
-            "SELECT key, value FROM app_settings"
+            "SELECT key, value FROM app_settings LIMIT 500"
         ).fetchall()
         app_settings = {r["key"]: r["value"] for r in setting_rows}
 
@@ -81,16 +83,18 @@ def get_notifications():
             """SELECT notification_id, type, message,
                       reference_table, reference_id, is_read, created_at
                FROM notifications
-               WHERE recipient_user_id = ? AND is_read = FALSE
-               ORDER BY created_at DESC
+               WHERE recipient_user_id = ?
+               ORDER BY is_read ASC, created_at DESC
                LIMIT 50""",
             (user["user_id"],),
         ).fetchall()
 
+        notifications = [dict(r) for r in rows]
+        unread_count = sum(1 for n in notifications if not n["is_read"])
         return jsonify({
             "ok": True,
-            "notifications": rows,
-            "unread_count": len(rows),
+            "notifications": notifications,
+            "unread_count": unread_count,
         })
     except Exception:
         return jsonify({"error": "Unable to fetch notifications."}), 500
@@ -147,6 +151,7 @@ def list_skills():
 # POST /api/notifications/<id>/read
 # ---------------------------------------------------------------------------
 @shared_bp.route("/api/notifications/<int:notification_id>/read", methods=["POST"])
+@limiter.limit("60 per minute")
 @login_required
 def mark_notification_read(notification_id: int):
     """
@@ -181,7 +186,7 @@ def mark_notification_read(notification_id: int):
 # GET /api/students/<student_id>/progress
 # ---------------------------------------------------------------------------
 PROGRESS_ROLES = ("ceo", "admin", "coach_overseer", "site_coordinator",
-                  "head_coach", "assistant_coach", "principal", "school_staff")
+                  "head_coach", "assistant_coach", "principal", "school_staff", "parent")
 
 @shared_bp.route("/api/students/<int:student_id>/progress", methods=["GET"])
 @login_required
@@ -206,8 +211,26 @@ def student_progress(student_id: int):
             return jsonify({"error": "Student not found."}), 404
 
         role = user.get("role")
-        if role in ("head_coach", "assistant_coach", "principal", "school_staff"):
+        if role in ("head_coach", "assistant_coach"):
             if user.get("school_id") != student["school_id"]:
+                return jsonify({"error": "Access denied."}), 403
+        elif role in ("principal", "school_staff"):
+            # current_user() uses an unordered LEFT JOIN that may return NULL
+            # for school_id when a principal has no cached assignment in the
+            # session row.  Re-resolve authoritatively from staff_assignments.
+            principal_school = db.execute(
+                """SELECT sa.school_id
+                   FROM staff_assignments sa
+                   JOIN staff_profiles sp ON sp.staff_id = sa.staff_id
+                   WHERE sp.user_id = ?
+                     AND sa.active_status = 1
+                     AND sa.deleted_at IS NULL
+                     AND sp.deleted_at IS NULL
+                   ORDER BY sa.created_at DESC
+                   LIMIT 1""",
+                (user["user_id"],),
+            ).fetchone()
+            if not principal_school or principal_school["school_id"] != student["school_id"]:
                 return jsonify({"error": "Access denied."}), 403
         elif role in ("coach_overseer", "site_coordinator"):
             # Look up org via staff profile — these roles may not have a school_id in the session
@@ -224,6 +247,22 @@ def student_progress(student_id: int):
                 (student["school_id"],),
             ).fetchone()
             if not overseer_org or not student_org or overseer_org["organization_id"] != student_org["organization_id"]:
+                return jsonify({"error": "Access denied."}), 403
+        elif role == "parent":
+            parent = db.execute(
+                "SELECT parent_id FROM parents WHERE user_id = ? LIMIT 1",
+                (user["user_id"],),
+            ).fetchone()
+            if not parent:
+                return jsonify({"error": "Access denied."}), 403
+            linked = db.execute(
+                """SELECT student_id FROM students
+                   WHERE student_id = ?
+                     AND (parent_primary_id = ? OR parent_secondary_id = ?)
+                     AND deleted_at IS NULL""",
+                (student_id, parent["parent_id"], parent["parent_id"]),
+            ).fetchone()
+            if not linked:
                 return jsonify({"error": "Access denied."}), 403
 
         overall = db.execute(
@@ -259,7 +298,7 @@ def student_progress(student_id: int):
         recent_assessments = db.execute(
             """SELECT a.assessment_id, a.assessment_date, a.assessment_method,
                       a.overall_assessment_notes,
-                      COUNT(asco.assessment_score_id) AS score_count
+                      COUNT(asco.score_id) AS score_count
                FROM assessments a
                LEFT JOIN assessment_scores asco ON asco.assessment_id = a.assessment_id
                WHERE a.student_id = ? AND a.deleted_at IS NULL
@@ -268,6 +307,20 @@ def student_progress(student_id: int):
                LIMIT 10""",
             (student_id,),
         ).fetchall()
+
+        # Fetch per-score detail for each recent assessment
+        assessment_scores_map = {}
+        for a in recent_assessments:
+            score_rows = db.execute(
+                """SELECT sk.skill_name, asco.normalized_score, asco.raw_level,
+                          asco.growth_flag, asco.confidence_rating
+                   FROM assessment_scores asco
+                   JOIN skills sk ON sk.skill_id = asco.skill_id
+                   WHERE asco.assessment_id = ?
+                   ORDER BY sk.skill_name""",
+                (a["assessment_id"],),
+            ).fetchall()
+            assessment_scores_map[a["assessment_id"]] = [dict(r) for r in score_rows]
 
         audit(db, user["user_id"], "READ", "students", student_id,
               new_values={"scope": "student_progress"})
@@ -278,7 +331,10 @@ def student_progress(student_id: int):
             "overall": dict(overall) if overall else None,
             "domains": [dict(r) for r in domain_rows],
             "skills": [dict(r) for r in skill_rows],
-            "recent_assessments": [dict(r) for r in recent_assessments],
+            "recent_assessments": [
+                {**dict(r), "scores": assessment_scores_map.get(r["assessment_id"], [])}
+                for r in recent_assessments
+            ],
         })
     finally:
         db.close()

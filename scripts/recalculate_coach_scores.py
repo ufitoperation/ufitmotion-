@@ -23,6 +23,28 @@ def run():
     app = create_app()
     with app.app_context():
         db = get_db()
+
+        # Idempotency guard — skip if already ran within the last 22 hours.
+        lock_row = db.execute(
+            "SELECT value FROM app_settings WHERE key = 'coach_score_recalc_last_run' LIMIT 1"
+        ).fetchone()
+        if lock_row and lock_row["value"]:
+            from datetime import datetime, timezone, timedelta
+            try:
+                last_run = datetime.fromisoformat(lock_row["value"])
+                if datetime.now(timezone.utc) - last_run < timedelta(hours=22):
+                    print(f"Skipping — already ran at {lock_row['value']} (< 22h ago)")
+                    return
+            except Exception:
+                pass
+
+        db.execute(
+            "INSERT INTO app_settings (key, value) VALUES ('coach_score_recalc_last_run', ?)"
+            " ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (now_utc(),),
+        )
+        db.commit()
+
         period_start, period_end = rolling_period()
 
         rows = db.execute(
@@ -62,6 +84,8 @@ def run():
                     pass
                 errors += 1
         print(f"Recalculated: {updated} updated, {errors} errors ({period_start} to {period_end})")
+        if errors:
+            sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -232,4 +232,88 @@ List sessions within the coach's scope, with pagination.
 
 ---
 
-*Last updated: 2026-04-19 after Phase 2A commit 40d0f7f*
+---
+
+## Principal Survey Routes
+
+### `POST /api/principal/survey`
+Roles: `principal`, `school_staff`
+
+Submit a principal satisfaction survey. school_id resolved server-side from staff_assignments.
+
+**Request body:**
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `respondent_name` | string | Yes | Max 200 chars |
+| `respondent_position` | string | Yes | Max 200 chars |
+| `school_name` | string | Yes | Max 200 chars |
+| `email` | string | No | Max 200 chars |
+| `satisfaction_rating` | integer | Yes | 1–5 |
+| `yard_safety_rating` | integer | Yes | 1–5 |
+| `coach_performance_rating` | integer | Yes | 1–5 |
+| `communication_rating` | integer | Yes | 1–5 |
+| `wellbeing_effectiveness_rating` | integer | No | 1–5 |
+| `improvements_suggestions` | string | No | Max 5000 chars |
+| `contributions_description` | string | No | Max 5000 chars |
+| `additional_services` | string | No | Max 5000 chars |
+
+**Response:** `201 {"ok": true}`
+
+---
+
+## Admin Survey Routes
+
+### `GET /api/admin/surveys`
+Roles: `admin`, `ceo`, `coach_overseer`
+
+Returns all principal satisfaction survey responses, newest first (max 500).
+
+**Response:** `{"ok": true, "surveys": [...]}`
+
+Each survey object includes all fields from `principal_satisfaction_surveys` plus `resolved_school_name` from the schools table.
+
+---
+
+## Coach Evaluation Routes
+
+### `GET /api/coach/subordinates`
+Roles: `head_coach`, `site_coordinator`, `coach_overseer`
+
+Returns assistant coaches assigned to the same school as the authenticated head coach.
+
+**Response:** `{"ok": true, "coaches": [{"staff_id", "user_id", "first_name", "last_name", "role", "position_title"}], "school_id"}`
+
+---
+
+### `POST /api/coach/evaluations`
+Roles: `head_coach`, `site_coordinator`, `coach_overseer`
+
+Submit an evaluation for an assistant coach at the same school. All 27 rating fields are required (1–5). Evaluated coach must be at the same school as the evaluator (validated server-side).
+
+**Body:** `{"evaluated_staff_id": int, "email": str (optional), "same_day_calloff": bool, "shows_up_consistently": 1-5, "reports_on_time": 1-5, ...24 more rating fields..., "coach_strengths": str, "coach_weaknesses": str, "improvement_plan": str}`
+
+**Response:** `201 {"ok": true}`
+
+---
+
+### `GET /api/coach/evaluations`
+Roles: `head_coach`, `site_coordinator`, `coach_overseer`
+
+Returns evaluations submitted by the authenticated head coach (limit 50, newest first).
+
+**Response:** `{"ok": true, "evaluations": [...]}`
+
+---
+
+## Admin Evaluation Routes
+
+### `GET /api/admin/evaluations`
+Roles: `admin`, `ceo`, `coach_overseer`
+
+Returns coach evaluations scoped to the user's organization, newest first (max 500). Includes evaluator name, evaluated coach name, and school name.
+
+**Response:** `{"ok": true, "evaluations": [...]}`
+
+---
+
+*Last updated: 2026-04-30 — added coach evaluation routes (step13), principal survey routes (step12)*

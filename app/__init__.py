@@ -25,6 +25,18 @@ def create_app(config=None):
     app.config["UFIT_CONFIG"] = cfg
     app.config["SECRET_KEY"] = cfg.SECRET_KEY
 
+    import os
+    sentry_dsn = os.environ.get("SENTRY_DSN")
+    if sentry_dsn:
+        import sentry_sdk
+        from sentry_sdk.integrations.flask import FlaskIntegration
+        sentry_sdk.init(
+            dsn=sentry_dsn,
+            integrations=[FlaskIntegration()],
+            traces_sample_rate=0.1,
+            send_default_pii=False,
+        )
+
     limiter.init_app(app)
 
     if not app.debug:
@@ -35,8 +47,9 @@ def create_app(config=None):
 
     # FERPA / OWASP session hardening
     app.config["SESSION_COOKIE_HTTPONLY"] = True
-    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+    app.config["SESSION_COOKIE_SAMESITE"] = "Strict"
     app.config["SESSION_COOKIE_SECURE"] = cfg.APP_ENV == "production"
+    app.config["SESSION_COOKIE_NAME"] = "__ufit_sess"   # avoid default "session" fingerprint
     app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=8)
     app.config["SESSION_REFRESH_EACH_REQUEST"] = True
 
@@ -50,6 +63,18 @@ def create_app(config=None):
 
     for bp in [auth_bp, admin_bp, coach_bp, shared_bp, pages_bp, principal_bp, parent_bp]:
         app.register_blueprint(bp)
+
+    @app.before_request
+    def csrf_check():
+        if request.method in ("GET", "HEAD", "OPTIONS"):
+            return
+        if not request.path.startswith("/api/"):
+            return
+        # Auth endpoints accept plain form/JSON from password managers — exempt them.
+        if request.path in ("/api/auth/login", "/api/auth/forgot-password", "/api/auth/reset-password"):
+            return
+        if request.headers.get("X-Requested-With") != "XMLHttpRequest":
+            return jsonify({"error": "Forbidden."}), 403
 
     @app.teardown_appcontext
     def close_db(exc):
@@ -70,7 +95,9 @@ def create_app(config=None):
             "script-src 'self' 'unsafe-inline'; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; "
-            "img-src 'self' data:;"
+            "img-src 'self' data:; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none';"
         )
         response.headers["Content-Security-Policy"] = csp
         proto = request.environ.get("HTTP_X_FORWARDED_PROTO", "")
@@ -94,10 +121,11 @@ def create_app(config=None):
         try:
             db = get_db()
             db.execute("SELECT 1")
+            db.execute("SELECT 1 FROM users LIMIT 1")
             return jsonify({"ok": True, "env": cfg.APP_ENV})
         except Exception as e:
             app.logger.error("Health check DB failure: %s", e)
-            return jsonify({"ok": False, "env": cfg.APP_ENV, "error": "DB unavailable"}), 503
+            return jsonify({"ok": False, "error": "DB unavailable"}), 503
 
     with app.app_context():
         from app.seeds import init_db

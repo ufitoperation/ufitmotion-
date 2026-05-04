@@ -83,7 +83,12 @@ def recalculate_student_summaries(db, student_id: int, school_id: int) -> None:
         agg = db.execute(
             """
             SELECT
-                MIN(a_sc.normalized_score)                            AS baseline,
+                (SELECT a2.normalized_score
+                 FROM assessment_scores a2
+                 JOIN assessments aa ON aa.assessment_id = a2.assessment_id
+                 WHERE a2.student_id = ? AND a2.skill_id = ?
+                   AND aa.deleted_at IS NULL
+                 ORDER BY a2.created_at ASC LIMIT 1)                  AS baseline,
                 MAX(a_sc.normalized_score)                            AS highest,
                 (SELECT a2.normalized_score
                  FROM assessment_scores a2
@@ -101,7 +106,7 @@ def recalculate_student_summaries(db, student_id: int, school_id: int) -> None:
             JOIN assessments a ON a.assessment_id = a_sc.assessment_id
             WHERE a_sc.student_id = ? AND a_sc.skill_id = ? AND a.deleted_at IS NULL
             """,
-            (student_id, skill_id, student_id, skill_id, student_id, skill_id),
+            (student_id, skill_id, student_id, skill_id, student_id, skill_id, student_id, skill_id),
         ).fetchone()
 
         if not agg or agg["current"] is None:
@@ -177,7 +182,11 @@ def recalculate_student_summaries(db, student_id: int, school_id: int) -> None:
             continue
 
         current_scores = [r["current_score"] for r in domain_scores if r["current_score"] is not None]
-        baseline_scores = [r["baseline_score"] for r in domain_scores if r["baseline_score"] is not None]
+        # Use only paired rows (both baseline and current set) for growth so the
+        # numerator and denominator are consistent — prevents inflated growth when
+        # some skills lack a baseline.
+        paired = [r for r in domain_scores if r["current_score"] is not None and r["baseline_score"] is not None]
+        baseline_scores = [r["baseline_score"] for r in paired]
 
         current_domain = sum(current_scores) / len(current_scores) if current_scores else None
         baseline_domain = sum(baseline_scores) / len(baseline_scores) if baseline_scores else None
@@ -230,6 +239,7 @@ def recalculate_student_summaries(db, student_id: int, school_id: int) -> None:
             FROM student_domain_summary sds
             JOIN skill_domains sd ON sd.domain_id = sds.domain_id
             WHERE sds.student_id = ? AND sd.domain_name = ?
+            LIMIT 1
             """,
             (student_id, domain_name),
         ).fetchone()
@@ -242,6 +252,7 @@ def recalculate_student_summaries(db, student_id: int, school_id: int) -> None:
             FROM student_skill_summary sss
             JOIN skills sk ON sk.skill_id = sss.skill_id
             WHERE sss.student_id = ? AND sk.skill_name = ?
+            LIMIT 1
             """,
             (student_id, skill_name),
         ).fetchone()

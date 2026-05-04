@@ -2,8 +2,13 @@ services:
   - type: web
     name: ufit-motion
     runtime: python
+    pythonVersion: "3.12.0"
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn "app:create_app()" --workers 1 --threads 4
+    # wsgi:app is more reliable than the factory-string form on Render.
+    # --timeout 120: prevents Render health-check kills during cold boot (DB connect + init_db).
+    # --workers 1 --threads 4: single process keeps per-request DB connections safe; threads handle concurrency.
+    # --bind 0.0.0.0:$PORT: Render injects $PORT at runtime.
+    startCommand: gunicorn wsgi:app --workers 1 --threads 4 --timeout 120 --bind "0.0.0.0:$PORT"
     healthCheckPath: /api/health
     envVars:
       - key: APP_ENV
@@ -18,10 +23,28 @@ services:
         sync: false
       - key: UFIT_APP_BASE_URL
         sync: false
+      # UFIT_APP_ROOT tells seeds.py where to find /migrations on the Render filesystem.
+      # Set to /opt/render/project/src (Render's default deploy root) in the dashboard.
+      - key: UFIT_APP_ROOT
+        sync: false
+      # Rate limiting: REDIS_URL enables distributed state across workers.
+      # With --workers 1 (current config), in-memory fallback is safe.
+      # Add a Render Redis instance and set this if you ever scale to 2+ workers.
+      - key: REDIS_URL
+        sync: false
+      # Email delivery via Resend — required for password resets and user invites.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      # Error tracking — optional but strongly recommended
+      - key: SENTRY_DSN
+        sync: false
 
   - type: cron
     name: ufit-coach-score-recalc
     runtime: python
+    pythonVersion: "3.12.0"
     buildCommand: pip install -r requirements.txt
     schedule: "0 2 * * *"
     startCommand: python scripts/recalculate_coach_scores.py
@@ -32,3 +55,8 @@ services:
         sync: false
       - key: APP_ENV
         value: production
+      - key: UFIT_APP_ROOT
+        sync: false
+      # Sentry error tracking — optional, enables cron error reporting
+      - key: SENTRY_DSN
+        sync: false

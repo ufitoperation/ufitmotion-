@@ -61,35 +61,38 @@ def parent_student():
         student_ids = [r["student_id"] for r in child_rows]
         placeholders = ",".join("?" * len(student_ids))
 
+        # Cap at 10 sessions per child × max children per parent (guard: 10 children × 10 sessions = 100 rows max).
+        # Python-side trimming below enforces the per-student cap after the DB fetch.
         attendance_rows = db.execute(
-            f"""SELECT
-                    ssa.student_id,
-                    s.session_date,
-                    s.session_type,
-                    ssa.attendance_status
-                FROM student_session_attendance ssa
-                JOIN sessions s ON s.session_id = ssa.session_id
-                WHERE ssa.student_id IN ({placeholders})
-                  AND s.deleted_at IS NULL
-                ORDER BY ssa.student_id ASC, s.session_date DESC""",
+            "SELECT ssa.student_id, s.session_date, s.session_type, ssa.attendance_status"
+            " FROM student_session_attendance ssa"
+            " JOIN sessions s ON s.session_id = ssa.session_id"
+            " WHERE ssa.student_id IN (" + ",".join(["?"] * len(student_ids)) + ")"
+            " AND s.deleted_at IS NULL"
+            " ORDER BY ssa.student_id ASC, s.session_date DESC LIMIT 200",
             student_ids,
         ).fetchall()
 
         score_rows = db.execute(
-            f"""SELECT
-                    asco.student_id,
-                    sd.domain_name,
-                    ROUND(AVG(asco.raw_level), 1) AS avg_raw_level
-                FROM assessment_scores asco
-                JOIN assessments a ON a.assessment_id = asco.assessment_id
-                JOIN skills sk ON sk.skill_id = asco.skill_id
-                JOIN skill_domains sd ON sd.domain_id = sk.domain_id
-                WHERE asco.student_id IN ({placeholders})
-                  AND a.deleted_at IS NULL
-                GROUP BY asco.student_id, sd.domain_id, sd.domain_name
-                ORDER BY asco.student_id ASC, sd.domain_name ASC""",
+            "SELECT asco.student_id, sd.domain_name, ROUND(AVG(asco.raw_level), 1) AS avg_raw_level"
+            " FROM assessment_scores asco"
+            " JOIN assessments a ON a.assessment_id = asco.assessment_id"
+            " JOIN skills sk ON sk.skill_id = asco.skill_id"
+            " JOIN skill_domains sd ON sd.domain_id = sk.domain_id"
+            " WHERE asco.student_id IN (" + ",".join(["?"] * len(student_ids)) + ")"
+            " AND a.deleted_at IS NULL"
+            " GROUP BY asco.student_id, sd.domain_name"
+            " ORDER BY asco.student_id ASC, sd.domain_name ASC",
             student_ids,
         ).fetchall()
+
+        overall_rows = db.execute(
+            "SELECT student_id, overall_ufit_score, readiness_band"
+            " FROM student_overall_summary"
+            " WHERE student_id IN (" + ",".join(["?"] * len(student_ids)) + ")",
+            student_ids,
+        ).fetchall()
+        overall_by_student = {r["student_id"]: r for r in overall_rows}
 
         # keep first 10 sessions per student
         attendance_by_student = {}
@@ -114,18 +117,21 @@ def parent_student():
                 "avg_raw_level": row["avg_raw_level"],
             })
 
-        children = [
-            {
-                "student_id": r["student_id"],
+        children = []
+        for r in child_rows:
+            sid = r["student_id"]
+            overall = overall_by_student.get(sid)
+            children.append({
+                "student_id": sid,
                 "first_name": r["student_first_name"],
                 "last_name": r["student_last_name"],
                 "grade_level": r["grade_level"],
                 "school_name": r["school_name"],
-                "recent_sessions": attendance_by_student.get(r["student_id"], []),
-                "assessment_summary": summary_by_student.get(r["student_id"], []),
-            }
-            for r in child_rows
-        ]
+                "overall_ufit_score": overall["overall_ufit_score"] if overall else None,
+                "readiness_band": overall["readiness_band"] if overall else None,
+                "recent_sessions": attendance_by_student.get(sid, []),
+                "assessment_summary": summary_by_student.get(sid, []),
+            })
 
         audit(db, user["user_id"], "READ", "students", None,
               new_values={"scope": "parent_children", "count": len(children)})

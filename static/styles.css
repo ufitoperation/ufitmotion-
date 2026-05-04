@@ -1561,7 +1561,7 @@ table.data-table .td-actions {
   cursor: pointer;
   color: var(--color-text-secondary);
   font-family: var(--font);
-  font-size: 0.625rem;
+  font-size: 0.75rem;
   font-weight: 500;
   transition: color var(--transition);
   -webkit-tap-highlight-color: transparent;

@@ -309,7 +309,8 @@ CREATE TABLE IF NOT EXISTS behavior_observations (
     sportsmanship_score INTEGER CHECK(sportsmanship_score BETWEEN 1 AND 5),
     confidence_score INTEGER CHECK(confidence_score BETWEEN 1 AND 5),
     notes TEXT,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TEXT DEFAULT NULL
 );
 
 CREATE TABLE IF NOT EXISTS eod_reports (
@@ -390,7 +391,27 @@ CREATE TABLE IF NOT EXISTS coach_observations (
     organization_score INTEGER CHECK(organization_score BETWEEN 1 AND 5),
     notes TEXT,
     action_plan TEXT,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TEXT DEFAULT NULL
+);
+
+CREATE TABLE IF NOT EXISTS coach_performance_snapshots (
+    snapshot_id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    staff_id             INTEGER NOT NULL REFERENCES staff_profiles(staff_id) ON DELETE CASCADE,
+    school_id            INTEGER NOT NULL REFERENCES schools(school_id) ON DELETE CASCADE,
+    window_id            INTEGER REFERENCES assessment_windows(window_id) ON DELETE SET NULL,
+    period_start         TEXT NOT NULL,
+    period_end           TEXT NOT NULL,
+    compliance_score     REAL,
+    outcomes_score       REAL,
+    observations_score   REAL,
+    overall_score        REAL,
+    performance_band     TEXT,
+    eod_ontime_rate      REAL,
+    session_log_rate     REAL,
+    incident_file_rate   REAL,
+    assessment_part_rate REAL,
+    created_at           TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS school_reports (
@@ -490,6 +511,72 @@ CREATE TABLE IF NOT EXISTS app_settings (
     value TEXT NOT NULL,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_by INTEGER REFERENCES users(user_id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS principal_satisfaction_surveys (
+    survey_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    school_id INTEGER REFERENCES schools(school_id) ON DELETE SET NULL,
+    submitted_by_user_id INTEGER REFERENCES users(user_id) ON DELETE SET NULL,
+    respondent_name TEXT NOT NULL,
+    respondent_position TEXT NOT NULL,
+    school_name TEXT NOT NULL,
+    email TEXT,
+    satisfaction_rating INTEGER NOT NULL CHECK (satisfaction_rating BETWEEN 1 AND 5),
+    yard_safety_rating INTEGER NOT NULL CHECK (yard_safety_rating BETWEEN 1 AND 5),
+    coach_performance_rating INTEGER NOT NULL CHECK (coach_performance_rating BETWEEN 1 AND 5),
+    communication_rating INTEGER NOT NULL CHECK (communication_rating BETWEEN 1 AND 5),
+    wellbeing_effectiveness_rating INTEGER CHECK (wellbeing_effectiveness_rating BETWEEN 1 AND 5),
+    improvements_suggestions TEXT,
+    contributions_description TEXT,
+    additional_services TEXT,
+    submitted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS coach_evaluations (
+    evaluation_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    school_id INTEGER REFERENCES schools(school_id) ON DELETE SET NULL,
+    evaluator_staff_id INTEGER REFERENCES staff_profiles(staff_id) ON DELETE SET NULL,
+    evaluated_staff_id INTEGER REFERENCES staff_profiles(staff_id) ON DELETE SET NULL,
+    email TEXT,
+    same_day_calloff INTEGER NOT NULL DEFAULT 0,
+    -- Attendance
+    shows_up_consistently INTEGER NOT NULL CHECK (shows_up_consistently BETWEEN 1 AND 5),
+    reports_on_time INTEGER NOT NULL CHECK (reports_on_time BETWEEN 1 AND 5),
+    processes_consistently INTEGER NOT NULL CHECK (processes_consistently BETWEEN 1 AND 5),
+    -- Continuous Skill Application
+    follows_sop INTEGER NOT NULL CHECK (follows_sop BETWEEN 1 AND 5),
+    problem_solves INTEGER NOT NULL CHECK (problem_solves BETWEEN 1 AND 5),
+    demonstrates_improvement INTEGER NOT NULL CHECK (demonstrates_improvement BETWEEN 1 AND 5),
+    -- Communication
+    apprises_lead_coach INTEGER NOT NULL CHECK (apprises_lead_coach BETWEEN 1 AND 5),
+    provides_feedback_to_lead INTEGER NOT NULL CHECK (provides_feedback_to_lead BETWEEN 1 AND 5),
+    follows_up_timely INTEGER NOT NULL CHECK (follows_up_timely BETWEEN 1 AND 5),
+    communicates_regularly INTEGER NOT NULL CHECK (communicates_regularly BETWEEN 1 AND 5),
+    -- School & Team Interactions
+    practices_restorative_justice INTEGER NOT NULL CHECK (practices_restorative_justice BETWEEN 1 AND 5),
+    creates_inclusive_environment INTEGER NOT NULL CHECK (creates_inclusive_environment BETWEEN 1 AND 5),
+    teaches_transferable_skills INTEGER NOT NULL CHECK (teaches_transferable_skills BETWEEN 1 AND 5),
+    maintains_positive_atmosphere INTEGER NOT NULL CHECK (maintains_positive_atmosphere BETWEEN 1 AND 5),
+    uses_reward_systems INTEGER NOT NULL CHECK (uses_reward_systems BETWEEN 1 AND 5),
+    implements_activities_fidelity INTEGER NOT NULL CHECK (implements_activities_fidelity BETWEEN 1 AND 5),
+    -- Student Interaction
+    learns_student_names INTEGER NOT NULL CHECK (learns_student_names BETWEEN 1 AND 5),
+    provides_student_feedback INTEGER NOT NULL CHECK (provides_student_feedback BETWEEN 1 AND 5),
+    uses_positive_language INTEGER NOT NULL CHECK (uses_positive_language BETWEEN 1 AND 5),
+    -- Safety & Compliance
+    provides_supervision INTEGER NOT NULL CHECK (provides_supervision BETWEEN 1 AND 5),
+    uses_designated_spaces INTEGER NOT NULL CHECK (uses_designated_spaces BETWEEN 1 AND 5),
+    ensures_safe_areas INTEGER NOT NULL CHECK (ensures_safe_areas BETWEEN 1 AND 5),
+    determines_best_areas INTEGER NOT NULL CHECK (determines_best_areas BETWEEN 1 AND 5),
+    follows_safety_procedures INTEGER NOT NULL CHECK (follows_safety_procedures BETWEEN 1 AND 5),
+    maintains_equipment INTEGER NOT NULL CHECK (maintains_equipment BETWEEN 1 AND 5),
+    maintains_orderly_flow INTEGER NOT NULL CHECK (maintains_orderly_flow BETWEEN 1 AND 5),
+    implements_rules_safeguards INTEGER NOT NULL CHECK (implements_rules_safeguards BETWEEN 1 AND 5),
+    -- Supervisor Summary
+    coach_strengths TEXT,
+    coach_weaknesses TEXT,
+    improvement_plan TEXT,
+    submitted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Seed skill domains

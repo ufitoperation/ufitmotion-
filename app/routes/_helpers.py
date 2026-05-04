@@ -60,6 +60,7 @@ def serialize_user(row: dict) -> dict:
         "position_title",
         "school_id",
         "school_name",
+        "program_id",
         "created_at",
     )
     return {k: row[k] for k in SAFE_FIELDS if k in row}
@@ -91,7 +92,7 @@ def serialize_session(row: dict) -> dict:
         return {}
     ALL_FIELDS = (
         "session_id", "school_id", "school_name", "program_id", "program_name",
-        "session_date", "start_time", "end_time", "session_type", "location",
+        "session_date", "start_time", "end_time", "duration_minutes", "session_type", "location",
         "planned_activity", "actual_activity", "student_group_name",
         "session_status", "total_students_present", "notes", "created_at",
         "coach_name",
@@ -109,7 +110,7 @@ def serialize_eod_report(row: dict) -> dict:
         "eod_id", "school_id", "school_name", "staff_id", "coach_name",
         "program_id", "report_date", "activities_completed", "student_engagement_summary",
         "attendance_summary", "behavior_summary", "success_story", "challenge_summary",
-        "notes", "session_id", "created_at",
+        "notes", "session_id", "session_type", "created_at",
         "school_concerns", "school_concerns_notes", "schedule_changes",
         "late_arrivals", "verbal_warnings", "hr_app_issues",
         "safety_hazards", "equipment_requests",
@@ -201,7 +202,12 @@ def serialize_student(row: dict) -> dict:
         "active_status",
         "created_at",
     )
-    return {k: row[k] for k in SAFE_FIELDS if k in row}
+    result = {k: row[k] for k in SAFE_FIELDS if k in row}
+    # Include assessment summary fields when provided by JOIN (not always present)
+    for field in ("latest_assessment_date", "avg_raw_level"):
+        if field in row.keys():
+            result[field] = row[field]
+    return result
 
 
 # ---------------------------------------------------------------------------

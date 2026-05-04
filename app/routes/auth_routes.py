@@ -11,7 +11,9 @@ Password reset tokens are stored in the users table and expire after 1 hour.
 """
 
 import hashlib
+import random
 import secrets
+import time
 from datetime import datetime, timezone, timedelta
 
 from flask import Blueprint, jsonify, request, session
@@ -206,6 +208,9 @@ def setup_admin():
         if not all([first_name, last_name, email, password]):
             return jsonify({"error": "first_name, last_name, email, and password are required."}), 400
 
+        if "@" not in email or "." not in email.split("@")[-1]:
+            return jsonify({"error": "Invalid email format."}), 400
+
         if role != "admin":
             return jsonify({"error": "role must be 'admin'. CEO accounts are created by an existing admin."}), 400
 
@@ -281,10 +286,13 @@ def forgot_password():
     if not email:
         return jsonify({"error": "Email is required."}), 400
 
+    if "@" not in email or "." not in email.split("@")[-1]:
+        return jsonify({"error": "Invalid email format."}), 400
+
     db = get_db()
     try:
         row = db.execute(
-            "SELECT user_id FROM users WHERE email = ? AND deleted_at IS NULL AND active_status = TRUE",
+            "SELECT user_id, first_name FROM users WHERE email = ? AND deleted_at IS NULL AND active_status = TRUE",
             (email,),
         ).fetchone()
 
@@ -302,12 +310,11 @@ def forgot_password():
                   new_values={"action": "reset_token_issued", "ip": request.remote_addr})
             db.commit()
 
-            # TODO: send reset email via configured email provider.
-            # from app.email import send_password_reset
-            # send_password_reset(email, token)
-            # Reset URL: {APP_BASE_URL}/reset-password?token={token}
+            from app.email import send_password_reset_email
+            send_password_reset_email(email, row["first_name"] or "there", token)
 
-        # Always return ok to avoid email enumeration.
+        # Jitter prevents timing-based email enumeration — always delay ~100ms regardless of whether user exists.
+        time.sleep(random.uniform(0.08, 0.15))
         return jsonify({"ok": True})
     finally:
         db.close()

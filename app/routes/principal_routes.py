@@ -13,7 +13,8 @@ from flask import Blueprint, jsonify, request
 
 from app.auth import current_user, roles_required
 from app.database import get_db
-from app.routes._helpers import audit
+from app.extensions import limiter
+from app.routes._helpers import audit, now_utc, parse_json
 
 _PACIFIC = ZoneInfo("America/Los_Angeles")
 
@@ -278,5 +279,198 @@ def principal_students():
     except Exception:
         logging.exception("principal_students route error")
         return jsonify({"error": "Could not load students — please try again or contact support."}), 500
+    finally:
+        db.close()
+
+
+@principal_bp.route("/api/principal/incidents", methods=["GET"])
+@roles_required("principal", "school_staff")
+def principal_incidents():
+    """List incidents for the principal's school, newest first."""
+    user = current_user()
+    db = get_db()
+    try:
+        school_id = _resolve_school_id(db, user["user_id"])
+        if not school_id:
+            return jsonify({"error": "No school assignment found for your account."}), 403
+
+        status_filter = (request.args.get("status") or "").strip()
+        if status_filter and status_filter not in ("open", "under_review", "resolved", "closed"):
+            return jsonify({"error": "Invalid status filter."}), 400
+
+        sql = """
+            SELECT ir.incident_id, ir.report_date, ir.incident_type, ir.severity_level,
+                   ir.description, ir.immediate_action_taken, ir.status,
+                   ir.admin_response, ir.resolution_notes, ir.acknowledged_at,
+                   ir.school_notified, ir.family_notified, ir.escalated_to_supervisor,
+                   (u.first_name || ' ' || u.last_name) AS reporter_name,
+                   CASE WHEN su.student_id IS NOT NULL
+                        THEN (su.student_first_name || ' ' || su.student_last_name)
+                        ELSE NULL END AS student_name
+            FROM incident_reports ir
+            LEFT JOIN staff_profiles sp ON sp.staff_id = ir.reported_by_staff_id
+            LEFT JOIN users u ON u.user_id = sp.user_id
+            LEFT JOIN students su ON su.student_id = ir.student_id
+            WHERE ir.school_id = ? AND ir.deleted_at IS NULL
+        """
+        params = [school_id]
+        if status_filter:
+            sql += " AND ir.status = ?"
+            params.append(status_filter)
+        sql += " ORDER BY ir.report_date DESC, ir.incident_id DESC LIMIT 100"
+
+        rows = db.execute(sql, params).fetchall()
+        incidents = [dict(r) for r in rows]
+
+        audit(db, user["user_id"], "READ", "incident_reports", None,
+              new_values={"scope": "principal_incidents", "school_id": school_id})
+        db.commit()
+        return jsonify({"ok": True, "incidents": incidents})
+    except Exception:
+        logging.exception("principal_incidents error")
+        return jsonify({"error": "Could not load incidents."}), 500
+    finally:
+        db.close()
+
+
+@principal_bp.route("/api/principal/incidents/<int:incident_id>", methods=["PATCH"])
+@roles_required("principal", "school_staff")
+def principal_resolve_incident(incident_id: int):
+    """Allow principal to update status and add response notes on their school's incidents."""
+    user = current_user()
+    data = parse_json()
+    new_status = (data.get("status") or "").strip()
+    if new_status not in ("open", "under_review", "resolved", "closed"):
+        return jsonify({"error": "status must be open, under_review, resolved, or closed."}), 400
+
+    db = get_db()
+    try:
+        school_id = _resolve_school_id(db, user["user_id"])
+        if not school_id:
+            return jsonify({"error": "No school assignment found for your account."}), 403
+
+        row = db.execute(
+            "SELECT incident_id, school_id FROM incident_reports WHERE incident_id = ? AND deleted_at IS NULL",
+            (incident_id,),
+        ).fetchone()
+        if not row:
+            return jsonify({"error": "Incident not found."}), 404
+        if row["school_id"] != school_id:
+            return jsonify({"error": "Access denied."}), 403
+
+        fields = {"status": new_status}
+        if data.get("admin_response") is not None:
+            fields["admin_response"] = str(data["admin_response"])[:2000]
+        if data.get("resolution_notes") is not None:
+            fields["resolution_notes"] = str(data["resolution_notes"])[:2000]
+        if new_status == "resolved":
+            fields["acknowledged_at"] = now_utc()
+            fields["acknowledged_by"] = user["user_id"]
+
+        set_clause = ", ".join(f"{k} = ?" for k in fields)
+        db.execute(
+            f"UPDATE incident_reports SET {set_clause} WHERE incident_id = ?",
+            list(fields.values()) + [incident_id],
+        )
+        audit(db, user["user_id"], "UPDATE", "incident_reports", incident_id,
+              new_values={"status": new_status, "updated_by_role": user["role"]})
+        db.commit()
+        return jsonify({"ok": True})
+    except Exception:
+        logging.exception("principal_resolve_incident error")
+        return jsonify({"error": "Could not update incident."}), 500
+    finally:
+        db.close()
+
+
+@principal_bp.route("/api/principal/survey", methods=["POST"])
+@roles_required("principal", "school_staff")
+@limiter.limit("10 per minute")
+def principal_submit_survey():
+    """Submit a principal satisfaction survey. One submission per call; no dedup enforced."""
+    user = current_user()
+    data = parse_json()
+
+    def _int_field(key, required=True):
+        v = data.get(key)
+        if v is None:
+            if required:
+                return None, f"{key} is required."
+            return None, None
+        try:
+            v = int(v)
+            if not (1 <= v <= 5):
+                raise ValueError
+            return v, None
+        except (ValueError, TypeError):
+            return None, f"{key} must be an integer between 1 and 5."
+
+    respondent_name = str(data.get("respondent_name") or "").strip()[:200]
+    respondent_position = str(data.get("respondent_position") or "").strip()[:200]
+    school_name_input = str(data.get("school_name") or "").strip()[:200]
+    email = str(data.get("email") or "").strip()[:200] or None
+
+    if not respondent_name:
+        return jsonify({"error": "respondent_name is required."}), 422
+    if not respondent_position:
+        return jsonify({"error": "respondent_position is required."}), 422
+    if not school_name_input:
+        return jsonify({"error": "school_name is required."}), 422
+
+    satisfaction_rating, err = _int_field("satisfaction_rating")
+    if err: return jsonify({"error": err}), 422
+    yard_safety_rating, err = _int_field("yard_safety_rating")
+    if err: return jsonify({"error": err}), 422
+    coach_performance_rating, err = _int_field("coach_performance_rating")
+    if err: return jsonify({"error": err}), 422
+    communication_rating, err = _int_field("communication_rating")
+    if err: return jsonify({"error": err}), 422
+    wellbeing_effectiveness_rating, err = _int_field("wellbeing_effectiveness_rating", required=False)
+    if err: return jsonify({"error": err}), 422
+
+    improvements_suggestions = str(data.get("improvements_suggestions") or "").strip()[:5000] or None
+    contributions_description = str(data.get("contributions_description") or "").strip()[:5000] or None
+    additional_services = str(data.get("additional_services") or "").strip()[:5000] or None
+
+    db = get_db()
+    try:
+        school_id = _resolve_school_id(db, user["user_id"])
+        if not school_id:
+            return jsonify({"error": "No school assignment found for your account."}), 403
+
+        db.execute(
+            """INSERT INTO principal_satisfaction_surveys
+               (school_id, submitted_by_user_id, respondent_name, respondent_position,
+                school_name, email,
+                satisfaction_rating, yard_safety_rating, coach_performance_rating,
+                communication_rating, wellbeing_effectiveness_rating,
+                improvements_suggestions, contributions_description, additional_services,
+                submitted_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                school_id,
+                user["user_id"],
+                respondent_name,
+                respondent_position,
+                school_name_input,
+                email,
+                satisfaction_rating,
+                yard_safety_rating,
+                coach_performance_rating,
+                communication_rating,
+                wellbeing_effectiveness_rating,
+                improvements_suggestions,
+                contributions_description,
+                additional_services,
+                now_utc(),
+            ),
+        )
+        audit(db, user["user_id"], "CREATE", "principal_satisfaction_surveys", None,
+              new_values={"school_id": school_id, "respondent_name": respondent_name})
+        db.commit()
+        return jsonify({"ok": True}), 201
+    except Exception:
+        logging.exception("principal_submit_survey error")
+        return jsonify({"error": "Could not submit survey — please try again."}), 500
     finally:
         db.close()

@@ -58,6 +58,9 @@ POSTGRES_ID_TABLES: set[str] = {
     "role_permissions",
     "audit_log",
     "app_settings",
+    "principal_satisfaction_surveys",
+    "coach_evaluations",
+    "coach_performance_snapshots",
 }
 
 # ---------------------------------------------------------------------------
@@ -170,6 +173,9 @@ def _maybe_add_returning(sql: str) -> str:
         "role_permissions": "permission_id",
         "audit_log": "log_id",
         "app_settings": "key",
+        "principal_satisfaction_surveys": "survey_id",
+        "coach_evaluations": "evaluation_id",
+        "coach_performance_snapshots": "snapshot_id",
     }
     pk = pk_map.get(table, "id")
     return f"{stripped} RETURNING {pk}"

@@ -19,8 +19,9 @@ import sys
 from zoneinfo import ZoneInfo
 from flask import Blueprint, current_app, jsonify, request
 
-from app.auth import coach_required, current_user
+from app.auth import admin_required, coach_required, current_user, login_required, roles_required
 from app.database import get_db
+from app.extensions import limiter
 from app.routes._helpers import (
     audit, now_utc, parse_json,
     serialize_assessment, serialize_assessment_score,
@@ -221,13 +222,13 @@ def list_sessions():
 
         main_sql = f"""
             SELECT se.session_id, se.school_id, sc.school_name, se.program_id, p.program_name,
-                   se.session_date, se.start_time, se.end_time, se.session_type, se.location,
+                   se.session_date, se.start_time, se.end_time, se.duration_minutes, se.session_type, se.location,
                    se.planned_activity, se.actual_activity, se.student_group_name,
                    se.session_status, se.total_students_present, se.notes, se.created_at,
                    (u.first_name || ' ' || u.last_name) AS coach_name
             FROM sessions se
             JOIN schools sc ON sc.school_id = se.school_id
-            JOIN programs p ON p.program_id = se.program_id
+            JOIN programs p ON p.program_id = se.program_id AND p.deleted_at IS NULL
             LEFT JOIN session_staff ss ON ss.session_id = se.session_id AND ss.role = 'lead'
             LEFT JOIN staff_profiles sp2 ON sp2.staff_id = ss.staff_id
             LEFT JOIN users u ON u.user_id = sp2.user_id
@@ -273,6 +274,7 @@ def list_sessions():
 
 
 @coach_bp.route("/api/sessions", methods=["POST"])
+@limiter.limit("20 per minute")
 @coach_required
 def create_session():
     data = parse_json()
@@ -329,6 +331,12 @@ def create_session():
         return jsonify({
             "error": "Invalid session_type. Must be one of: regular, makeup, enrichment, assessment."
         }), 400
+
+    # Rule 8b: duration_minutes — optional positive integer ≤ 480
+    duration_minutes = data.get("duration_minutes")
+    if duration_minutes is not None:
+        if not isinstance(duration_minutes, int) or isinstance(duration_minutes, bool) or not (1 <= duration_minutes <= 480):
+            return jsonify({"error": "duration_minutes must be an integer between 1 and 480."}), 400
 
     # Rule 9: string length limits
     location = data.get("location")
@@ -432,7 +440,7 @@ def create_session():
         # Rule 16: program must be active at this school
         prog_row = db.execute(
             "SELECT program_id FROM programs"
-            " WHERE program_id = ? AND school_id = ? AND program_status = 'active'",
+            " WHERE program_id = ? AND school_id = ? AND program_status = 'active' AND deleted_at IS NULL",
             (program_id, school_id),
         ).fetchone()
         if not prog_row:
@@ -479,11 +487,13 @@ def create_session():
             """INSERT INTO sessions
                (school_id, program_id, session_date, start_time, end_time,
                 session_type, location, planned_activity, actual_activity,
-                student_group_name, session_status, total_students_present, notes, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                student_group_name, session_status, total_students_present,
+                duration_minutes, notes, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (school_id, program_id, session_date_raw, start_time, end_time,
              session_type, location, planned_activity, actual_activity,
-             student_group_name, session_status, n_students, notes, created_at_val),
+             student_group_name, session_status, n_students,
+             duration_minutes, notes, created_at_val),
         )
         new_session_id = cur.lastrowid
 
@@ -558,7 +568,7 @@ def create_session():
 # ===========================================================================
 
 @coach_bp.route("/api/eod-reports", methods=["GET"])
-@coach_required
+@roles_required("ceo", "admin", "coach_overseer", "site_coordinator", "head_coach", "assistant_coach")
 def list_eod_reports():
     # GET /api/eod-reports — response contains no student PII; FERPA audit not required.
     user = current_user()
@@ -637,13 +647,13 @@ def list_eod_reports():
             scope_sql = (
                 "AND er.school_id IN"
                 " (SELECT school_id FROM staff_assignments"
-                "  WHERE staff_id = ? AND active_status = 1)"
+                "  WHERE staff_id = ? AND active_status = 1 AND deleted_at IS NULL)"
             )
             scope_params = [staff_id]
             if school_id_filter is not None:
                 assigned = db.execute(
                     "SELECT 1 FROM staff_assignments"
-                    " WHERE staff_id = ? AND school_id = ? AND active_status = 1",
+                    " WHERE staff_id = ? AND school_id = ? AND active_status = 1 AND deleted_at IS NULL",
                     (staff_id, school_id_filter),
                 ).fetchone()
                 if not assigned:
@@ -673,6 +683,11 @@ def list_eod_reports():
                 ).fetchone()
                 if not filter_sc or filter_sc["organization_id"] != org_id:
                     return jsonify({"error": "You do not have access to this school."}), 403
+
+        elif role in ("ceo", "admin"):
+            # Full access — no org restriction for HQ admin/CEO
+            scope_sql = ""
+            scope_params = []
 
         else:
             scope_sql = "AND 1=0"
@@ -716,7 +731,7 @@ def list_eod_reports():
                    er.behavior_summary, er.success_story, er.challenge_summary,
                    er.notes, er.injury_incident_flag, er.followup_needed,
                    er.principal_communication_needed, er.submitted_on_time,
-                   er.session_id, er.created_at,
+                   er.session_id, ses.session_type, er.created_at,
                    er.incident_report_filed, er.school_concerns,
                    er.school_concerns_resolved, er.school_concerns_notes,
                    er.schedule_changes, er.coaches_clocked_in, er.late_arrivals,
@@ -729,6 +744,7 @@ def list_eod_reports():
             JOIN schools sc ON sc.school_id = er.school_id
             LEFT JOIN staff_profiles sp ON sp.staff_id = er.staff_id
             LEFT JOIN users u ON u.user_id = sp.user_id AND u.deleted_at IS NULL
+            LEFT JOIN sessions ses ON ses.session_id = er.session_id AND ses.deleted_at IS NULL
             WHERE er.deleted_at IS NULL
               AND er.report_date >= ? AND er.report_date <= ?
               {scope_sql}
@@ -761,7 +777,59 @@ def list_eod_reports():
         db.close()
 
 
+@coach_bp.route("/api/eod-reports/<int:eod_id>", methods=["GET"])
+@roles_required("ceo", "admin", "coach_overseer", "site_coordinator", "head_coach", "assistant_coach")
+def get_eod_report(eod_id: int):
+    """Fetch a single EOD report by ID. Admin/CEO see any; coaches see only their own."""
+    user = current_user()
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+
+    role = user["role"]
+    staff_id = user.get("staff_id")
+
+    db = get_db()
+    try:
+        row = db.execute(
+            """SELECT er.eod_id, er.school_id, sc.school_name, er.staff_id,
+                      (u.first_name || ' ' || u.last_name) AS coach_name,
+                      er.program_id, er.report_date, er.activities_completed,
+                      er.student_engagement_summary, er.attendance_summary,
+                      er.behavior_summary, er.success_story, er.challenge_summary,
+                      er.notes, er.injury_incident_flag, er.followup_needed,
+                      er.principal_communication_needed, er.submitted_on_time,
+                      er.session_id, ses.session_type, er.created_at,
+                      er.incident_report_filed, er.school_concerns,
+                      er.school_concerns_resolved, er.school_concerns_notes,
+                      er.schedule_changes, er.coaches_clocked_in, er.late_arrivals,
+                      er.coaches_in_uniform, er.verbal_warnings, er.hr_app_issues,
+                      er.coaches_setup_ready, er.equipment_accounted,
+                      er.transitions_orderly, er.safety_hazards, er.yard_supervised,
+                      er.curriculum_followed, er.equipment_requests,
+                      er.principal_communication_notes, er.ufit_standards_notes
+               FROM eod_reports er
+               JOIN schools sc ON sc.school_id = er.school_id
+               LEFT JOIN staff_profiles sp ON sp.staff_id = er.staff_id
+               LEFT JOIN users u ON u.user_id = sp.user_id AND u.deleted_at IS NULL
+               LEFT JOIN sessions ses ON ses.session_id = er.session_id AND ses.deleted_at IS NULL
+               WHERE er.eod_id = ? AND er.deleted_at IS NULL""",
+            (eod_id,),
+        ).fetchone()
+
+        if row is None:
+            return jsonify({"error": "EOD report not found."}), 404
+
+        # Coaches can only view their own reports
+        if role in ("head_coach", "assistant_coach") and row["staff_id"] != staff_id:
+            return jsonify({"error": "Access denied."}), 403
+
+        return jsonify({"ok": True, "report": serialize_eod_report(row)})
+    finally:
+        db.close()
+
+
 @coach_bp.route("/api/eod-reports", methods=["POST"])
+@limiter.limit("10 per minute")
 @coach_required
 def create_eod_report():
     # Rule 1: site_coordinator blocked before body parsing (role known from session)
@@ -933,7 +1001,7 @@ def create_eod_report():
         if program_id is not None:
             prog_row = db.execute(
                 "SELECT program_id FROM programs"
-                " WHERE program_id = ? AND school_id = ? AND program_status = 'active'",
+                " WHERE program_id = ? AND school_id = ? AND program_status = 'active' AND deleted_at IS NULL",
                 (program_id, school_id),
             ).fetchone()
             if not prog_row:
@@ -1131,7 +1199,7 @@ def list_incidents():
         scope_sql = (
             "AND ir.school_id IN"
             " (SELECT school_id FROM staff_assignments"
-            "  WHERE staff_id = ? AND active_status = 1)"
+            "  WHERE staff_id = ? AND active_status = 1 AND deleted_at IS NULL)"
         )
         scope_params = [staff_id]
     else:  # coach_overseer
@@ -1191,6 +1259,7 @@ def list_incidents():
 
 
 @coach_bp.route("/api/incidents", methods=["POST"])
+@limiter.limit("10 per minute")
 @coach_required
 def create_incident():
     user = current_user()
@@ -1458,13 +1527,13 @@ def list_assessments():
             scope_sql = (
                 "AND a.school_id IN"
                 " (SELECT school_id FROM staff_assignments"
-                "  WHERE staff_id = ? AND active_status = 1)"
+                "  WHERE staff_id = ? AND active_status = 1 AND deleted_at IS NULL)"
             )
             scope_params = [staff_id]
             if school_id_filter is not None:
                 assigned = db.execute(
                     "SELECT 1 FROM staff_assignments"
-                    " WHERE staff_id = ? AND school_id = ? AND active_status = 1",
+                    " WHERE staff_id = ? AND school_id = ? AND active_status = 1 AND deleted_at IS NULL",
                     (staff_id, school_id_filter),
                 ).fetchone()
                 if not assigned:
@@ -1520,7 +1589,7 @@ def list_assessments():
             if role == "site_coordinator":
                 allowed = db.execute(
                     "SELECT 1 FROM staff_assignments"
-                    " WHERE staff_id = ? AND school_id = ? AND active_status = 1",
+                    " WHERE staff_id = ? AND school_id = ? AND active_status = 1 AND deleted_at IS NULL",
                     (staff_id, stu_school),
                 ).fetchone()
                 if not allowed:
@@ -1615,6 +1684,7 @@ def list_assessments():
 
 
 @coach_bp.route("/api/assessments", methods=["POST"])
+@limiter.limit("30 per minute")
 @coach_required
 def submit_assessment():
     # Rule 1: site_coordinator blocked before body parsing
@@ -1924,28 +1994,50 @@ def my_students():
                 base_sql = """
                     SELECT s.student_id, s.student_first_name, s.student_last_name,
                            s.grade_level, s.school_id, s.active_status, s.created_at,
-                           sc.school_name
+                           sc.school_name,
+                           la.latest_assessment_date,
+                           ROUND(AVG(CAST(asco.raw_level AS REAL)), 1) AS avg_raw_level
                     FROM students s
                     JOIN schools sc ON sc.school_id = s.school_id
+                    LEFT JOIN (
+                        SELECT student_id, MAX(assessment_date) AS latest_assessment_date
+                        FROM assessments WHERE deleted_at IS NULL GROUP BY student_id
+                    ) la ON la.student_id = s.student_id
+                    LEFT JOIN assessments a
+                        ON a.student_id = s.student_id
+                        AND a.assessment_date = la.latest_assessment_date
+                        AND a.deleted_at IS NULL
+                    LEFT JOIN assessment_scores asco ON asco.assessment_id = a.assessment_id
                     WHERE s.active_status = TRUE AND s.deleted_at IS NULL
                       AND sc.organization_id = ?
                 """
                 params: list = [org_id]
             else:
-                return jsonify({"ok": True, "students": [], "count": 0})
+                return jsonify({"ok": True, "students": [], "total": 0})
         else:
             school_id = user.get("school_id")
             if not school_id:
                 return jsonify({
-                    "ok": True, "students": [], "count": 0,
+                    "ok": True, "students": [], "total": 0,
                     "message": "No school assignment found for this coach.",
                 })
             base_sql = """
                 SELECT s.student_id, s.student_first_name, s.student_last_name,
                        s.grade_level, s.school_id, s.active_status, s.created_at,
-                       sc.school_name
+                       sc.school_name,
+                       la.latest_assessment_date,
+                       ROUND(AVG(CAST(asco.raw_level AS REAL)), 1) AS avg_raw_level
                 FROM students s
                 JOIN schools sc ON sc.school_id = s.school_id
+                LEFT JOIN (
+                    SELECT student_id, MAX(assessment_date) AS latest_assessment_date
+                    FROM assessments WHERE deleted_at IS NULL GROUP BY student_id
+                ) la ON la.student_id = s.student_id
+                LEFT JOIN assessments a
+                    ON a.student_id = s.student_id
+                    AND a.assessment_date = la.latest_assessment_date
+                    AND a.deleted_at IS NULL
+                LEFT JOIN assessment_scores asco ON asco.assessment_id = a.assessment_id
                 WHERE s.active_status = TRUE AND s.deleted_at IS NULL
                   AND s.school_id = ?
             """
@@ -1960,10 +2052,15 @@ def my_students():
                 " AND (LOWER(s.student_first_name) LIKE ?"
                 " OR LOWER(s.student_last_name) LIKE ?)"
             )
-            pattern = f"%{search}%"
+            pattern = f"%{search.lower()}%"
             params.extend([pattern, pattern])
 
-        base_sql += " ORDER BY s.student_last_name ASC, s.student_first_name ASC LIMIT 500"
+        base_sql += (
+            " GROUP BY s.student_id, s.student_first_name, s.student_last_name,"
+            " s.grade_level, s.school_id, s.active_status, s.created_at, sc.school_name,"
+            " la.latest_assessment_date"
+            " ORDER BY s.student_last_name ASC, s.student_first_name ASC LIMIT 500"
+        )
 
         rows = db.execute(base_sql, params).fetchall()
         students = [serialize_student(r) for r in rows]
@@ -1978,7 +2075,7 @@ def my_students():
         except Exception as exc:  # noqa: BLE001
             current_app.logger.error("AUDIT FAILURE in my_students: %s", exc)
 
-        return jsonify({"ok": True, "students": students, "count": len(students)})
+        return jsonify({"ok": True, "students": students, "total": len(students)})
     finally:
         db.close()
 
@@ -1989,6 +2086,7 @@ def my_students():
 # ===========================================================================
 
 @coach_bp.route("/api/behavior-observations", methods=["POST"])
+@limiter.limit("20 per minute")
 @coach_required
 def submit_behavior_observation():
     user = current_user()
@@ -2070,7 +2168,7 @@ def submit_behavior_observation():
 
 
 @coach_bp.route("/api/behavior-observations", methods=["GET"])
-@coach_required
+@roles_required("ceo", "admin", "coach_overseer", "site_coordinator", "head_coach", "assistant_coach")
 def list_behavior_observations():
     user = current_user()
     if user is None:
@@ -2118,7 +2216,7 @@ def list_behavior_observations():
             elif role == "site_coordinator":
                 sql += (" AND bo.school_id IN"
                         " (SELECT school_id FROM staff_assignments"
-                        "  WHERE staff_id = ? AND active_status = 1)")
+                        "  WHERE staff_id = ? AND active_status = 1 AND deleted_at IS NULL)")
                 params.append(staff_id)
             elif role == "coach_overseer":
                 overseer_school = user.get("school_id")
@@ -2132,6 +2230,13 @@ def list_behavior_observations():
                     return jsonify({"error": "You have no active school assignment."}), 403
                 sql += " AND bo.school_id IN (SELECT school_id FROM schools WHERE organization_id = ? AND deleted_at IS NULL)"
                 params.append(org_row["organization_id"])
+            else:
+                # admin / ceo — scope to their org; CEO with no org sees all (intentional)
+                from app.routes.admin_routes import _get_org_scope
+                org_id = _get_org_scope(db, user)
+                if org_id:
+                    sql += " AND bo.school_id IN (SELECT school_id FROM schools WHERE organization_id = ? AND deleted_at IS NULL)"
+                    params.append(org_id)
 
         if session_id:
             sql += " AND bo.session_id = ?"
@@ -2161,7 +2266,7 @@ def list_assessment_windows():
 
     school_id = request.args.get("school_id", type=int) or user.get("school_id")
     if not school_id:
-        return jsonify({"error": "school_id is required."}), 400
+        return jsonify({"ok": True, "windows": []})
 
     if user["role"] in ("head_coach", "assistant_coach") and school_id != user.get("school_id"):
         return jsonify({"error": "You can only view windows for your assigned school."}), 403
@@ -2198,6 +2303,7 @@ def list_assessment_windows():
 # ===========================================================================
 
 @coach_bp.route("/api/coach-observations", methods=["POST"])
+@limiter.limit("10 per minute")
 @coach_required
 def submit_coach_observation():
     user = current_user()
@@ -2285,15 +2391,11 @@ def submit_coach_observation():
 
 
 @coach_bp.route("/api/coach-observations", methods=["GET"])
-@coach_required
+@roles_required("ceo", "admin", "coach_overseer", "head_coach")
 def list_coach_observations():
     user = current_user()
     if user is None:
         return jsonify({"error": "Authentication required."}), 401
-
-    _OBS_READ_ROLES = ("head_coach", "coach_overseer", "ceo", "admin")
-    if user["role"] not in _OBS_READ_ROLES:
-        return jsonify({"error": "Access denied."}), 403
 
     staff_id_filter = request.args.get("staff_id", type=int)
     school_id_filter = request.args.get("school_id", type=int) or user.get("school_id")
@@ -2352,6 +2454,15 @@ def my_score():
             scorecard = calculate_coach_score(db, staff_id, school_id, period_start, period_end)
         except ValueError as e:
             return jsonify({"error": str(e)}), 400
+        # Keep rolling_score / rolling_band current so admin coaches list reflects live data.
+        try:
+            db.execute(
+                "UPDATE staff_profiles SET rolling_score = ?, rolling_band = ? WHERE staff_id = ?",
+                (scorecard["overall_score"], scorecard["performance_band"], staff_id),
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
         snapshots = db.execute(
             "SELECT * FROM coach_performance_snapshots"
             " WHERE staff_id=? AND school_id=? ORDER BY period_end DESC LIMIT 12",
@@ -2362,5 +2473,193 @@ def my_score():
             "scorecard": scorecard,
             "snapshots": [dict(r) for r in snapshots],
         })
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# Coach Evaluations (head_coach only)
+# ---------------------------------------------------------------------------
+
+def _get_head_coach_staff_id(db, user_id: int):
+    row = db.execute(
+        """SELECT sp.staff_id, sa.school_id
+           FROM staff_profiles sp
+           JOIN staff_assignments sa ON sa.staff_id = sp.staff_id
+           WHERE sp.user_id = ?
+             AND sa.active_status = 1
+             AND sa.deleted_at IS NULL
+             AND sp.deleted_at IS NULL
+           ORDER BY sa.created_at DESC LIMIT 1""",
+        (user_id,),
+    ).fetchone()
+    return (row["staff_id"], row["school_id"]) if row else (None, None)
+
+
+@coach_bp.route("/api/coach/subordinates", methods=["GET"])
+@roles_required("head_coach", "site_coordinator", "coach_overseer")
+def get_coach_subordinates():
+    """Return assistant coaches at the same school as the authenticated head coach."""
+    user = current_user()
+    db = get_db()
+    try:
+        _, school_id = _get_head_coach_staff_id(db, user["user_id"])
+        if not school_id:
+            return jsonify({"error": "No school assignment found."}), 403
+
+        rows = db.execute(
+            """SELECT u.user_id, u.first_name, u.last_name, u.role,
+                      sp.staff_id, sp.position_title
+               FROM users u
+               JOIN staff_profiles sp ON sp.user_id = u.user_id AND sp.deleted_at IS NULL
+               JOIN staff_assignments sa ON sa.staff_id = sp.staff_id
+               WHERE sa.school_id = ?
+                 AND sa.active_status = 1
+                 AND sa.deleted_at IS NULL
+                 AND u.active_status = 1
+                 AND u.deleted_at IS NULL
+                 AND u.role = 'assistant_coach'
+               ORDER BY u.last_name ASC, u.first_name ASC""",
+            (school_id,),
+        ).fetchall()
+
+        coaches = [
+            {
+                "staff_id": r["staff_id"],
+                "user_id": r["user_id"],
+                "first_name": r["first_name"],
+                "last_name": r["last_name"],
+                "role": r["role"],
+                "position_title": r["position_title"],
+            }
+            for r in rows
+        ]
+        return jsonify({"ok": True, "coaches": coaches, "school_id": school_id})
+    except Exception:
+        import logging
+        logging.exception("get_coach_subordinates error")
+        return jsonify({"error": "Could not load subordinates."}), 500
+    finally:
+        db.close()
+
+
+@coach_bp.route("/api/coach/evaluations", methods=["POST"])
+@limiter.limit("5 per minute")
+@roles_required("head_coach", "site_coordinator", "coach_overseer")
+def submit_coach_evaluation():
+    """Head coach submits an evaluation for an assistant coach at their school."""
+    user = current_user()
+    data = parse_json()
+    db = get_db()
+    try:
+        evaluator_staff_id, school_id = _get_head_coach_staff_id(db, user["user_id"])
+        if not school_id:
+            return jsonify({"error": "No school assignment found."}), 403
+
+        # Validate evaluated coach is at same school
+        evaluated_staff_id = data.get("evaluated_staff_id")
+        try:
+            evaluated_staff_id = int(evaluated_staff_id)
+        except (TypeError, ValueError):
+            return jsonify({"error": "evaluated_staff_id is required."}), 422
+
+        row = db.execute(
+            """SELECT sa.staff_id FROM staff_assignments sa
+               JOIN staff_profiles sp ON sp.staff_id = sa.staff_id
+               JOIN users u ON u.user_id = sp.user_id
+               WHERE sa.staff_id = ? AND sa.school_id = ?
+                 AND sa.active_status = 1 AND sa.deleted_at IS NULL
+                 AND sp.deleted_at IS NULL AND u.role = 'assistant_coach'""",
+            (evaluated_staff_id, school_id),
+        ).fetchone()
+        if not row:
+            return jsonify({"error": "Coach not found at your school."}), 404
+
+        def _r(key):
+            v = data.get(key)
+            try:
+                v = int(v)
+                if not (1 <= v <= 5):
+                    raise ValueError
+                return v
+            except (TypeError, ValueError):
+                return None
+
+        rating_fields = [
+            "shows_up_consistently", "reports_on_time", "processes_consistently",
+            "follows_sop", "problem_solves", "demonstrates_improvement",
+            "apprises_lead_coach", "provides_feedback_to_lead", "follows_up_timely", "communicates_regularly",
+            "practices_restorative_justice", "creates_inclusive_environment", "teaches_transferable_skills",
+            "maintains_positive_atmosphere", "uses_reward_systems", "implements_activities_fidelity",
+            "learns_student_names", "provides_student_feedback", "uses_positive_language",
+            "provides_supervision", "uses_designated_spaces", "ensures_safe_areas", "determines_best_areas",
+            "follows_safety_procedures", "maintains_equipment", "maintains_orderly_flow",
+            "implements_rules_safeguards",
+        ]
+        ratings = {f: _r(f) for f in rating_fields}
+        missing = [f for f, v in ratings.items() if v is None]
+        if missing:
+            return jsonify({"error": f"Missing or invalid rating fields: {', '.join(missing)}"}), 422
+
+        same_day_calloff = 1 if data.get("same_day_calloff") else 0
+        email = str(data.get("email") or "").strip()[:200] or None
+        if email and not re.fullmatch(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", email):
+            return jsonify({"error": "Invalid email format."}), 422
+        coach_strengths = str(data.get("coach_strengths") or "").strip()[:5000] or None
+        coach_weaknesses = str(data.get("coach_weaknesses") or "").strip()[:5000] or None
+        improvement_plan = str(data.get("improvement_plan") or "").strip()[:5000] or None
+
+        cols = ["school_id", "evaluator_staff_id", "evaluated_staff_id", "email",
+                "same_day_calloff"] + rating_fields + ["coach_strengths", "coach_weaknesses",
+                "improvement_plan", "submitted_at"]
+        vals = ([school_id, evaluator_staff_id, evaluated_staff_id, email, same_day_calloff]
+                + [ratings[f] for f in rating_fields]
+                + [coach_strengths, coach_weaknesses, improvement_plan, now_utc()])
+
+        placeholders = ", ".join("?" * len(cols))
+        col_names = ", ".join(cols)
+        db.execute(
+            f"INSERT INTO coach_evaluations ({col_names}) VALUES ({placeholders})",
+            vals,
+        )
+        audit(db, user["user_id"], "CREATE", "coach_evaluations", None,
+              new_values={"evaluated_staff_id": evaluated_staff_id, "school_id": school_id})
+        db.commit()
+        return jsonify({"ok": True}), 201
+    except Exception:
+        import logging
+        logging.exception("submit_coach_evaluation error")
+        return jsonify({"error": "Could not submit evaluation."}), 500
+    finally:
+        db.close()
+
+
+@coach_bp.route("/api/coach/evaluations", methods=["GET"])
+@roles_required("head_coach", "site_coordinator", "coach_overseer")
+def list_coach_evaluations():
+    """Return evaluations submitted by the authenticated head coach."""
+    user = current_user()
+    db = get_db()
+    try:
+        evaluator_staff_id, school_id = _get_head_coach_staff_id(db, user["user_id"])
+        if not school_id:
+            return jsonify({"error": "No school assignment found."}), 403
+
+        rows = db.execute(
+            """SELECT ce.*,
+                      COALESCE(u.first_name || ' ' || u.last_name, '[Deleted]') AS evaluated_name,
+                      u.role AS evaluated_role
+               FROM coach_evaluations ce
+               LEFT JOIN staff_profiles sp ON sp.staff_id = ce.evaluated_staff_id
+               LEFT JOIN users u ON u.user_id = sp.user_id
+               WHERE ce.evaluator_staff_id = ?
+               ORDER BY ce.submitted_at DESC LIMIT 50""",
+            (evaluator_staff_id,),
+        ).fetchall()
+        return jsonify({"ok": True, "evaluations": [dict(r) for r in rows]})
+    except Exception:
+        import logging
+        logging.exception("list_coach_evaluations error")
+        return jsonify({"error": "Could not load evaluations."}), 500
     finally:
         db.close()

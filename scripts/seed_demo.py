@@ -269,6 +269,43 @@ def run():
         insert_eod(washington_id, washington_prog_id, coach3_sid, 3, on_time=1)
 
         # ------------------------------------------------------------------ #
+        # 7a. Assessment Windows                                              #
+        # ------------------------------------------------------------------ #
+        lincoln_window_id = db.execute(
+            """INSERT INTO assessment_windows
+               (school_id, window_name, start_date, end_date, status,
+                assessment_focus, created_at)
+               VALUES (?, 'Fall 2025 Assessment', ?, ?, 'closed',
+                       'Baseline locomotor and ball-handling skills', ?)""",
+            (lincoln_id, d(60), d(45), now),
+        ).lastrowid
+        washington_window_id = db.execute(
+            """INSERT INTO assessment_windows
+               (school_id, window_name, start_date, end_date, status,
+                assessment_focus, created_at)
+               VALUES (?, 'Fall 2025 Assessment', ?, ?, 'closed',
+                       'Baseline movement and game-application skills', ?)""",
+            (washington_id, d(60), d(45), now),
+        ).lastrowid
+        # Open current window for both schools
+        lincoln_current_window_id = db.execute(
+            """INSERT INTO assessment_windows
+               (school_id, window_name, start_date, end_date, status,
+                assessment_focus, created_at)
+               VALUES (?, 'Spring 2026 Assessment', ?, ?, 'open',
+                       'Growth check — compare against Fall baseline', ?)""",
+            (lincoln_id, d(14), d(-14), now),
+        ).lastrowid
+        washington_current_window_id = db.execute(
+            """INSERT INTO assessment_windows
+               (school_id, window_name, start_date, end_date, status,
+                assessment_focus, created_at)
+               VALUES (?, 'Spring 2026 Assessment', ?, ?, 'open',
+                       'Growth check — compare against Fall baseline', ?)""",
+            (washington_id, d(14), d(-14), now),
+        ).lastrowid
+
+        # ------------------------------------------------------------------ #
         # 7. Assessments + Scores                                             #
         # ------------------------------------------------------------------ #
         skills = db.execute(
@@ -280,12 +317,12 @@ def run():
         if not ms_skills:
             ms_skills = skills[:4]
 
-        def insert_assessment(student_id, school_id, prog_id, staff_id, days_ago, skill_list, scores):
+        def insert_assessment(student_id, school_id, prog_id, staff_id, days_ago, skill_list, scores, window_id=None):
             a_id = db.execute(
                 """INSERT INTO assessments (student_id, school_id, program_id, assessed_by_staff_id,
-                                            assessment_date, assessment_method, created_at)
-                   VALUES (?, ?, ?, ?, ?, 'observational', ?)""",
-                (student_id, school_id, prog_id, staff_id, d(days_ago), now),
+                                            assessment_date, assessment_method, window_id, created_at)
+                   VALUES (?, ?, ?, ?, ?, 'observational', ?, ?)""",
+                (student_id, school_id, prog_id, staff_id, d(days_ago), window_id, now),
             ).lastrowid
             for skill, score in zip(skill_list, scores):
                 db.execute(
@@ -305,7 +342,7 @@ def run():
                 (lincoln_student_ids[2], [2, 3, 2, 3]),
             ]
             for stu_id, scores in assessed_lincoln:
-                insert_assessment(stu_id, lincoln_id, lincoln_prog_id, coach1_sid, 7, k5_skills, scores)
+                insert_assessment(stu_id, lincoln_id, lincoln_prog_id, coach1_sid, 7, k5_skills, scores, lincoln_window_id)
 
         # Assess 2 Washington students
         assessed_washington = []
@@ -315,7 +352,7 @@ def run():
                 (washington_student_ids[1], [4, 5, 4, 4]),
             ]
             for stu_id, scores in assessed_washington:
-                insert_assessment(stu_id, washington_id, washington_prog_id, coach3_sid, 5, ms_skills, scores)
+                insert_assessment(stu_id, washington_id, washington_prog_id, coach3_sid, 5, ms_skills, scores, washington_window_id)
 
         # ------------------------------------------------------------------ #
         # 8. Populate summary tables via scoring engine                       #

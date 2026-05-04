@@ -110,7 +110,7 @@ def _compliance_pillar(db, staff_id: int, school_id: int,
     window_row = db.execute(
         "SELECT COUNT(*) AS cnt FROM assessment_windows"
         " WHERE school_id=? AND status IN ('active','closed')"
-        " AND start_date <= ? AND end_date >= ?",
+        " AND start_date <= ? AND end_date >= ? AND deleted_at IS NULL",
         (school_id, pe, ps),
     ).fetchone()
     has_window = ((window_row["cnt"] or 0) if window_row else 0) > 0
@@ -193,7 +193,7 @@ def _outcomes_pillar(db, school_id: int,
         "SELECT AVG(CAST(teamwork_score + effort_score + self_control_score"
         " + listening_score + sportsmanship_score + confidence_score AS REAL) / 6.0) AS avg_sel"
         " FROM behavior_observations"
-        " WHERE school_id=? AND observation_date BETWEEN ? AND ?",
+        " WHERE school_id=? AND observation_date BETWEEN ? AND ? AND deleted_at IS NULL",
         (school_id, ps, pe),
     ).fetchone()
     avg_sel = sel_row["avg_sel"] if sel_row else None
@@ -221,7 +221,8 @@ def _observations_pillar(db, staff_id: int, school_id: int,
         " AVG(safety_score) AS sa, AVG(organization_score) AS o,"
         " COUNT(*) AS cnt"
         " FROM coach_observations"
-        " WHERE observed_staff_id=? AND school_id=? AND observation_date BETWEEN ? AND ?",
+        " WHERE observed_staff_id=? AND school_id=? AND observation_date BETWEEN ? AND ?"
+        " AND deleted_at IS NULL",
         (staff_id, school_id, ps, pe),
     ).fetchone()
 
