@@ -69,7 +69,7 @@ def run():
                                     active_status, start_date_with_ufit, created_at)
                VALUES (?, 'Lincoln Elementary', 'elementary', 'Los Angeles', 'CA', '90001',
                        'Dr. Patricia Moore', 'principal.lincoln@ufit.demo', 'K-5', 480,
-                       1, ?, ?)""",
+                       TRUE, ?, ?)""",
             (org_id, d(180), now),
         ).lastrowid
 
@@ -79,7 +79,7 @@ def run():
                                     active_status, start_date_with_ufit, created_at)
                VALUES (?, 'Jefferson Elementary', 'elementary', 'Inglewood', 'CA', '90301',
                        'Mr. David Chen', 'principal.jefferson@ufit.demo', 'K-5', 390,
-                       1, ?, ?)""",
+                       TRUE, ?, ?)""",
             (org_id, d(180), now),
         ).lastrowid
 
@@ -89,7 +89,7 @@ def run():
                                     active_status, start_date_with_ufit, created_at)
                VALUES (?, 'Roosevelt Middle School', 'middle', 'Compton', 'CA', '90220',
                        'Dr. Angela Washington', 'principal.roosevelt@ufit.demo', '6-8', 520,
-                       1, ?, ?)""",
+                       TRUE, ?, ?)""",
             (org_id, d(180), now),
         ).lastrowid
 
@@ -100,7 +100,7 @@ def run():
             return db.execute(
                 """INSERT INTO users (first_name, last_name, email, password_hash, role,
                                       active_status, email_verified, created_at)
-                   VALUES (?, ?, ?, ?, ?, 1, 1, ?)""",
+                   VALUES (?, ?, ?, ?, ?, TRUE, TRUE, ?)""",
                 (first, last, email, pw, role, now),
             ).lastrowid
 
@@ -115,7 +115,7 @@ def run():
             db.execute(
                 """INSERT INTO staff_assignments (staff_id, school_id, program_id, assignment_role,
                                                    start_date, active_status, created_at)
-                   VALUES (?, ?, ?, ?, ?, 1, ?)""",
+                   VALUES (?, ?, ?, ?, ?, TRUE, ?)""",
                 (staff_id, school_id, program_id, role, d(180), now),
             )
 
@@ -244,7 +244,7 @@ def run():
                 sid = db.execute(
                     """INSERT INTO students (school_id, student_first_name, student_last_name,
                                              grade_level, active_status, enrollment_start, created_at)
-                       VALUES (?, ?, ?, ?, 1, ?, ?)""",
+                       VALUES (?, ?, ?, ?, TRUE, ?, ?)""",
                     (school_id, first, last, grade, d(180), now),
                 ).lastrowid
                 db.execute(
@@ -368,7 +368,7 @@ def run():
 
         def insert_eod_reports(session_id_list, school_id, prog_id, staff_id, on_time_rate=0.90):
             for idx, (sess_id, days_ago) in enumerate(session_id_list):
-                on_time = 1 if random.random() < on_time_rate else 0
+                on_time = True if random.random() < on_time_rate else False
                 db.execute(
                     """INSERT INTO eod_reports (school_id, staff_id, program_id, session_id,
                                                  report_date, activities_completed,
@@ -383,7 +383,7 @@ def run():
                                                  principal_communication_needed, created_at)
                        VALUES (?, ?, ?, ?, ?, 'Completed full lesson plan per curriculum guide.',
                                ?, 'No major behavior issues. Two verbal redirects at most.',
-                               ?, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, ?)""",
+                               ?, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, FALSE, FALSE, FALSE, ?)""",
                     (
                         school_id, staff_id, prog_id, sess_id,
                         d(days_ago),
@@ -427,7 +427,7 @@ def run():
         # 13. Assessments                                                      #
         # ------------------------------------------------------------------ #
         all_skills = db.execute(
-            "SELECT skill_id, grade_band FROM skills WHERE active_status = 1"
+            "SELECT skill_id, grade_band FROM skills WHERE active_status = TRUE"
         ).fetchall()
 
         k2_skills = [s for s in all_skills if s["grade_band"] in ("K-2", "K-5")]
@@ -591,7 +591,7 @@ def run():
                VALUES (?, ?, ?, ?, 'injury', 'low',
                        'Student fell during relay race and scraped knee. No serious injury.',
                        'Applied first aid. Parents notified. Student returned to activity.',
-                       1, 1, 0, 'resolved', ?)""",
+                       TRUE, TRUE, FALSE, 'resolved', ?)""",
             (lincoln_id, d(18), lincoln_head_sid, lincoln_student_ids[0], now),
         )
         db.execute(
@@ -602,7 +602,7 @@ def run():
                VALUES (?, ?, ?, ?, 'behavior', 'low',
                        'Student refused to participate and became verbally disruptive during cooperative game.',
                        'Verbal redirect given. Student rejoined group after 5 minutes.',
-                       0, 0, 0, 'resolved', ?)""",
+                       FALSE, FALSE, FALSE, 'resolved', ?)""",
             (lincoln_id, d(9), lincoln_asst_sid, lincoln_student_ids[4], now),
         )
         db.execute(
@@ -613,7 +613,7 @@ def run():
                VALUES (?, ?, ?, ?, 'injury', 'medium',
                        'Student twisted ankle during tag game. Ice pack applied. Parent called.',
                        'Stopped activity. Applied ice. Parent picked up student early.',
-                       1, 1, 0, 'resolved', ?)""",
+                       TRUE, TRUE, FALSE, 'resolved', ?)""",
             (lincoln_id, d(3), lincoln_head_sid, lincoln_student_ids[10], now),
         )
 
@@ -626,7 +626,7 @@ def run():
                VALUES (?, ?, ?, ?, 'behavior', 'medium',
                        'Student threw ball at another student intentionally. No injury occurred.',
                        'Student removed from activity, verbal counseling. Referred to vice principal.',
-                       1, 1, 1, 'resolved', ?)""",
+                       TRUE, TRUE, TRUE, 'resolved', ?)""",
             (jefferson_id, d(22), jefferson_head_sid, jefferson_student_ids[2], now),
         )
         db.execute(
@@ -637,7 +637,7 @@ def run():
                VALUES (?, ?, ?, ?, 'injury', 'low',
                        'Student bumped heads with peer during catching drill. Brief dizziness reported.',
                        'Both students seated and monitored for 15 min. School nurse evaluated.',
-                       1, 1, 0, 'resolved', ?)""",
+                       TRUE, TRUE, FALSE, 'resolved', ?)""",
             (jefferson_id, d(7), jefferson_asst_sid, jefferson_student_ids[8], now),
         )
 
@@ -650,7 +650,7 @@ def run():
                VALUES (?, ?, ?, ?, 'injury', 'high',
                        'Student collision during soccer drill. Student complained of wrist pain. Sent to nurse.',
                        'Stopped drill. Escorted to nurse. Parents called. Wrist splinted. Incident documented.',
-                       1, 1, 1, 'open', ?)""",
+                       TRUE, TRUE, TRUE, 'open', ?)""",
             (roosevelt_id, d(5), roosevelt_head_sid, roosevelt_student_ids[0], now),
         )
         db.execute(
@@ -661,7 +661,7 @@ def run():
                VALUES (?, ?, ?, ?, 'behavior', 'low',
                        'Student used inappropriate language toward teammate. First offense.',
                        'Verbal warning issued. Student apologized and class continued.',
-                       0, 0, 0, 'resolved', ?)""",
+                       FALSE, FALSE, FALSE, 'resolved', ?)""",
             (roosevelt_id, d(12), roosevelt_asst_sid, roosevelt_student_ids[5], now),
         )
         db.execute(
@@ -672,7 +672,7 @@ def run():
                VALUES (?, ?, ?, ?, 'other', 'low',
                        'Student left session without permission and was found near school gate.',
                        'Student escorted back. Office notified. Parents informed.',
-                       1, 1, 0, 'resolved', ?)""",
+                       TRUE, TRUE, FALSE, 'resolved', ?)""",
             (roosevelt_id, d(30), roosevelt_head_sid, roosevelt_student_ids[14], now),
         )
 
