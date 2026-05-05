@@ -162,6 +162,7 @@ def principal_dashboard():
                WHERE sa.school_id = ? AND sa.active_status = 1
                  AND sa.deleted_at IS NULL
                  AND u.active_status = 1 AND u.deleted_at IS NULL
+                 AND u.role IN ('head_coach', 'assistant_coach', 'site_coordinator', 'coach_overseer')
                ORDER BY u.last_name ASC, u.first_name ASC""",
             (school_id,),
         ).fetchall()
