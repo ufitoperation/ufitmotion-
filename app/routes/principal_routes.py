@@ -168,6 +168,7 @@ def principal_dashboard():
         ).fetchall()
         coaches = [
             {
+                "staff_id": r["staff_id"],
                 "user_id": r["user_id"],
                 "first_name": r["first_name"],
                 "last_name": r["last_name"],
