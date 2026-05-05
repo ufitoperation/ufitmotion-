@@ -76,22 +76,29 @@ _SUPABASE_REGIONS = [
 
 def _supabase_pooler_dsns(base_url: str) -> list[str]:
     """
-    Given a standard Supabase DATABASE_URL (direct connection), return a list
-    of transaction-pooler DSNs to try, one per known AWS region.
+    Given a Supabase DATABASE_URL, return a list of DSNs to try in order.
 
-    Supabase pooler hostnames follow the pattern:
-        aws-0-<region>.pooler.supabase.com
+    If the URL is already a pooler URL (contains pooler.supabase.com), return
+    it directly with sslmode=require — no region-guessing needed.
 
-    The pooler uses port 6543 for transaction mode.
+    Otherwise, generate pooler DSNs for each known AWS region from the direct
+    connection URL.
     """
-    # Parse out user/password/dbname from the direct connection URL.
+    # Already a pooler URL — use it directly, just ensure SSL is set.
+    if "pooler.supabase.com" in base_url:
+        if "sslmode=" not in base_url:
+            sep = "&" if "?" in base_url else "?"
+            return [base_url + sep + "sslmode=require"]
+        return [base_url]
+
+    # Parse out user/password/dbname from a direct connection URL.
     # Expected format: postgresql://user:password@host:port/dbname[?options]
     pattern = re.compile(
         r"postgresql(?:\+\w+)?://([^:]+):([^@]+)@[^/]+/([^?]+)"
     )
     m = pattern.match(base_url)
     if not m:
-        # Cannot parse — return the original URL unchanged in a single-item list.
+        # Cannot parse — return the original URL unchanged.
         return [base_url]
 
     user, password, dbname = m.group(1), m.group(2), m.group(3)
