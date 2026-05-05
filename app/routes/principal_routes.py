@@ -50,12 +50,23 @@ def _resolve_school_id(db, user_id: int):
 
 
 
+def _reliability_badge(score):
+    """Convert composite score to badge label."""
+    if score is None:
+        return "unscored"
+    if score >= 80:
+        return "strong"
+    if score >= 60:
+        return "developing"
+    return "needs_support"
+
+
 @principal_bp.route("/api/principal/dashboard", methods=["GET"])
 @roles_required("principal", "school_staff")
 def principal_dashboard():
     """
     School-level dashboard stats for the authenticated principal.
-    Scoped to the principal's assigned school.
+    Scoped to the principal's assigned school — no school_id trusted from client.
     """
     user = current_user()
     db = get_db()
@@ -65,87 +76,134 @@ def principal_dashboard():
             return jsonify({"error": "No school assignment found for your account."}), 403
 
         week_start, week_end = _get_week_bounds()
+        today = _now_pacific().date()
+        thirty_ago = (today - datetime.timedelta(days=30)).isoformat()
+        today_iso = today.isoformat()
 
         school_row = db.execute(
             """SELECT school_id, school_name, school_type, city, state
-               FROM schools
-               WHERE school_id = ? AND deleted_at IS NULL""",
+               FROM schools WHERE school_id = ? AND deleted_at IS NULL""",
             (school_id,),
         ).fetchone()
 
         sessions_this_week = db.execute(
             """SELECT COUNT(*) AS cnt FROM sessions
-               WHERE school_id = ?
-                 AND session_date BETWEEN ? AND ?
+               WHERE school_id = ? AND session_date BETWEEN ? AND ?
                  AND deleted_at IS NULL""",
             (school_id, week_start, week_end),
         ).fetchone()["cnt"]
 
         students_total = db.execute(
             """SELECT COUNT(*) AS cnt FROM students
-               WHERE school_id = ?
-                 AND active_status = 1
-                 AND deleted_at IS NULL""",
+               WHERE school_id = ? AND active_status = 1 AND deleted_at IS NULL""",
             (school_id,),
         ).fetchone()["cnt"]
 
         students_assessed = db.execute(
             """SELECT COUNT(DISTINCT a.student_id) AS cnt
-               FROM assessments a
-               WHERE a.school_id = ?
-                 AND a.deleted_at IS NULL""",
+               FROM assessments a WHERE a.school_id = ? AND a.deleted_at IS NULL""",
             (school_id,),
         ).fetchone()["cnt"]
-
-        expected_row = db.execute(
-            """SELECT COUNT(*) AS cnt
-               FROM (
-                 SELECT DISTINCT ss.staff_id, s.session_date
-                 FROM sessions s
-                 JOIN session_staff ss ON ss.session_id = s.session_id
-                 WHERE s.school_id = ?
-                   AND s.session_date BETWEEN ? AND ?
-                   AND s.deleted_at IS NULL
-               ) AS _expected""",
-            (school_id, week_start, week_end),
-        ).fetchone()
-        expected = expected_row["cnt"] if expected_row else 0
-
-        actual = db.execute(
-            """SELECT COUNT(*) AS cnt FROM eod_reports
-               WHERE school_id = ?
-                 AND report_date BETWEEN ? AND ?
-                 AND deleted_at IS NULL""",
-            (school_id, week_start, week_end),
-        ).fetchone()["cnt"]
-
-        eod_compliance_rate = round(min(1.0, actual / expected), 2) if expected > 0 else 0.0
 
         open_incidents = db.execute(
             """SELECT COUNT(*) AS cnt FROM incident_reports
-               WHERE school_id = ?
-                 AND status = 'open'
-                 AND deleted_at IS NULL""",
+               WHERE school_id = ? AND status = 'open' AND deleted_at IS NULL""",
             (school_id,),
         ).fetchone()["cnt"]
 
+        # Session compliance: % of calendar days in last 30 with at least one session
+        session_days_row = db.execute(
+            """SELECT COUNT(DISTINCT session_date) AS cnt FROM sessions
+               WHERE school_id = ? AND session_date BETWEEN ? AND ?
+                 AND deleted_at IS NULL""",
+            (school_id, thirty_ago, today_iso),
+        ).fetchone()
+        session_days = session_days_row["cnt"] if session_days_row else 0
+        # 22 working days is a reasonable month approximation for display
+        session_compliance = round(min(1.0, session_days / 22), 2)
+
+        # EOD compliance (weekly, existing metric)
+        expected_row = db.execute(
+            """SELECT COUNT(*) AS cnt FROM (
+                 SELECT DISTINCT ss.staff_id, s.session_date
+                 FROM sessions s
+                 JOIN session_staff ss ON ss.session_id = s.session_id
+                 WHERE s.school_id = ? AND s.session_date BETWEEN ? AND ?
+                   AND s.deleted_at IS NULL
+               ) AS _exp""",
+            (school_id, week_start, week_end),
+        ).fetchone()
+        expected = expected_row["cnt"] if expected_row else 0
+        actual_eod = db.execute(
+            """SELECT COUNT(*) AS cnt FROM eod_reports
+               WHERE school_id = ? AND report_date BETWEEN ? AND ?
+                 AND deleted_at IS NULL""",
+            (school_id, week_start, week_end),
+        ).fetchone()["cnt"]
+        eod_compliance_rate = round(min(1.0, actual_eod / expected), 2) if expected > 0 else 0.0
+
+        # Coaches with latest performance snapshot
         coach_rows = db.execute(
-            """SELECT DISTINCT u.user_id, u.first_name, u.last_name, u.role
+            """SELECT DISTINCT u.user_id, u.first_name, u.last_name, u.role,
+                      sp.staff_id,
+                      cps.overall_score,
+                      cps.performance_band,
+                      cps.period_start
                FROM users u
                JOIN staff_profiles sp ON sp.user_id = u.user_id AND sp.deleted_at IS NULL
                JOIN staff_assignments sa ON sa.staff_id = sp.staff_id
-               WHERE sa.school_id = ?
-                 AND sa.active_status = 1
+               LEFT JOIN coach_performance_snapshots cps
+                   ON cps.staff_id = sp.staff_id
+                   AND cps.snapshot_id = (
+                       SELECT snapshot_id FROM coach_performance_snapshots
+                       WHERE staff_id = sp.staff_id
+                       ORDER BY created_at DESC LIMIT 1
+                   )
+               WHERE sa.school_id = ? AND sa.active_status = 1
                  AND sa.deleted_at IS NULL
-                 AND u.active_status = 1
-                 AND u.deleted_at IS NULL
+                 AND u.active_status = 1 AND u.deleted_at IS NULL
                ORDER BY u.last_name ASC, u.first_name ASC""",
             (school_id,),
         ).fetchall()
         coaches = [
-            {"user_id": r["user_id"], "first_name": r["first_name"],
-             "last_name": r["last_name"], "role": r["role"]}
+            {
+                "user_id": r["user_id"],
+                "first_name": r["first_name"],
+                "last_name": r["last_name"],
+                "role": r["role"],
+                "composite_score": r["overall_score"],
+                "performance_band": r["performance_band"],
+                "period_label": r["period_start"],
+                "reliability_badge": _reliability_badge(r["overall_score"]),
+            }
             for r in coach_rows
+        ]
+
+        # Skill domain averages (latest assessment per student)
+        domain_rows = db.execute(
+            """SELECT sd.domain_name,
+                      ROUND(AVG(asco.normalized_score), 1) AS avg_score,
+                      COUNT(DISTINCT a.student_id) AS student_count
+               FROM assessments a
+               JOIN (
+                   SELECT student_id, MAX(assessment_date) AS latest_date
+                   FROM assessments
+                   WHERE school_id = ? AND deleted_at IS NULL
+                   GROUP BY student_id
+               ) latest ON latest.student_id = a.student_id
+                       AND latest.latest_date = a.assessment_date
+               JOIN assessment_scores asco ON asco.assessment_id = a.assessment_id
+               JOIN skills sk ON sk.skill_id = asco.skill_id
+               JOIN skill_domains sd ON sd.domain_id = sk.domain_id
+               WHERE a.school_id = ? AND a.deleted_at IS NULL
+               GROUP BY sd.domain_id, sd.domain_name
+               ORDER BY sd.domain_name""",
+            (school_id, school_id),
+        ).fetchall()
+        domain_averages = [
+            {"domain_name": r["domain_name"], "avg_score": r["avg_score"],
+             "student_count": r["student_count"]}
+            for r in domain_rows
         ]
 
         audit(db, user["user_id"], "READ", "students", None,
@@ -161,11 +219,14 @@ def principal_dashboard():
                 "state": school_row["state"],
             },
             "sessions_this_week": sessions_this_week,
+            "session_compliance_monthly": session_compliance,
+            "session_days_monthly": session_days,
             "students_total": students_total,
             "students_assessed": students_assessed,
             "eod_compliance_rate": eod_compliance_rate,
             "open_incidents": open_incidents,
             "coaches": coaches,
+            "domain_averages": domain_averages,
         })
     except Exception:
         logging.exception("principal_dashboard route error")
@@ -173,6 +234,98 @@ def principal_dashboard():
     finally:
         db.close()
 
+
+
+@principal_bp.route("/api/principal/skill-averages", methods=["GET"])
+@roles_required("principal", "school_staff")
+def principal_skill_averages():
+    """
+    School-wide skill domain averages broken down by grade level.
+    Uses latest assessment per student. Scoped to principal's school.
+    """
+    user = current_user()
+    db = get_db()
+    try:
+        school_id = _resolve_school_id(db, user["user_id"])
+        if not school_id:
+            return jsonify({"error": "No school assignment found for your account."}), 403
+
+        # Grade-level breakdown by domain
+        grade_rows = db.execute(
+            """SELECT s.grade_level,
+                      sd.domain_name,
+                      ROUND(AVG(asco.normalized_score), 1) AS avg_score,
+                      COUNT(DISTINCT a.student_id) AS student_count
+               FROM assessments a
+               JOIN (
+                   SELECT student_id, MAX(assessment_date) AS latest_date
+                   FROM assessments
+                   WHERE school_id = ? AND deleted_at IS NULL
+                   GROUP BY student_id
+               ) latest ON latest.student_id = a.student_id
+                       AND latest.latest_date = a.assessment_date
+               JOIN assessment_scores asco ON asco.assessment_id = a.assessment_id
+               JOIN skills sk ON sk.skill_id = asco.skill_id
+               JOIN skill_domains sd ON sd.domain_id = sk.domain_id
+               JOIN students s ON s.student_id = a.student_id
+               WHERE a.school_id = ? AND a.deleted_at IS NULL
+               GROUP BY s.grade_level, sd.domain_id, sd.domain_name
+               ORDER BY s.grade_level, sd.domain_name""",
+            (school_id, school_id),
+        ).fetchall()
+
+        # Overall domain averages
+        domain_rows = db.execute(
+            """SELECT sd.domain_name,
+                      ROUND(AVG(asco.normalized_score), 1) AS avg_score,
+                      COUNT(DISTINCT a.student_id) AS student_count
+               FROM assessments a
+               JOIN (
+                   SELECT student_id, MAX(assessment_date) AS latest_date
+                   FROM assessments
+                   WHERE school_id = ? AND deleted_at IS NULL
+                   GROUP BY student_id
+               ) latest ON latest.student_id = a.student_id
+                       AND latest.latest_date = a.assessment_date
+               JOIN assessment_scores asco ON asco.assessment_id = a.assessment_id
+               JOIN skills sk ON sk.skill_id = asco.skill_id
+               JOIN skill_domains sd ON sd.domain_id = sk.domain_id
+               WHERE a.school_id = ? AND a.deleted_at IS NULL
+               GROUP BY sd.domain_id, sd.domain_name
+               ORDER BY sd.domain_name""",
+            (school_id, school_id),
+        ).fetchall()
+
+        # Restructure grade data into {grade: [{domain, avg_score, student_count}]}
+        by_grade = {}
+        for r in grade_rows:
+            g = r["grade_level"] or "Unknown"
+            by_grade.setdefault(g, []).append({
+                "domain_name": r["domain_name"],
+                "avg_score": r["avg_score"],
+                "student_count": r["student_count"],
+            })
+
+        audit(db, user["user_id"], "READ", "students", None,
+              new_values={"scope": "principal_skill_averages", "school_id": school_id})
+        db.commit()
+        return jsonify({
+            "ok": True,
+            "domain_averages": [
+                {"domain_name": r["domain_name"], "avg_score": r["avg_score"],
+                 "student_count": r["student_count"]}
+                for r in domain_rows
+            ],
+            "by_grade": [
+                {"grade_level": g, "domains": domains}
+                for g, domains in sorted(by_grade.items())
+            ],
+        })
+    except Exception:
+        logging.exception("principal_skill_averages error")
+        return jsonify({"error": "Could not load skill averages."}), 500
+    finally:
+        db.close()
 
 
 @principal_bp.route("/api/principal/students", methods=["GET"])

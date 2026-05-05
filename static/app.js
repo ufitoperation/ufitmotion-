@@ -208,7 +208,7 @@ const PAGE_TITLES = {
   dashboard: 'Dashboard', schools: 'Schools', coaches: 'Coaches',
   students: 'Students', incidents: 'Incidents', reports: 'Reports',
   sessions: 'My Sessions', 'eod-reports': 'EOD Reports', assessments: 'Assessments',
-  settings: 'Settings', 'principal-dashboard': 'Dashboard', 'principal-students': 'My Students',
+  settings: 'Settings', skills: 'Skills Overview', 'principal-dashboard': 'Dashboard', 'principal-students': 'My Students',
   'parent-home': 'My Children', behavior: 'Behavior Observations', performance: 'My Performance',
 };
 
@@ -279,6 +279,7 @@ function renderPage() {
       case 'students':
       case 'principal-students':  loadPrincipalStudents(main); break;
       case 'incidents':           loadPrincipalIncidents(main); break;
+      case 'skills':              loadPrincipalSkillAverages(main); break;
       case 'survey':              loadPrincipalSurvey(main); break;
       case 'settings': main.innerHTML = renderSettingsPage(); attachSettingsListeners(); break;
       default: loadPrincipalDashboard(main);
@@ -450,6 +451,7 @@ function navConfig(portal) {
   if (portal === 'principal') return [
     { page: 'dashboard', label: 'Dashboard', icon: iconDashboard },
     { page: 'students',  label: 'Students',  icon: iconStudents  },
+    { page: 'skills',    label: 'Skills',    icon: iconAssess    },
     { page: 'incidents', label: 'Incidents', icon: iconIncidents },
     { page: 'survey',    label: 'Survey',    icon: iconSurveys   },
     { page: 'settings',  label: 'Settings',  icon: iconSettings  },
@@ -2524,34 +2526,132 @@ async function loadPrincipalDashboard(container) {
     const d = await api('GET', '/api/principal/dashboard');
     const school = d.school || {};
     state.principalSchool = school;
-    const eodPct = d.eod_compliance_rate != null ? Math.round(d.eod_compliance_rate * 100) : 0;
+    const compliancePct = d.session_compliance_monthly != null ? Math.round(d.session_compliance_monthly * 100) : null;
+    const complianceVariant = compliancePct == null ? '' : compliancePct >= 80 ? 'success' : compliancePct >= 60 ? 'warning' : 'error';
+    const complianceDisplay = compliancePct != null ? compliancePct + '%' : '—';
+
+    function domainBars(domains) {
+      return domains.map(dm => {
+        const score = dm.avg_score ?? 0;
+        const barColor = score >= 70 ? 'var(--color-success)' : score >= 50 ? 'var(--color-warning)' : 'var(--color-danger)';
+        return `
+          <div style="margin-bottom:14px;">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+              <span style="font-weight:600;font-size:0.9rem;">${esc(dm.domain_name || dm.domain || '')}</span>
+              <span style="font-size:0.85rem;color:var(--color-text-secondary);">${Math.round(score)}/100</span>
+            </div>
+            <div style="height:8px;background:var(--color-border);border-radius:4px;overflow:hidden;">
+              <div style="height:100%;width:${Math.min(score, 100)}%;background:${barColor};border-radius:4px;transition:width 0.3s;"></div>
+            </div>
+            ${dm.student_count != null ? `<div class="text-caption" style="margin-top:3px;">${dm.student_count} students</div>` : ''}
+          </div>`;
+      }).join('');
+    }
+
+    function coachBadge(reliability) {
+      const map = {
+        strong:        ['badge-success',    'Strong'],
+        developing:    ['badge-warning',    'Developing'],
+        needs_support: ['badge-error',      'Needs Support'],
+        unscored:      ['badge-secondary',  'Not Scored'],
+      };
+      const [cls, label] = map[reliability] || ['badge-secondary', fmtLabel(reliability || 'unscored')];
+      return `<span class="badge ${cls}">${label}</span>`;
+    }
+
     container.innerHTML = `
       <div class="welcome-card">
         <div class="welcome-greeting">${esc(school.school_name || 'Your School')}</div>
         <div class="welcome-subtitle">${school.city ? esc(school.city) + (school.state ? ', ' + esc(school.state) : '') : ''} &mdash; ${todayFull()}</div>
       </div>
       <div class="stats-grid">
-        ${statCard('Total Students', d.students_total ?? 0, iconStudents(), '')}
-        ${statCard('Assessed', d.students_assessed ?? 0, iconAssess(), 'accent')}
-        ${statCard('Sessions This Week', d.sessions_this_week ?? 0, iconSessions(), 'success')}
-        ${statCard('EOD Compliance', eodPct + '%', iconEod(), eodPct < 70 ? 'error' : 'success')}
-        ${statCard('Open Incidents', d.open_incidents ?? 0, iconIncidents(), d.open_incidents > 0 ? 'error' : '')}
+        ${statCard('Total Students',        d.students_total ?? 0,    iconStudents(),  '')}
+        ${statCard('Assessed',              d.students_assessed ?? 0, iconAssess(),    'accent')}
+        ${statCard('Sessions This Week',    d.sessions_this_week ?? 0, iconSessions(), 'success')}
+        ${statCard('Session Compliance',    complianceDisplay,         iconSessions(), complianceVariant)}
+        ${statCard('Open Incidents',        d.open_incidents ?? 0,    iconIncidents(), d.open_incidents > 0 ? 'error' : '')}
       </div>
+      ${d.domain_averages?.length ? `
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Skill Domain Averages</div>
+          <button class="btn btn-ghost btn-sm" onclick="navigate('skills')">View All</button>
+        </div>
+        <div style="padding:0 4px;">${domainBars(d.domain_averages)}</div>
+      </div>` : ''}
       <div class="card">
         <div class="card-header">
           <div class="card-title">Coaches at ${esc(school.school_name || 'Your School')}</div>
           <button class="btn btn-ghost btn-sm" onclick="navigate('students')">View Students</button>
         </div>
         ${d.coaches?.length ? `<div class="table-wrap"><table class="data-table">
-          <thead><tr><th>Name</th><th>Role</th></tr></thead>
+          <thead><tr><th>Name</th><th>Role</th><th>Performance Score</th><th>Status</th></tr></thead>
           <tbody>${(d.coaches || []).map(c => `<tr>
             <td>${esc(c.first_name)} ${esc(c.last_name)}</td>
             <td><span class="badge">${fmtLabel(c.role)}</span></td>
+            <td>
+              ${c.composite_score != null ? `<span style="font-weight:700;">${Math.round(c.composite_score)}/100</span>` : '—'}
+              ${c.period_label ? `<div class="text-caption">${esc(c.period_label)}</div>` : ''}
+            </td>
+            <td>${coachBadge(c.reliability_badge)}</td>
           </tr>`).join('')}</tbody>
         </table></div>` : `<div class="empty-state" style="padding:24px 0 8px;">
           <div class="empty-state-text">No coaches assigned yet — contact Ufit to add coaches to this school.</div>
         </div>`}
       </div>`;
+  } catch (err) {
+    container.innerHTML = errorCard(err.message);
+  }
+}
+
+async function loadPrincipalSkillAverages(container) {
+  container.innerHTML = renderSkeleton(4);
+  try {
+    const d = await api('GET', '/api/principal/skill-averages');
+    const overall = d.domain_averages || [];
+    const byGrade = d.by_grade || [];
+
+    function domainBars(domains) {
+      if (!domains.length) return `<div class="empty-state-text" style="padding:12px 0;">No data available.</div>`;
+      return domains.map(dm => {
+        const score = dm.avg_score ?? 0;
+        const barColor = score >= 70 ? 'var(--color-success)' : score >= 50 ? 'var(--color-warning)' : 'var(--color-danger)';
+        return `
+          <div style="margin-bottom:14px;">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+              <span style="font-weight:600;font-size:0.9rem;">${esc(dm.domain_name || dm.domain || '')}</span>
+              <span style="font-size:0.85rem;color:var(--color-text-secondary);">${Math.round(score)}/100</span>
+            </div>
+            <div style="height:8px;background:var(--color-border);border-radius:4px;overflow:hidden;">
+              <div style="height:100%;width:${Math.min(score, 100)}%;background:${barColor};border-radius:4px;transition:width 0.3s;"></div>
+            </div>
+            ${dm.student_count != null ? `<div class="text-caption" style="margin-top:3px;">${dm.student_count} students</div>` : ''}
+          </div>`;
+      }).join('');
+    }
+
+    const gradeSections = byGrade.length ? byGrade.map(g => `
+      <div class="card" style="margin-top:16px;">
+        <div class="card-header">
+          <div class="card-title">${esc(g.grade_label || g.grade || '')}</div>
+        </div>
+        <div style="padding:0 4px;">${domainBars(g.domain_averages || [])}</div>
+      </div>`).join('') : '';
+
+    container.innerHTML = `
+      <div class="page-header">
+        <div class="text-h2">Skills Overview</div>
+      </div>
+      ${overall.length ? `
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">All Grades — Domain Averages</div>
+        </div>
+        <div style="padding:0 4px;">${domainBars(overall)}</div>
+      </div>` : `<div class="card"><div class="empty-state" style="padding:32px 0;">
+        <div class="empty-state-text">No skill assessment data available yet.</div>
+      </div></div>`}
+      ${gradeSections}`;
   } catch (err) {
     container.innerHTML = errorCard(err.message);
   }
