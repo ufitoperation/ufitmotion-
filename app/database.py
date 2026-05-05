@@ -422,7 +422,7 @@ def _open_postgres(database_url: str) -> PostgresConnection:
     last_error: Optional[Exception] = None
     for dsn in dsns:
         try:
-            conn = psycopg.connect(dsn, autocommit=False)
+            conn = psycopg.connect(dsn, autocommit=False, connect_timeout=10)
             return PostgresConnection(conn)
         except Exception as e:
             last_error = e
@@ -430,7 +430,7 @@ def _open_postgres(database_url: str) -> PostgresConnection:
 
     # Try the original URL as final fallback.
     try:
-        conn = psycopg.connect(database_url, autocommit=False)
+        conn = psycopg.connect(database_url, autocommit=False, connect_timeout=10)
         return PostgresConnection(conn)
     except Exception as e:
         last_error = e

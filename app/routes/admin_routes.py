@@ -900,7 +900,8 @@ def delete_student(student_id: int):
             "UPDATE student_program_enrollment SET status = 'inactive' WHERE student_id = ?",
             (student_id,),
         )
-        audit(db, user["user_id"], "DELETE", "students", student_id)
+        audit(db, user["user_id"], "DELETE", "students", student_id,
+              old_values={"school_id": row["school_id"]})
         db.commit()
         return jsonify({"ok": True})
     finally:
@@ -2388,10 +2389,10 @@ def admin_students_growth():
                    JOIN skills sk ON sk.skill_id = asco.skill_id
                    JOIN skill_domains sd ON sd.domain_id = sk.domain_id
                    JOIN assessments a ON a.assessment_id = asco.assessment_id
-                   WHERE a.deleted_at IS NULL AND a.window_id = ?
-                   GROUP BY sd.domain_id, sd.domain_name
-                   ORDER BY sd.domain_name ASC""",
-                (window_id,),
+                   WHERE a.deleted_at IS NULL AND a.window_id = ?"""
+                + org_assess_filter
+                + " GROUP BY sd.domain_id, sd.domain_name ORDER BY sd.domain_name ASC",
+                [window_id] + org_p,
             ).fetchall()
         else:
             domain_rows = db.execute(
@@ -2426,10 +2427,10 @@ def admin_students_growth():
                    JOIN skills sk ON sk.skill_id = asco.skill_id
                    JOIN skill_domains sd ON sd.domain_id = sk.domain_id
                    JOIN assessments a ON a.assessment_id = asco.assessment_id
-                   WHERE a.deleted_at IS NULL AND a.window_id = ?
-                   GROUP BY sk.skill_id, sd.domain_id
-                   ORDER BY sd.domain_name, sk.skill_name""",
-                (window_id,),
+                   WHERE a.deleted_at IS NULL AND a.window_id = ?"""
+                + org_assess_filter
+                + " GROUP BY sk.skill_id, sd.domain_id ORDER BY sd.domain_name, sk.skill_name",
+                [window_id] + org_p,
             ).fetchall()
         else:
             skill_rows = db.execute(

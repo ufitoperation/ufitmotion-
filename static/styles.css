@@ -8,19 +8,22 @@
    ============================================================ */
 :root {
   /* Brand Colors */
-  --color-primary:        #1E40AF;
-  --color-primary-hover:  #1D4ED8;
-  --color-primary-light:  #3B82F6;
-  --color-accent:         #F59E0B;
-  --color-accent-hover:   #D97706;
-  --color-accent-light:   #FCD34D;
+  --color-primary:        #0A2463;
+  --color-primary-hover:  #163580;
+  --color-primary-light:  #2952A3;
+  --color-accent:         #C9A84C;
+  --color-accent-hover:   #A8893A;
+  --color-accent-light:   #E8D08A;
 
   /* Neutrals */
   --color-bg:             #F8FAFC;
+  --color-background:     #F8FAFC;
   --color-surface:        #FFFFFF;
   --color-surface-dark:   #1E293B;
   --color-text-primary:   #0F172A;
+  --color-text:           #0F172A;
   --color-text-secondary: #64748B;
+  --color-text-muted:     #94A3B8;
   --color-border:         #E2E8F0;
 
   /* Status */

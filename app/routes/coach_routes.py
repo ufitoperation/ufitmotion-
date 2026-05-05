@@ -1134,9 +1134,8 @@ def list_incidents():
 
     role = user["role"]
     staff_id = user.get("staff_id")
-    db = get_db()
 
-    # --- Pagination ---
+    # --- Pagination (validate before opening DB connection) ---
     page_raw = request.args.get("page", "1")
     per_page_raw = request.args.get("per_page", "20")
     try:
@@ -1154,7 +1153,7 @@ def list_incidents():
 
     offset = (page - 1) * per_page
 
-    # --- Optional filters ---
+    # --- Optional filters (validate before opening DB connection) ---
     from_date = request.args.get("from")
     to_date = request.args.get("to")
     status_filter = request.args.get("status")
@@ -1191,71 +1190,74 @@ def list_incidents():
         filter_sql += " AND ir.severity_level = ?"
         filter_params.append(severity_filter)
 
-    # --- Role scoping ---
-    if role in ("head_coach", "assistant_coach"):
-        scope_sql = "AND ir.reported_by_staff_id = ? AND ir.school_id = ?"
-        scope_params = [staff_id, user["school_id"]]
-    elif role == "site_coordinator":
-        scope_sql = (
-            "AND ir.school_id IN"
-            " (SELECT school_id FROM staff_assignments"
-            "  WHERE staff_id = ? AND active_status = 1 AND deleted_at IS NULL)"
+    db = get_db()
+    try:
+        # --- Role scoping ---
+        if role in ("head_coach", "assistant_coach"):
+            scope_sql = "AND ir.reported_by_staff_id = ? AND ir.school_id = ?"
+            scope_params = [staff_id, user.get("school_id")]
+        elif role == "site_coordinator":
+            scope_sql = (
+                "AND ir.school_id IN"
+                " (SELECT school_id FROM staff_assignments"
+                "  WHERE staff_id = ? AND active_status = 1 AND deleted_at IS NULL)"
+            )
+            scope_params = [staff_id]
+        else:  # coach_overseer
+            overseer_school_id = user.get("school_id")
+            if not overseer_school_id:
+                return jsonify({"error": "You have no active school assignment."}), 403
+            org_row = db.execute(
+                "SELECT organization_id FROM schools WHERE school_id = ?",
+                (overseer_school_id,),
+            ).fetchone()
+            if not org_row:
+                return jsonify({"error": "You have no active school assignment."}), 403
+            scope_sql = "AND sc.organization_id = ?"
+            scope_params = [org_row["organization_id"]]
+
+        base_join = (
+            " FROM incident_reports ir"
+            " JOIN schools sc ON sc.school_id = ir.school_id"
+            " LEFT JOIN users u ON u.user_id = ("
+            "   SELECT sp2.user_id FROM staff_profiles sp2"
+            "   WHERE sp2.staff_id = ir.reported_by_staff_id"
+            " ) AND u.deleted_at IS NULL"
+            " WHERE ir.deleted_at IS NULL"
+            f" {scope_sql}"
+            f" {filter_sql}"
         )
-        scope_params = [staff_id]
-    else:  # coach_overseer
-        overseer_school_id = user["school_id"]
-        if not overseer_school_id:
-            return jsonify({"error": "You have no active school assignment."}), 403
-        org_row = db.execute(
-            "SELECT organization_id FROM schools WHERE school_id = ?",
-            (overseer_school_id,),
-        ).fetchone()
-        if not org_row:
-            return jsonify({"error": "You have no active school assignment."}), 403
-        scope_sql = "AND sc.organization_id = ?"
-        scope_params = [org_row["organization_id"]]
 
-    base_join = (
-        " FROM incident_reports ir"
-        " JOIN schools sc ON sc.school_id = ir.school_id"
-        " LEFT JOIN users u ON u.user_id = ("
-        "   SELECT sp2.user_id FROM staff_profiles sp2"
-        "   WHERE sp2.staff_id = ir.reported_by_staff_id"
-        " ) AND u.deleted_at IS NULL"
-        " WHERE ir.deleted_at IS NULL"
-        f" {scope_sql}"
-        f" {filter_sql}"
-    )
+        count_params = scope_params + filter_params
+        total = db.execute(
+            "SELECT COUNT(*) AS cnt" + base_join,
+            count_params,
+        ).fetchone()["cnt"]
 
-    count_params = scope_params + filter_params
-    total = db.execute(
-        "SELECT COUNT(*) AS cnt" + base_join,
-        count_params,
-    ).fetchone()["cnt"]
+        rows = db.execute(
+            "SELECT ir.incident_id, ir.school_id, sc.school_name,"
+            " ir.reported_by_staff_id AS staff_id,"
+            " (u.first_name || ' ' || u.last_name) AS coach_name,"
+            " ir.session_id, ir.student_id,"
+            " ir.report_date, ir.incident_type, ir.severity_level,"
+            " ir.description, ir.immediate_action_taken,"
+            " ir.school_notified, ir.family_notified, ir.escalated_to_supervisor,"
+            " ir.status, ir.resolution_notes, ir.admin_response, ir.acknowledged_at, ir.created_at"
+            + base_join
+            + " ORDER BY ir.report_date DESC, ir.incident_id DESC"
+            + " LIMIT ? OFFSET ?",
+            count_params + [per_page, offset],
+        ).fetchall()
 
-    rows = db.execute(
-        "SELECT ir.incident_id, ir.school_id, sc.school_name,"
-        " ir.reported_by_staff_id AS staff_id,"
-        " (u.first_name || ' ' || u.last_name) AS coach_name,"
-        " ir.session_id, ir.student_id,"
-        " ir.report_date, ir.incident_type, ir.severity_level,"
-        " ir.description, ir.immediate_action_taken,"
-        " ir.school_notified, ir.family_notified, ir.escalated_to_supervisor,"
-        " ir.status, ir.resolution_notes, ir.admin_response, ir.acknowledged_at, ir.created_at"
-        + base_join
-        + " ORDER BY ir.report_date DESC, ir.incident_id DESC"
-        + " LIMIT ? OFFSET ?",
-        count_params + [per_page, offset],
-    ).fetchall()
-
-    db.close()
-    return jsonify({
-        "ok": True,
-        "total": total,
-        "page": page,
-        "per_page": per_page,
-        "incidents": [serialize_incident(r) for r in rows],
-    })
+        return jsonify({
+            "ok": True,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "incidents": [serialize_incident(r) for r in rows],
+        })
+    finally:
+        db.close()
 
 
 @coach_bp.route("/api/incidents", methods=["POST"])
@@ -1272,7 +1274,7 @@ def create_incident():
 
     data = parse_json()
     role = user["role"]
-    staff_id = user["staff_id"]
+    staff_id = user.get("staff_id")
 
     # Rule 3: school_id
     school_id_raw = data.get("school_id")
@@ -1339,7 +1341,7 @@ def create_incident():
 
     # Rule 15: school access check
     if role in ("head_coach", "assistant_coach"):
-        if user["school_id"] != school_id:
+        if user.get("school_id") != school_id:
             return jsonify({"error": "You are not assigned to this school."}), 403
 
     db = get_db()
@@ -2175,7 +2177,7 @@ def list_behavior_observations():
     student_id = request.args.get("student_id", type=int)
     session_id = request.args.get("session_id", type=int)
     role = user["role"]
-    staff_id = user["staff_id"]
+    staff_id = user.get("staff_id")
 
     db = get_db()
     try:

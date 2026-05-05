@@ -83,7 +83,7 @@ def init_db() -> None:
 def _run_migration(db) -> None:
     """Read and execute the correct schema migration for the current backend."""
     # Use SQLite-compatible schema for local dev, Postgres schema for production.
-    is_sqlite = getattr(db, "backend", "sqlite") == "sqlite"
+    is_sqlite = getattr(db, "backend", "postgres") == "sqlite"
     filename = "001_sqlite_dev.sql" if is_sqlite else "001_initial_schema.sql"
     migration_path = _find_migration_file(filename)
     if migration_path is None:
@@ -482,9 +482,10 @@ def _seed_demo_users(db) -> None:
                     skill_id = skill_id_map.get(skill_name)
                     if skill_id:
                         db.execute(
-                            """INSERT OR IGNORE INTO assessment_scores
+                            """INSERT INTO assessment_scores
                                (assessment_id, student_id, skill_id, raw_level, normalized_score, created_at)
-                               VALUES (?, ?, ?, ?, ?, ?)""",
+                               VALUES (?, ?, ?, ?, ?, ?)
+                               ON CONFLICT DO NOTHING""",
                             (assessment_id, sid, skill_id, score, score * 20, score_ts),
                         )
 
@@ -493,17 +494,19 @@ def _seed_demo_users(db) -> None:
                     skill_id = skill_id_map.get(skill_name)
                     if skill_id:
                         db.execute(
-                            """INSERT OR IGNORE INTO assessment_scores
+                            """INSERT INTO assessment_scores
                                (assessment_id, student_id, skill_id, raw_level, normalized_score, created_at)
-                               VALUES (?, ?, ?, ?, ?, ?)""",
+                               VALUES (?, ?, ?, ?, ?, ?)
+                               ON CONFLICT DO NOTHING""",
                             (assessment_id, sid, skill_id, score, score * 20, score_ts),
                         )
 
         # ── 12. session_staff — link coach as lead for every session ─────────
         for sess_id in session_ids:
             db.execute(
-                """INSERT OR IGNORE INTO session_staff (session_id, staff_id, role)
-                   VALUES (?, ?, 'lead')""",
+                """INSERT INTO session_staff (session_id, staff_id, role)
+                   VALUES (?, ?, 'lead')
+                   ON CONFLICT DO NOTHING""",
                 (sess_id, coach_sp_id),
             )
 
@@ -516,9 +519,10 @@ def _seed_demo_users(db) -> None:
                 status = "present" if j < present_count else "absent"
                 level = "high" if j < 5 else "medium"
                 db.execute(
-                    """INSERT OR IGNORE INTO student_session_attendance
+                    """INSERT INTO student_session_attendance
                        (session_id, student_id, attendance_status, participation_level, created_at)
-                       VALUES (?, ?, ?, ?, ?)""",
+                       VALUES (?, ?, ?, ?, ?)
+                       ON CONFLICT DO NOTHING""",
                     (sess_id, sid, status, level if status == "present" else None, ts),
                 )
 
@@ -684,7 +688,7 @@ def _seed_app_settings(db) -> None:
 
     ts = now_utc()
     inserted = 0
-    is_sqlite = getattr(db, "backend", "sqlite") == "sqlite"
+    is_sqlite = getattr(db, "backend", "postgres") == "sqlite"
     upsert_sql = (
         "INSERT OR IGNORE INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)"
         if is_sqlite else

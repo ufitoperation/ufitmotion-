@@ -925,7 +925,7 @@ async function loadCoachesPage(container) {
             const late = c.late_submissions_this_week ?? 0;
             const score = c.rolling_score != null ? Math.round(c.rolling_score) : null;
             const band = c.rolling_band || '';
-            const bandClass = {'Exceptional':'badge-success','Strong':'badge-success','Meeting Expectations':'','Developing':'badge-warning','Needs Improvement':'badge-error'}[band] || '';
+            const bandClass = {'Exceptional':'badge-success','Strong':'badge-success','Meeting Expectations':'badge-info','Developing':'badge-warning','Needs Improvement':'badge-error'}[band] || '';
             const _sid = _modalStore.set(c);
             return `<tr>
               <td><strong>${esc(c.first_name)} ${esc(c.last_name)}</strong><div class="text-caption">${esc(c.email)}</div></td>
@@ -964,7 +964,7 @@ async function openCoachScorecardModal(coach) {
     if (!el) return;
 
     const overall = sc.overall_score != null ? Math.round(sc.overall_score) : null;
-    const bandClass = {'Exceptional':'badge-success','Strong':'badge-success','Meeting Expectations':'','Developing':'badge-warning','Needs Improvement':'badge-error'}[sc.performance_band] || '';
+    const bandClass = {'Exceptional':'badge-success','Strong':'badge-success','Meeting Expectations':'badge-info','Developing':'badge-warning','Needs Improvement':'badge-error'}[sc.performance_band] || '';
 
     const pillarBar = (label, score, detail) => {
       const pct = score != null ? Math.round(score) : 0;
@@ -2749,8 +2749,8 @@ async function openPrincipalCoachScoreModal(staffId) {
       ${score != null ? scoreBar(score) : '<div style="font-size:0.75rem;color:var(--color-text-secondary);">Not yet evaluated</div>'}
     </div>`;
 
-  const bandColors = { exemplary: 'success', proficient: 'info', developing: 'warning', needs_improvement: 'error' };
-  const bandLabel = { exemplary: 'Exemplary', proficient: 'Proficient', developing: 'Developing', needs_improvement: 'Needs Support' };
+  const bandColors = { 'Exceptional': 'success', 'Strong': 'success', 'Meeting Expectations': 'info', 'Developing': 'warning', 'Needs Improvement': 'error' };
+  const bandLabel = { 'Exceptional': 'Exceptional', 'Strong': 'Strong', 'Meeting Expectations': 'Meeting Expectations', 'Developing': 'Developing', 'Needs Improvement': 'Needs Improvement' };
   const band = snap?.performance_band;
 
   const mb = document.querySelector('.modal-body');
@@ -3592,8 +3592,8 @@ async function loadParentHome(container) {
     container.innerHTML = children.map(c => {
       const scoreBand = c.readiness_band || '—';
       const score = c.overall_ufit_score != null ? Math.round(c.overall_ufit_score) : null;
-      const scoreColor = scoreBand === 'Advanced' ? '#22c55e' : scoreBand === 'Proficient' ? '#1E40AF' : scoreBand === 'Developing' ? '#f59e0b' : '#ef4444';
-      const bandBg = scoreBand === 'Advanced' ? '#dcfce7' : scoreBand === 'Proficient' ? '#dbeafe' : scoreBand === 'Developing' ? '#fef3c7' : '#fee2e2';
+      const scoreColor = scoreBand === 'Advanced' ? '#22c55e' : scoreBand === 'Proficient' ? '#0A2463' : scoreBand === 'Developing' ? '#f59e0b' : '#ef4444';
+      const bandBg = scoreBand === 'Advanced' ? '#dcfce7' : scoreBand === 'Proficient' ? '#dde3f5' : scoreBand === 'Developing' ? '#fef3c7' : '#fee2e2';
 
       const domainIcons = { physical: '🏃', psychomotor: '🏃', sel: '🤝', behavior: '🤝', cognitive: '🧠' };
       const getDomainIcon = name => {
@@ -4468,7 +4468,7 @@ async function loadMyPerformancePage(container) {
     if (!el) return;
 
     const overall = sc.overall_score != null ? Math.round(sc.overall_score) : null;
-    const bandClass = {'Exceptional':'badge-success','Strong':'badge-success','Meeting Expectations':'','Developing':'badge-warning','Needs Improvement':'badge-error'}[sc.performance_band] || '';
+    const bandClass = {'Exceptional':'badge-success','Strong':'badge-success','Meeting Expectations':'badge-info','Developing':'badge-warning','Needs Improvement':'badge-error'}[sc.performance_band] || '';
 
     const pillarBar = (label, score, detail) => {
       const pct = score != null ? Math.round(score) : 0;

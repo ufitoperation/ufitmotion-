@@ -457,9 +457,10 @@ def run():
             ).lastrowid
             for skill, score in zip(skill_list, scores):
                 db.execute(
-                    """INSERT OR IGNORE INTO assessment_scores
+                    """INSERT INTO assessment_scores
                            (assessment_id, student_id, skill_id, raw_level, normalized_score, created_at)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
+                       VALUES (?, ?, ?, ?, ?, ?)
+                       ON CONFLICT DO NOTHING""",
                     (a_id, student_id, skill["skill_id"], score, score * 20, now),
                 )
             return a_id
