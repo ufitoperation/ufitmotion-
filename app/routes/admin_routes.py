@@ -82,7 +82,7 @@ def _get_org_scope(db, user) -> Optional[int]:
             """SELECT sc.organization_id FROM staff_profiles sp
                JOIN staff_assignments sa ON sa.staff_id = sp.staff_id
                JOIN schools sc ON sc.school_id = sa.school_id
-               WHERE sp.user_id = ? AND sa.active_status = 1
+               WHERE sp.user_id = ? AND sa.active_status = TRUE
                AND sp.deleted_at IS NULL AND sc.deleted_at IS NULL LIMIT 1""",
             (user["user_id"],)
         ).fetchone()
@@ -106,7 +106,7 @@ def list_organizations():
                       COUNT(s.school_id) AS school_count
                FROM organizations o
                LEFT JOIN schools s ON s.organization_id = o.organization_id
-                 AND s.deleted_at IS NULL AND s.active_status = 1
+                 AND s.deleted_at IS NULL AND s.active_status = TRUE
                WHERE o.deleted_at IS NULL
                GROUP BY o.organization_id
                ORDER BY o.organization_name ASC
@@ -178,7 +178,7 @@ def list_schools():
     db = get_db()
     try:
         params = []
-        where = "WHERE s.deleted_at IS NULL AND s.active_status = 1"
+        where = "WHERE s.deleted_at IS NULL AND s.active_status = TRUE"
         if search:
             where += " AND (LOWER(s.school_name) LIKE ? OR LOWER(s.city) LIKE ?)"
             params += [f"%{search.lower()}%", f"%{search.lower()}%"]
@@ -192,9 +192,9 @@ def list_schools():
                        COUNT(DISTINCT st.student_id) AS student_count
                 FROM schools s
                 LEFT JOIN organizations o ON o.organization_id = s.organization_id
-                LEFT JOIN staff_assignments sa ON sa.school_id = s.school_id AND sa.active_status = 1 AND sa.deleted_at IS NULL
+                LEFT JOIN staff_assignments sa ON sa.school_id = s.school_id AND sa.active_status = TRUE AND sa.deleted_at IS NULL
                 LEFT JOIN students st ON st.school_id = s.school_id
-                    AND st.active_status = 1 AND st.deleted_at IS NULL
+                    AND st.active_status = TRUE AND st.deleted_at IS NULL
                 {where}
                 GROUP BY s.school_id
                 ORDER BY s.school_name ASC""",
@@ -402,7 +402,7 @@ def delete_school(school_id: int):
             return jsonify({"error": "School not found."}), 404
 
         active_students = db.execute(
-            "SELECT COUNT(*) AS cnt FROM students WHERE school_id = ? AND active_status = 1 AND deleted_at IS NULL",
+            "SELECT COUNT(*) AS cnt FROM students WHERE school_id = ? AND active_status = TRUE AND deleted_at IS NULL",
             (school_id,),
         ).fetchone()["cnt"]
         if active_students > 0:
@@ -410,7 +410,7 @@ def delete_school(school_id: int):
 
         ts = now_utc()
         db.execute("UPDATE schools SET deleted_at = ? WHERE school_id = ?", (ts, school_id))
-        db.execute("UPDATE staff_assignments SET active_status = 0 WHERE school_id = ?", (school_id,))
+        db.execute("UPDATE staff_assignments SET active_status = FALSE WHERE school_id = ?", (school_id,))
         db.execute("UPDATE programs SET program_status = 'inactive' WHERE school_id = ?", (school_id,))
         db.execute("UPDATE sessions SET deleted_at = ? WHERE school_id = ? AND deleted_at IS NULL", (ts, school_id))
         db.execute("UPDATE eod_reports SET deleted_at = ? WHERE school_id = ? AND deleted_at IS NULL", (ts, school_id))
@@ -465,7 +465,7 @@ def list_users():
                        sp.position_title, s.school_id, s.school_name
                 FROM users u
                 LEFT JOIN staff_profiles sp ON sp.user_id = u.user_id AND sp.deleted_at IS NULL
-                LEFT JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status = 1 AND sa.deleted_at IS NULL
+                LEFT JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status = TRUE AND sa.deleted_at IS NULL
                 LEFT JOIN schools s ON s.school_id = sa.school_id
                 {where}
                 ORDER BY u.last_name ASC, u.first_name ASC
@@ -597,7 +597,7 @@ def create_user():
                       s.school_id, s.school_name
                FROM users u
                LEFT JOIN staff_profiles sp ON sp.user_id = u.user_id AND sp.deleted_at IS NULL
-               LEFT JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status = 1 AND sa.deleted_at IS NULL
+               LEFT JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status = TRUE AND sa.deleted_at IS NULL
                LEFT JOIN schools s ON s.school_id = sa.school_id
                WHERE u.user_id = ?""",
             (new_user_id,),
@@ -677,7 +677,7 @@ def delete_user(user_id: int):
 
         ts = now_utc()
         db.execute(
-            "UPDATE users SET deleted_at = ?, active_status = 0 WHERE user_id = ?",
+            "UPDATE users SET deleted_at = ?, active_status = FALSE WHERE user_id = ?",
             (ts, user_id),
         )
         db.execute(
@@ -685,7 +685,7 @@ def delete_user(user_id: int):
             (ts, user_id),
         )
         db.execute(
-            "UPDATE staff_assignments SET active_status = 0 WHERE staff_id = (SELECT staff_id FROM staff_profiles WHERE user_id = ?)",
+            "UPDATE staff_assignments SET active_status = FALSE WHERE staff_id = (SELECT staff_id FROM staff_profiles WHERE user_id = ?)",
             (user_id,),
         )
         audit(db, current["user_id"], "DELETE", "users", user_id,
@@ -893,7 +893,7 @@ def delete_student(student_id: int):
 
         ts = now_utc()
         db.execute(
-            "UPDATE students SET deleted_at = ?, active_status = 0 WHERE student_id = ?",
+            "UPDATE students SET deleted_at = ?, active_status = FALSE WHERE student_id = ?",
             (ts, student_id),
         )
         db.execute(
@@ -1070,7 +1070,7 @@ def list_programs():
             SELECT p.program_id, p.school_id, sc.school_name, p.program_name,
                    p.program_type, p.service_model, p.grade_band, p.start_date,
                    p.end_date, p.program_status, p.frequency, p.reporting_cycle, p.notes,
-                   (SELECT COUNT(*) FROM staff_assignments sa WHERE sa.program_id = p.program_id AND sa.active_status = 1) AS coach_count,
+                   (SELECT COUNT(*) FROM staff_assignments sa WHERE sa.program_id = p.program_id AND sa.active_status = TRUE) AS coach_count,
                    (SELECT COUNT(*) FROM student_program_enrollment spe WHERE spe.program_id = p.program_id AND spe.status = 'active') AS student_count
             FROM programs p
             JOIN schools sc ON sc.school_id = p.school_id
@@ -1185,7 +1185,7 @@ def delete_program(program_id: int):
         ts = now_utc()
         db.execute("UPDATE programs SET program_status = 'inactive' WHERE program_id = ?", (program_id,))
         db.execute("UPDATE student_program_enrollment SET status = 'inactive' WHERE program_id = ?", (program_id,))
-        db.execute("UPDATE staff_assignments SET active_status = 0 WHERE program_id = ?", (program_id,))
+        db.execute("UPDATE staff_assignments SET active_status = FALSE WHERE program_id = ?", (program_id,))
         db.execute("UPDATE sessions SET deleted_at = ? WHERE program_id = ? AND deleted_at IS NULL", (ts, program_id))
         audit(db, user["user_id"], "DELETE", "programs", program_id,
               old_values={"program_name": row["program_name"]})
@@ -1474,12 +1474,12 @@ def list_reports():
                     (SELECT COUNT(*) FROM eod_reports er
                      WHERE er.staff_id = sp.staff_id
                        AND er.report_date BETWEEN ? AND ?
-                       AND er.submitted_on_time = 1
+                       AND er.submitted_on_time = TRUE
                        AND er.deleted_at IS NULL) AS on_time,
                     (SELECT COUNT(*) FROM eod_reports er
                      WHERE er.staff_id = sp.staff_id
                        AND er.report_date BETWEEN ? AND ?
-                       AND er.submitted_on_time = 0
+                       AND er.submitted_on_time = FALSE
                        AND er.deleted_at IS NULL) AS late,
                     (SELECT COUNT(DISTINCT s.session_id) FROM sessions s
                      JOIN session_staff ss ON ss.session_id = s.session_id
@@ -1488,10 +1488,10 @@ def list_reports():
                        AND s.deleted_at IS NULL) AS sessions_logged
                 FROM staff_profiles sp
                 JOIN users u ON u.user_id = sp.user_id
-                JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status = 1 AND sa.deleted_at IS NULL
+                JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status = TRUE AND sa.deleted_at IS NULL
                 JOIN schools sc ON sc.school_id = sa.school_id {org_filter} {eod_school_filter}
                 WHERE u.role IN ('head_coach', 'assistant_coach')
-                  AND u.active_status = 1
+                  AND u.active_status = TRUE
                   AND u.deleted_at IS NULL
                   AND sp.deleted_at IS NULL
                 GROUP BY sp.staff_id, u.first_name, u.last_name, sc.school_name
@@ -1577,7 +1577,7 @@ def list_reports():
                 FROM student_overall_summary sos
                 JOIN students st ON st.student_id = sos.student_id
                 JOIN schools sc ON sc.school_id = st.school_id
-                WHERE st.active_status = 1 AND st.deleted_at IS NULL
+                WHERE st.active_status = TRUE AND st.deleted_at IS NULL
                   {org_filter}
                   {('AND sc.school_id = ?' if school_id else '')}
                 GROUP BY sc.school_id, sc.school_name
@@ -1729,17 +1729,17 @@ def admin_dashboard():
         org_params = (org_id,) if org_id else ()
 
         active_schools = db.execute(
-            f"SELECT COUNT(*) AS cnt FROM schools s WHERE s.active_status=1 AND s.deleted_at IS NULL {org_filter}",
+            f"SELECT COUNT(*) AS cnt FROM schools s WHERE s.active_status = TRUE AND s.deleted_at IS NULL {org_filter}",
             org_params,
         ).fetchone()["cnt"]
 
         active_coaches = db.execute(
             f"""SELECT COUNT(*) AS cnt FROM users u
                JOIN staff_profiles sp ON sp.user_id = u.user_id
-               JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status = 1
+               JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status = TRUE
                JOIN schools s ON s.school_id = sa.school_id
                WHERE u.role IN ('head_coach','assistant_coach')
-                 AND u.active_status=1 AND u.deleted_at IS NULL
+                 AND u.active_status = TRUE AND u.deleted_at IS NULL
                  {org_filter}""",
             org_params,
         ).fetchone()["cnt"]
@@ -1827,10 +1827,10 @@ def admin_list_schools():
                   JOIN staff_profiles sp ON sp.user_id = u.user_id AND sp.deleted_at IS NULL
                   JOIN staff_assignments sa ON sa.staff_id = sp.staff_id
                   WHERE sa.school_id = s.school_id
-                    AND sa.active_status = 1
+                    AND sa.active_status = TRUE
                     AND sa.deleted_at IS NULL
                     AND u.role IN ('head_coach','assistant_coach')
-                    AND u.active_status = 1
+                    AND u.active_status = TRUE
                     AND u.deleted_at IS NULL
                  ) AS coach_count,
                  (SELECT COUNT(*) FROM sessions ses
@@ -1843,7 +1843,7 @@ def admin_list_schools():
                     AND e.deleted_at IS NULL
                  ) AS last_eod_date
                FROM schools s
-               WHERE s.active_status = 1 AND s.deleted_at IS NULL {org_filter}
+               WHERE s.active_status = TRUE AND s.deleted_at IS NULL {org_filter}
                ORDER BY s.school_name ASC
                LIMIT 500""",
             params,
@@ -1904,7 +1904,7 @@ def admin_list_coaches():
                  (SELECT COUNT(*) FROM eod_reports e
                   WHERE e.staff_id = sp.staff_id
                     AND e.report_date BETWEEN ? AND ?
-                    AND e.submitted_on_time = 0
+                    AND e.submitted_on_time = FALSE
                     AND e.deleted_at IS NULL
                  ) AS late_submissions_this_week,
                  (SELECT COUNT(*) FROM incident_reports ir
@@ -1915,10 +1915,10 @@ def admin_list_coaches():
                FROM users u
                JOIN staff_profiles sp ON sp.user_id = u.user_id AND sp.deleted_at IS NULL
                JOIN staff_assignments sa ON sa.staff_id = sp.staff_id
-                          AND sa.active_status = 1 AND sa.deleted_at IS NULL
+                          AND sa.active_status = TRUE AND sa.deleted_at IS NULL
                JOIN schools s ON s.school_id = sa.school_id AND s.deleted_at IS NULL
                WHERE u.role IN ('head_coach','assistant_coach')
-                 AND u.active_status = 1
+                 AND u.active_status = TRUE
                  AND u.deleted_at IS NULL
                  {org_filter}
                ORDER BY u.last_name ASC, u.first_name ASC
@@ -1967,7 +1967,7 @@ def get_coach_score(staff_id: int):
         staff = db.execute(
             "SELECT sp.staff_id, sp.user_id, sa.school_id"
             " FROM staff_profiles sp"
-            " JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status=1 AND sa.deleted_at IS NULL"
+            " JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status = TRUE AND sa.deleted_at IS NULL"
             " JOIN schools sc ON sc.school_id = sa.school_id"
             " WHERE sp.staff_id=? AND sp.deleted_at IS NULL"
             + (" AND sc.organization_id=?" if org_id else ""),
@@ -2019,7 +2019,7 @@ def freeze_coach_score(staff_id: int):
         org_id = _get_org_scope(db, user)
         staff = db.execute(
             "SELECT sp.staff_id, sa.school_id FROM staff_profiles sp"
-            " JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status=1 AND sa.deleted_at IS NULL"
+            " JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status = TRUE AND sa.deleted_at IS NULL"
             " JOIN schools sc ON sc.school_id = sa.school_id"
             " WHERE sp.staff_id=? AND sp.deleted_at IS NULL"
             + (" AND sc.organization_id=?" if org_id else ""),
@@ -2312,7 +2312,7 @@ def admin_students_growth():
             org_p = []
 
         total_students = db.execute(
-            "SELECT COUNT(*) AS cnt FROM students WHERE active_status=1 AND deleted_at IS NULL"
+            "SELECT COUNT(*) AS cnt FROM students WHERE active_status = TRUE AND deleted_at IS NULL"
             + org_student_filter,
             org_p,
         ).fetchone()["cnt"]
@@ -2331,7 +2331,7 @@ def admin_students_growth():
             ).fetchone()["cnt"]
 
         school_rows = db.execute(
-            "SELECT school_id, school_name FROM schools WHERE active_status=1 AND deleted_at IS NULL"
+            "SELECT school_id, school_name FROM schools WHERE active_status = TRUE AND deleted_at IS NULL"
             + org_school_filter
             + " ORDER BY school_name ASC",
             org_p,
@@ -2364,7 +2364,7 @@ def admin_students_growth():
             r["school_id"]: r["cnt"]
             for r in db.execute(
                 "SELECT school_id, COUNT(*) AS cnt FROM students"
-                " WHERE active_status=1 AND deleted_at IS NULL"
+                " WHERE active_status = TRUE AND deleted_at IS NULL"
                 + org_student_filter
                 + " GROUP BY school_id",
                 org_p,
@@ -2506,7 +2506,7 @@ def trigger_eod_alerts():
                WHERE ses.session_date = ?
                  AND ses.deleted_at IS NULL
                  AND u.deleted_at IS NULL
-                 AND u.active_status = 1
+                 AND u.active_status = TRUE
                  AND sp.staff_id NOT IN (
                    SELECT staff_id FROM eod_reports
                    WHERE report_date = ? AND deleted_at IS NULL

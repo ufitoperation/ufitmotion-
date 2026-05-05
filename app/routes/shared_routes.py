@@ -114,13 +114,13 @@ def list_skills():
         domain_rows = db.execute(
             """SELECT domain_id, domain_name, domain_type
                FROM skill_domains
-               WHERE active_status = 1
+               WHERE active_status = TRUE
                ORDER BY domain_name ASC"""
         ).fetchall()
         skill_rows = db.execute(
             """SELECT skill_id, domain_id, skill_name, grade_band, skill_description
                FROM skills
-               WHERE active_status = 1
+               WHERE active_status = TRUE
                ORDER BY domain_id ASC, skill_name ASC"""
         ).fetchall()
 
@@ -223,7 +223,7 @@ def student_progress(student_id: int):
                    FROM staff_assignments sa
                    JOIN staff_profiles sp ON sp.staff_id = sa.staff_id
                    WHERE sp.user_id = ?
-                     AND sa.active_status = 1
+                     AND sa.active_status = TRUE
                      AND sa.deleted_at IS NULL
                      AND sp.deleted_at IS NULL
                    ORDER BY sa.created_at DESC
@@ -236,7 +236,7 @@ def student_progress(student_id: int):
             # Look up org via staff profile — these roles may not have a school_id in the session
             overseer_org = db.execute(
                 """SELECT s.organization_id FROM staff_profiles sp
-                   JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status = 1 AND sa.deleted_at IS NULL
+                   JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status = TRUE AND sa.deleted_at IS NULL
                    JOIN schools s ON s.school_id = sa.school_id AND s.deleted_at IS NULL
                    WHERE sp.user_id = ? AND sp.deleted_at IS NULL
                    LIMIT 1""",

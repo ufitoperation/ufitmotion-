@@ -48,7 +48,7 @@ def parent_student():
                FROM students s
                JOIN schools sc ON sc.school_id = s.school_id
                WHERE (s.parent_primary_id = ? OR s.parent_secondary_id = ?)
-                 AND s.active_status = 1
+                 AND s.active_status = TRUE
                  AND s.deleted_at IS NULL
                ORDER BY s.student_last_name ASC, s.student_first_name ASC""",
             (parent_id, parent_id),

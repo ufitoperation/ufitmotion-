@@ -60,7 +60,7 @@ def _compliance_pillar(db, staff_id: int, school_id: int,
 
     # EOD on-time rate
     eod_row = db.execute(
-        "SELECT COUNT(*) AS total, SUM(CASE WHEN submitted_on_time=1 THEN 1 ELSE 0 END) AS ontime"
+        "SELECT COUNT(*) AS total, SUM(CASE WHEN submitted_on_time = TRUE THEN 1 ELSE 0 END) AS ontime"
         " FROM eod_reports WHERE staff_id=? AND school_id=? AND report_date BETWEEN ? AND ?"
         " AND deleted_at IS NULL",
         (staff_id, school_id, ps, pe),
@@ -93,7 +93,7 @@ def _compliance_pillar(db, staff_id: int, school_id: int,
     flagged_row = db.execute(
         "SELECT COUNT(*) AS flagged FROM eod_reports"
         " WHERE staff_id=? AND school_id=? AND report_date BETWEEN ? AND ?"
-        " AND injury_incident_flag=1 AND deleted_at IS NULL",
+        " AND injury_incident_flag = TRUE AND deleted_at IS NULL",
         (staff_id, school_id, ps, pe),
     ).fetchone()
     flagged = (flagged_row["flagged"] or 0) if flagged_row else 0
@@ -117,7 +117,7 @@ def _compliance_pillar(db, staff_id: int, school_id: int,
     if has_window:
         enrolled_row = db.execute(
             "SELECT COUNT(*) AS enrolled FROM students"
-            " WHERE school_id=? AND active_status=1 AND deleted_at IS NULL",
+            " WHERE school_id=? AND active_status = TRUE AND deleted_at IS NULL",
             (school_id,),
         ).fetchone()
         assessed_row = db.execute(

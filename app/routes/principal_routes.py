@@ -39,7 +39,7 @@ def _resolve_school_id(db, user_id: int):
            FROM staff_assignments sa
            JOIN staff_profiles sp ON sp.staff_id = sa.staff_id
            WHERE sp.user_id = ?
-             AND sa.active_status = 1
+             AND sa.active_status = TRUE
              AND sa.deleted_at IS NULL
              AND sp.deleted_at IS NULL
            ORDER BY sa.created_at DESC
@@ -95,7 +95,7 @@ def principal_dashboard():
 
         students_total = db.execute(
             """SELECT COUNT(*) AS cnt FROM students
-               WHERE school_id = ? AND active_status = 1 AND deleted_at IS NULL""",
+               WHERE school_id = ? AND active_status = TRUE AND deleted_at IS NULL""",
             (school_id,),
         ).fetchone()["cnt"]
 
@@ -159,9 +159,9 @@ def principal_dashboard():
                        WHERE staff_id = sp.staff_id
                        ORDER BY created_at DESC LIMIT 1
                    )
-               WHERE sa.school_id = ? AND sa.active_status = 1
+               WHERE sa.school_id = ? AND sa.active_status = TRUE
                  AND sa.deleted_at IS NULL
-                 AND u.active_status = 1 AND u.deleted_at IS NULL
+                 AND u.active_status = TRUE AND u.deleted_at IS NULL
                  AND u.role IN ('head_coach', 'assistant_coach', 'site_coordinator', 'coach_overseer')
                ORDER BY u.last_name ASC, u.first_name ASC""",
             (school_id,),
@@ -260,9 +260,9 @@ def principal_coach_score(staff_id: int):
                JOIN staff_assignments sa ON sa.staff_id = sp.staff_id
                WHERE sp.staff_id = ?
                  AND sa.school_id = ?
-                 AND sa.active_status = 1
+                 AND sa.active_status = TRUE
                  AND sa.deleted_at IS NULL
-                 AND u.active_status = 1
+                 AND u.active_status = TRUE
                  AND u.deleted_at IS NULL
                  AND u.role IN ('head_coach', 'assistant_coach', 'site_coordinator', 'coach_overseer')""",
             (staff_id, school_id),
@@ -307,7 +307,7 @@ def principal_coach_score(staff_id: int):
             """SELECT COUNT(*) AS cnt FROM eod_reports
                WHERE staff_id = ? AND school_id = ?
                  AND report_date BETWEEN ? AND ?
-                 AND submitted_on_time = 1
+                 AND submitted_on_time = TRUE
                  AND deleted_at IS NULL""",
             (staff_id, school_id, thirty_ago, today_iso),
         ).fetchone()["cnt"]
@@ -497,7 +497,7 @@ def principal_students():
         total_row = db.execute(
             """SELECT COUNT(*) AS cnt FROM students
                WHERE school_id = ?
-                 AND active_status = 1
+                 AND active_status = TRUE
                  AND deleted_at IS NULL
                  AND (LOWER(student_first_name) LIKE ? OR LOWER(student_last_name) LIKE ?)""",
             (school_id, search_pattern, search_pattern),
@@ -527,7 +527,7 @@ def principal_students():
                    AND a.deleted_at IS NULL
                LEFT JOIN assessment_scores asco ON asco.assessment_id = a.assessment_id
                WHERE s.school_id = ?
-                 AND s.active_status = 1
+                 AND s.active_status = TRUE
                  AND s.deleted_at IS NULL
                  AND (LOWER(s.student_first_name) LIKE ? OR LOWER(s.student_last_name) LIKE ?)
                GROUP BY s.student_id, s.student_first_name, s.student_last_name,

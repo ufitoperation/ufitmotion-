@@ -453,7 +453,7 @@ def create_session():
             valid_rows = db.execute(
                 f"SELECT student_id FROM students"
                 f" WHERE student_id IN ({placeholders})"
-                f" AND school_id = ? AND active_status = 1 AND deleted_at IS NULL",
+                f" AND school_id = ? AND active_status = TRUE AND deleted_at IS NULL",
                 (*student_ids, school_id),
             ).fetchall()
             valid_set = {r["student_id"] for r in valid_rows}
@@ -647,13 +647,13 @@ def list_eod_reports():
             scope_sql = (
                 "AND er.school_id IN"
                 " (SELECT school_id FROM staff_assignments"
-                "  WHERE staff_id = ? AND active_status = 1 AND deleted_at IS NULL)"
+                "  WHERE staff_id = ? AND active_status = TRUE AND deleted_at IS NULL)"
             )
             scope_params = [staff_id]
             if school_id_filter is not None:
                 assigned = db.execute(
                     "SELECT 1 FROM staff_assignments"
-                    " WHERE staff_id = ? AND school_id = ? AND active_status = 1 AND deleted_at IS NULL",
+                    " WHERE staff_id = ? AND school_id = ? AND active_status = TRUE AND deleted_at IS NULL",
                     (staff_id, school_id_filter),
                 ).fetchone()
                 if not assigned:
@@ -1200,7 +1200,7 @@ def list_incidents():
             scope_sql = (
                 "AND ir.school_id IN"
                 " (SELECT school_id FROM staff_assignments"
-                "  WHERE staff_id = ? AND active_status = 1 AND deleted_at IS NULL)"
+                "  WHERE staff_id = ? AND active_status = TRUE AND deleted_at IS NULL)"
             )
             scope_params = [staff_id]
         else:  # coach_overseer
@@ -1401,7 +1401,7 @@ def create_incident():
                           ?
                    FROM users u
                    JOIN staff_profiles sp ON sp.user_id = u.user_id
-                   JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status = 1 AND sa.deleted_at IS NULL
+                   JOIN staff_assignments sa ON sa.staff_id = sp.staff_id AND sa.active_status = TRUE AND sa.deleted_at IS NULL
                    JOIN schools sa_sc ON sa_sc.school_id = sa.school_id
                    JOIN schools sc ON sc.school_id = ?
                    WHERE u.role IN ('ceo', 'admin', 'coach_overseer')
@@ -1527,13 +1527,13 @@ def list_assessments():
             scope_sql = (
                 "AND a.school_id IN"
                 " (SELECT school_id FROM staff_assignments"
-                "  WHERE staff_id = ? AND active_status = 1 AND deleted_at IS NULL)"
+                "  WHERE staff_id = ? AND active_status = TRUE AND deleted_at IS NULL)"
             )
             scope_params = [staff_id]
             if school_id_filter is not None:
                 assigned = db.execute(
                     "SELECT 1 FROM staff_assignments"
-                    " WHERE staff_id = ? AND school_id = ? AND active_status = 1 AND deleted_at IS NULL",
+                    " WHERE staff_id = ? AND school_id = ? AND active_status = TRUE AND deleted_at IS NULL",
                     (staff_id, school_id_filter),
                 ).fetchone()
                 if not assigned:
@@ -1589,7 +1589,7 @@ def list_assessments():
             if role == "site_coordinator":
                 allowed = db.execute(
                     "SELECT 1 FROM staff_assignments"
-                    " WHERE staff_id = ? AND school_id = ? AND active_status = 1 AND deleted_at IS NULL",
+                    " WHERE staff_id = ? AND school_id = ? AND active_status = TRUE AND deleted_at IS NULL",
                     (staff_id, stu_school),
                 ).fetchone()
                 if not allowed:
@@ -1787,7 +1787,7 @@ def submit_assessment():
         # Rule 11: student existence and school scope
         student_row = db.execute(
             "SELECT student_id, school_id FROM students"
-            " WHERE student_id = ? AND active_status = 1 AND deleted_at IS NULL",
+            " WHERE student_id = ? AND active_status = TRUE AND deleted_at IS NULL",
             (student_id,),
         ).fetchone()
         if not student_row:
@@ -1828,7 +1828,7 @@ def submit_assessment():
         # Rule 13: skill_id validation
         for item in scores_raw:
             skill_row = db.execute(
-                "SELECT skill_id FROM skills WHERE skill_id = ? AND active_status = 1",
+                "SELECT skill_id FROM skills WHERE skill_id = ? AND active_status = TRUE",
                 (item["skill_id"],),
             ).fetchone()
             if not skill_row:
@@ -2129,7 +2129,7 @@ def submit_behavior_observation():
     db = get_db()
     try:
         student = db.execute(
-            "SELECT student_id, school_id FROM students WHERE student_id = ? AND active_status = 1 AND deleted_at IS NULL",
+            "SELECT student_id, school_id FROM students WHERE student_id = ? AND active_status = TRUE AND deleted_at IS NULL",
             (student_id,),
         ).fetchone()
         if not student:
@@ -2196,7 +2196,7 @@ def list_behavior_observations():
         if student_id:
             # Validate student access
             student = db.execute(
-                "SELECT school_id FROM students WHERE student_id = ? AND active_status = 1 AND deleted_at IS NULL",
+                "SELECT school_id FROM students WHERE student_id = ? AND active_status = TRUE AND deleted_at IS NULL",
                 (student_id,),
             ).fetchone()
             if not student:
@@ -2216,7 +2216,7 @@ def list_behavior_observations():
             elif role == "site_coordinator":
                 sql += (" AND bo.school_id IN"
                         " (SELECT school_id FROM staff_assignments"
-                        "  WHERE staff_id = ? AND active_status = 1 AND deleted_at IS NULL)")
+                        "  WHERE staff_id = ? AND active_status = TRUE AND deleted_at IS NULL)")
                 params.append(staff_id)
             elif role == "coach_overseer":
                 overseer_school = user.get("school_id")
@@ -2487,7 +2487,7 @@ def _get_head_coach_staff_id(db, user_id: int):
            FROM staff_profiles sp
            JOIN staff_assignments sa ON sa.staff_id = sp.staff_id
            WHERE sp.user_id = ?
-             AND sa.active_status = 1
+             AND sa.active_status = TRUE
              AND sa.deleted_at IS NULL
              AND sp.deleted_at IS NULL
            ORDER BY sa.created_at DESC LIMIT 1""",
@@ -2514,9 +2514,9 @@ def get_coach_subordinates():
                JOIN staff_profiles sp ON sp.user_id = u.user_id AND sp.deleted_at IS NULL
                JOIN staff_assignments sa ON sa.staff_id = sp.staff_id
                WHERE sa.school_id = ?
-                 AND sa.active_status = 1
+                 AND sa.active_status = TRUE
                  AND sa.deleted_at IS NULL
-                 AND u.active_status = 1
+                 AND u.active_status = TRUE
                  AND u.deleted_at IS NULL
                  AND u.role = 'assistant_coach'
                ORDER BY u.last_name ASC, u.first_name ASC""",
@@ -2568,7 +2568,7 @@ def submit_coach_evaluation():
                JOIN staff_profiles sp ON sp.staff_id = sa.staff_id
                JOIN users u ON u.user_id = sp.user_id
                WHERE sa.staff_id = ? AND sa.school_id = ?
-                 AND sa.active_status = 1 AND sa.deleted_at IS NULL
+                 AND sa.active_status = TRUE AND sa.deleted_at IS NULL
                  AND sp.deleted_at IS NULL AND u.role = 'assistant_coach'""",
             (evaluated_staff_id, school_id),
         ).fetchone()
