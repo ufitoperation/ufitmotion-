@@ -1336,7 +1336,19 @@ async function loadStudentsGrowth(container) {
   const gc = document.getElementById('growth-content');
   if (!gc) return;
   const byS = growthData?.by_school || [];
+  const byDomain = growthData?.by_skill_domain || [];
+  const bySkill = growthData?.by_skill || [];
   const schoolOpts = schoolList.map(s => `<option value="${s.school_id}">${esc(s.school_name)}</option>`).join('');
+
+  const _lvlColor = v => v == null ? 'var(--color-border)' : v >= 4 ? 'var(--color-success)' : v >= 3 ? 'var(--color-warning)' : 'var(--color-danger)';
+  const _pct = v => v == null ? 0 : Math.min(100, Math.round((v / 5) * 100));
+  const _fmtSkill = n => n.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+  const skillsByDomain = {};
+  bySkill.forEach(sk => {
+    if (!skillsByDomain[sk.domain_id]) skillsByDomain[sk.domain_id] = [];
+    skillsByDomain[sk.domain_id].push(sk);
+  });
 
   gc.innerHTML = `
     <div class="stats-grid" style="margin-bottom:20px;">
@@ -1363,6 +1375,47 @@ async function loadStudentsGrowth(container) {
           </tr>`;
         }).join('')}</tbody>
       </table></div>
+    </div>` : ''}
+    ${byDomain.length ? `
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card-header">
+        <div class="card-title">Skill Performance Overview</div>
+        <div class="text-caption">All students · all assessment windows · scale 1–5</div>
+      </div>
+      <div style="padding:0 20px 20px;">
+        ${byDomain.map(d => {
+          const dSkills = skillsByDomain[d.skill_domain_id] || [];
+          const avg = d.avg_raw_level;
+          return `
+            <div style="margin-bottom:28px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                <div style="font-weight:600;font-size:0.95rem;">${esc(d.domain_name)}</div>
+                <div style="font-weight:700;color:${_lvlColor(avg)};font-size:1.1rem;">${avg != null ? Number(avg).toFixed(1) : '—'}<span style="font-size:0.75rem;color:var(--color-text-secondary);font-weight:400;"> / 5</span></div>
+              </div>
+              <div style="background:var(--color-border);border-radius:6px;height:10px;margin-bottom:16px;">
+                <div style="width:${_pct(avg)}%;background:${_lvlColor(avg)};border-radius:6px;height:10px;"></div>
+              </div>
+              ${dSkills.length ? `
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px 24px;">
+                  ${dSkills.map(sk => `
+                    <div>
+                      <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
+                        <span style="font-size:0.8rem;color:var(--color-text-secondary);">${esc(_fmtSkill(sk.skill_name))}</span>
+                        <span style="font-size:0.8rem;font-weight:600;color:${_lvlColor(sk.avg_raw_level)};">${sk.avg_raw_level != null ? Number(sk.avg_raw_level).toFixed(1) : '—'}</span>
+                      </div>
+                      <div style="background:var(--color-border);border-radius:3px;height:5px;">
+                        <div style="width:${_pct(sk.avg_raw_level)}%;background:${_lvlColor(sk.avg_raw_level)};border-radius:3px;height:5px;"></div>
+                      </div>
+                    </div>`).join('')}
+                </div>` : ''}
+            </div>`;
+        }).join('')}
+        <div style="padding-top:12px;border-top:1px solid var(--color-border);display:flex;gap:16px;flex-wrap:wrap;font-size:0.75rem;color:var(--color-text-secondary);">
+          <span style="display:flex;align-items:center;gap:5px;"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--color-success);"></span>4.0–5.0 On Track</span>
+          <span style="display:flex;align-items:center;gap:5px;"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--color-warning);"></span>3.0–3.9 Developing</span>
+          <span style="display:flex;align-items:center;gap:5px;"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--color-danger);"></span>Below 3.0 Needs Focus</span>
+        </div>
+      </div>
     </div>` : ''}
     <div class="card">
       <div class="card-header">

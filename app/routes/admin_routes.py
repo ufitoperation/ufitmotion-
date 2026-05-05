@@ -2403,6 +2403,47 @@ def admin_students_growth():
             for r in domain_rows
         ]
 
+        # Per-skill averages grouped under each domain
+        if window_id is not None:
+            skill_rows = db.execute(
+                """SELECT sk.skill_id, sk.skill_name, sd.domain_id, sd.domain_name,
+                          ROUND(AVG(CAST(asco.raw_level AS REAL)), 2) AS avg_raw_level,
+                          COUNT(DISTINCT a.student_id) AS student_count
+                   FROM assessment_scores asco
+                   JOIN skills sk ON sk.skill_id = asco.skill_id
+                   JOIN skill_domains sd ON sd.domain_id = sk.domain_id
+                   JOIN assessments a ON a.assessment_id = asco.assessment_id
+                   WHERE a.deleted_at IS NULL AND a.window_id = ?
+                   GROUP BY sk.skill_id, sd.domain_id
+                   ORDER BY sd.domain_name, sk.skill_name""",
+                (window_id,),
+            ).fetchall()
+        else:
+            skill_rows = db.execute(
+                """SELECT sk.skill_id, sk.skill_name, sd.domain_id, sd.domain_name,
+                          ROUND(AVG(CAST(asco.raw_level AS REAL)), 2) AS avg_raw_level,
+                          COUNT(DISTINCT a.student_id) AS student_count
+                   FROM assessment_scores asco
+                   JOIN skills sk ON sk.skill_id = asco.skill_id
+                   JOIN skill_domains sd ON sd.domain_id = sk.domain_id
+                   JOIN assessments a ON a.assessment_id = asco.assessment_id
+                   WHERE a.deleted_at IS NULL
+                   GROUP BY sk.skill_id, sd.domain_id
+                   ORDER BY sd.domain_name, sk.skill_name"""
+            ).fetchall()
+
+        by_skill = [
+            {
+                "skill_id": r["skill_id"],
+                "skill_name": r["skill_name"],
+                "domain_id": r["domain_id"],
+                "domain_name": r["domain_name"],
+                "avg_raw_level": r["avg_raw_level"],
+                "student_count": r["student_count"],
+            }
+            for r in skill_rows
+        ]
+
         audit(db, user["user_id"], "READ", "assessments", None,
               new_values={"scope": "admin_students_growth", "window_id": window_id, "org_id": org_id})
         db.commit()
@@ -2413,6 +2454,7 @@ def admin_students_growth():
             "total_students": total_students,
             "by_school": by_school,
             "by_skill_domain": by_skill_domain,
+            "by_skill": by_skill,
         })
     except Exception:
         return jsonify({"error": "Could not load student growth data — please try again or contact support."}), 500
