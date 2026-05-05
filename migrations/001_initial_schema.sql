@@ -807,9 +807,10 @@ CREATE TABLE IF NOT EXISTS audit_log (
     log_id      BIGSERIAL PRIMARY KEY,
     user_id     BIGINT      REFERENCES users (user_id) ON DELETE SET NULL,
     action      TEXT        NOT NULL
-                    CHECK (action IN (
+                    CHECK (LOWER(action) IN (
                         'create', 'update', 'delete', 'soft_delete',
-                        'login', 'logout', 'export'
+                        'insert', 'read', 'login', 'logout',
+                        'login_failed', 'export'
                     )),
     table_name  TEXT        NOT NULL,
     record_id   BIGINT,
