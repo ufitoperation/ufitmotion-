@@ -70,12 +70,22 @@ def _get_org_scope(db, user) -> Optional[int]:
     if user is None or user["role"] in ("ceo", "admin"):
         return None
     school_id = user.get("school_id")
-    if not school_id:
-        return None
-    row = db.execute(
-        "SELECT organization_id FROM schools WHERE school_id = ? AND deleted_at IS NULL", (school_id,)
-    ).fetchone()
-    return row["organization_id"] if row else None
+    if school_id:
+        row = db.execute(
+            "SELECT organization_id FROM schools WHERE school_id = ? AND deleted_at IS NULL", (school_id,)
+        ).fetchone()
+        return row["organization_id"] if row else None
+    if user["role"] == "coach_overseer":
+        # Resolve org via staff_assignments when school_id is missing from session
+        row = db.execute(
+            """SELECT sc.organization_id FROM staff_assignments sa
+               JOIN schools sc ON sc.school_id = sa.school_id
+               WHERE sa.staff_id = ? AND sa.active_status = 1
+               AND sc.deleted_at IS NULL LIMIT 1""",
+            (user["user_id"],)
+        ).fetchone()
+        return row["organization_id"] if row else None
+    return None
 
 
 # ===========================================================================
@@ -864,10 +874,19 @@ def delete_student(student_id: int):
     db = get_db()
     try:
         row = db.execute(
-            "SELECT student_id FROM students WHERE student_id = ? AND deleted_at IS NULL", (student_id,)
+            "SELECT student_id, school_id FROM students WHERE student_id = ? AND deleted_at IS NULL", (student_id,)
         ).fetchone()
         if not row:
             return jsonify({"error": "Student not found."}), 404
+
+        org_id = _get_org_scope(db, user)
+        if org_id is not None:
+            school = db.execute(
+                "SELECT organization_id FROM schools WHERE school_id = ? AND deleted_at IS NULL",
+                (row["school_id"],)
+            ).fetchone()
+            if not school or school["organization_id"] != org_id:
+                return jsonify({"error": "Student not found."}), 404
 
         ts = now_utc()
         db.execute(
@@ -968,11 +987,20 @@ def update_student(student_id: int):
     db = get_db()
     try:
         row = db.execute(
-            "SELECT student_id FROM students WHERE student_id = ? AND deleted_at IS NULL",
+            "SELECT student_id, school_id FROM students WHERE student_id = ? AND deleted_at IS NULL",
             (student_id,),
         ).fetchone()
         if not row:
             return jsonify({"error": "Student not found."}), 404
+
+        org_id = _get_org_scope(db, user)
+        if org_id is not None:
+            school = db.execute(
+                "SELECT organization_id FROM schools WHERE school_id = ? AND deleted_at IS NULL",
+                (row["school_id"],)
+            ).fetchone()
+            if not school or school["organization_id"] != org_id:
+                return jsonify({"error": "Student not found."}), 404
 
         ALLOWED = {
             "student_first_name": (str, 100),

@@ -1614,7 +1614,7 @@ async function loadCoachDashboard(container) {
     const [sessRes, eodRes, winRes] = await Promise.allSettled([
       api('GET', '/api/sessions?per_page=5'),
       api('GET', '/api/eod-reports?per_page=5'),
-      api('GET', '/api/assessment-windows'),
+      api('GET', '/api/coach/assessment-windows'),
     ]);
     const sessions = sessRes.status === 'fulfilled' ? (sessRes.value.sessions || []) : [];
     const eods = eodRes.status === 'fulfilled' ? (eodRes.value.reports || []) : [];
@@ -2634,9 +2634,9 @@ async function loadPrincipalSkillAverages(container) {
     const gradeSections = byGrade.length ? byGrade.map(g => `
       <div class="card" style="margin-top:16px;">
         <div class="card-header">
-          <div class="card-title">${esc(g.grade_label || g.grade || '')}</div>
+          <div class="card-title">Grade ${esc(g.grade_level || '')}</div>
         </div>
-        <div style="padding:0 4px;">${domainBars(g.domain_averages || [])}</div>
+        <div style="padding:0 4px;">${domainBars(g.domains || [])}</div>
       </div>`).join('') : '';
 
     container.innerHTML = `

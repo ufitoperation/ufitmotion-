@@ -25,7 +25,7 @@ def run():
         db = get_db()
 
         org = db.execute(
-            "SELECT organization_id FROM organizations WHERE organization_name = 'Ufit Demo District'"
+            "SELECT organization_id FROM organizations WHERE organization_name IN ('Ufit Demo Unified', 'Ufit Demo District')"
         ).fetchone()
 
         # Always clean up stale demo users regardless of org state

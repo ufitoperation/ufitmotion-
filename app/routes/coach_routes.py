@@ -2257,7 +2257,7 @@ def list_behavior_observations():
 # Coaches read windows; admins create them (see admin_routes.py).
 # ===========================================================================
 
-@coach_bp.route("/api/assessment-windows", methods=["GET"])
+@coach_bp.route("/api/coach/assessment-windows", methods=["GET"])
 @coach_required
 def list_assessment_windows():
     user = current_user()
