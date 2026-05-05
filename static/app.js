@@ -2803,52 +2803,122 @@ async function openPrincipalCoachScoreModal(staffId) {
 async function loadPrincipalStudents(container) {
   let page = 1;
   const perPage = 25;
+  let skillData = null;
+
+  // Fetch skill averages once upfront; roster re-fetches on page/search change
+  container.innerHTML = `<div class="text-h2" style="margin-bottom:16px;">Students</div>${renderSkeleton(6)}`;
+  try {
+    skillData = await api('GET', '/api/principal/skill-averages');
+  } catch (_) {}
+
+  const _sLvlColor = v => v == null ? 'var(--color-border)' : v >= 4 ? 'var(--color-success)' : v >= 3 ? 'var(--color-warning)' : 'var(--color-danger)';
+  const _sPct = v => v == null ? 0 : Math.min(100, Math.round((v / 5) * 100));
+  const _sFmtSkill = n => n.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+  function renderSkillCard() {
+    const bySkill = skillData?.by_skill || [];
+    if (!bySkill.length) return '';
+    // Compute domain averages from skill data (raw_level scale 1-5)
+    const domainMap = {};
+    bySkill.forEach(sk => {
+      if (!domainMap[sk.domain_id]) domainMap[sk.domain_id] = { domain_name: sk.domain_name, total: 0, count: 0, skills: [] };
+      domainMap[sk.domain_id].total += sk.avg_raw_level || 0;
+      domainMap[sk.domain_id].count += 1;
+      domainMap[sk.domain_id].skills.push(sk);
+    });
+    const domains = Object.values(domainMap).map(d => ({ ...d, avg_raw_level: d.count ? Math.round(d.total / d.count * 100) / 100 : null }));
+    return `
+      <div class="card" style="margin-bottom:20px;">
+        <div class="card-header">
+          <div class="card-title">Skill Performance Overview</div>
+          <div class="text-caption">Your school · latest assessment per student · scale 1–5</div>
+        </div>
+        <div style="padding:0 20px 20px;">
+          ${domains.map(d => `
+            <div style="margin-bottom:28px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                <div style="font-weight:600;font-size:0.95rem;">${esc(d.domain_name)}</div>
+                <div style="font-weight:700;color:${_sLvlColor(d.avg_raw_level)};font-size:1.1rem;">${d.avg_raw_level != null ? Number(d.avg_raw_level).toFixed(1) : '—'}<span style="font-size:0.75rem;color:var(--color-text-secondary);font-weight:400;"> / 5</span></div>
+              </div>
+              <div style="background:var(--color-border);border-radius:6px;height:10px;margin-bottom:16px;">
+                <div style="width:${_sPct(d.avg_raw_level)}%;background:${_sLvlColor(d.avg_raw_level)};border-radius:6px;height:10px;"></div>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px 24px;">
+                ${d.skills.map(sk => `
+                  <div>
+                    <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
+                      <span style="font-size:0.8rem;color:var(--color-text-secondary);">${esc(_sFmtSkill(sk.skill_name))}</span>
+                      <span style="font-size:0.8rem;font-weight:600;color:${_sLvlColor(sk.avg_raw_level)};">${sk.avg_raw_level != null ? Number(sk.avg_raw_level).toFixed(1) : '—'}</span>
+                    </div>
+                    <div style="background:var(--color-border);border-radius:3px;height:5px;">
+                      <div style="width:${_sPct(sk.avg_raw_level)}%;background:${_sLvlColor(sk.avg_raw_level)};border-radius:3px;height:5px;"></div>
+                    </div>
+                  </div>`).join('')}
+              </div>
+            </div>`).join('')}
+          <div style="padding-top:12px;border-top:1px solid var(--color-border);display:flex;gap:16px;flex-wrap:wrap;font-size:0.75rem;color:var(--color-text-secondary);">
+            <span style="display:flex;align-items:center;gap:5px;"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--color-success);"></span>4.0–5.0 On Track</span>
+            <span style="display:flex;align-items:center;gap:5px;"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--color-warning);"></span>3.0–3.9 Developing</span>
+            <span style="display:flex;align-items:center;gap:5px;"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--color-danger);"></span>Below 3.0 Needs Focus</span>
+          </div>
+        </div>
+      </div>`;
+  }
 
   async function fetch(p = 1) {
-    container.innerHTML = `<div class="text-h2" style="margin-bottom:16px;">Students</div>${renderSkeleton(6)}`;
+    const search = (state._studentSearch || '');
+    const rosterEl = document.getElementById('principal-roster');
+    if (rosterEl) rosterEl.innerHTML = renderSkeleton(4);
     try {
-      const search = (state._studentSearch || '');
       const d = await api('GET', `/api/principal/students?page=${p}&per_page=${perPage}${search ? '&search=' + encodeURIComponent(search) : ''}`);
       const students = d.students || [];
       const total = d.total || 0;
-      container.innerHTML = `
-        <div class="page-header">
-          <div class="text-h2">Students</div>
-          <input class="form-input" id="student-search" type="search" placeholder="Search by name…" value="${esc(search)}" style="max-width:240px;" />
+      if (!rosterEl) return;
+      rosterEl.innerHTML = students.length ? `
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Name</th><th>Grade</th><th>Last Assessed</th><th>Avg Level</th></tr></thead>
+            <tbody>${students.map(s => {
+              const lvl = s.avg_raw_level;
+              const lvlColor = lvl == null ? '' : lvl >= 4 ? 'var(--color-success)' : lvl >= 3 ? 'var(--color-warning)' : 'var(--color-danger)';
+              const lvlDisplay = lvl != null ? `<span style="font-weight:700;color:${lvlColor};">${lvl.toFixed(1)}</span><span class="text-caption"> /5</span>` : '—';
+              return `<tr style="cursor:pointer;" onclick="openStudentProgressModal(${s.student_id})">
+              <td>${esc(s.first_name)} ${esc(s.last_name)}</td>
+              <td>${esc(s.grade_level || '—')}</td>
+              <td>${fmtDate(s.latest_assessment_date)}</td>
+              <td>${lvlDisplay}</td>
+              <td><span style="color:var(--color-primary);font-size:0.8rem;">View →</span></td>
+            </tr>`;}).join('')}</tbody>
+          </table>
         </div>
-        ${students.length ? `
-          <div class="table-wrap">
-            <table class="data-table">
-              <thead><tr><th>Name</th><th>Grade</th><th>Last Assessed</th><th>Avg Level</th></tr></thead>
-              <tbody>${students.map(s => {
-                const lvl = s.avg_raw_level;
-                const lvlColor = lvl == null ? '' : lvl >= 4 ? 'var(--color-success)' : lvl >= 3 ? 'var(--color-warning)' : 'var(--color-danger)';
-                const lvlDisplay = lvl != null ? `<span style="font-weight:700;color:${lvlColor};">${lvl.toFixed(1)}</span><span class="text-caption"> /5</span>` : '—';
-                return `<tr style="cursor:pointer;" onclick="openStudentProgressModal(${s.student_id})">
-                <td>${esc(s.first_name)} ${esc(s.last_name)}</td>
-                <td>${esc(s.grade_level || '—')}</td>
-                <td>${fmtDate(s.latest_assessment_date)}</td>
-                <td>${lvlDisplay}</td>
-                <td><span style="color:var(--color-primary);font-size:0.8rem;">View →</span></td>
-              </tr>`;}).join('')}</tbody>
-            </table>
-          </div>
-          <div class="pagination">
-            ${p > 1 ? `<button class="btn btn-ghost btn-sm" id="prev-page">← Previous</button>` : ''}
-            <span class="text-caption">Showing ${(p-1)*perPage+1}–${Math.min(p*perPage, total)} of ${total}</span>
-            ${p * perPage < total ? `<button class="btn btn-ghost btn-sm" id="next-page">Next →</button>` : ''}
-          </div>` : `<div class="empty-state"><div class="empty-state-icon">${iconStudents()}</div><div class="empty-state-title">No students found</div></div>`}`;
+        <div class="pagination">
+          ${p > 1 ? `<button class="btn btn-ghost btn-sm" id="prev-page">← Previous</button>` : ''}
+          <span class="text-caption">Showing ${(p-1)*perPage+1}–${Math.min(p*perPage, total)} of ${total}</span>
+          ${p * perPage < total ? `<button class="btn btn-ghost btn-sm" id="next-page">Next →</button>` : ''}
+        </div>` : `<div class="empty-state"><div class="empty-state-icon">${iconStudents()}</div><div class="empty-state-title">No students found</div></div>`;
 
       document.getElementById('prev-page')?.addEventListener('click', () => fetch(p - 1));
       document.getElementById('next-page')?.addEventListener('click', () => fetch(p + 1));
-      let searchTimer;
-      document.getElementById('student-search')?.addEventListener('input', e => {
-        clearTimeout(searchTimer);
-        searchTimer = setTimeout(() => { state._studentSearch = e.target.value; fetch(1); }, 350);
-      });
-    } catch (err) { container.innerHTML = errorCard(err.message); }
+    } catch (err) { if (rosterEl) rosterEl.innerHTML = errorCard(err.message); }
   }
+
+  container.innerHTML = `
+    <div class="page-header" style="margin-bottom:20px;">
+      <div class="text-h2">Students</div>
+      <input class="form-input" id="student-search" type="search" placeholder="Search by name…" value="${esc(state._studentSearch || '')}" style="max-width:240px;" />
+    </div>
+    ${renderSkillCard()}
+    <div class="card">
+      <div class="card-header"><div class="card-title">Student Roster</div></div>
+      <div id="principal-roster">${renderSkeleton(4)}</div>
+    </div>`;
+
   fetch(page);
+  let searchTimer;
+  document.getElementById('student-search')?.addEventListener('input', e => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => { state._studentSearch = e.target.value; fetch(1); }, 350);
+  });
 }
 
 /* ============================================================

@@ -408,6 +408,28 @@ def principal_skill_averages():
                 "student_count": r["student_count"],
             })
 
+        # Per-skill averages using raw_level (1-5 scale) for student-page skill card
+        skill_rows = db.execute(
+            """SELECT sk.skill_id, sk.skill_name, sd.domain_id, sd.domain_name,
+                      ROUND(AVG(CAST(asco.raw_level AS REAL)), 2) AS avg_raw_level,
+                      COUNT(DISTINCT a.student_id) AS student_count
+               FROM assessments a
+               JOIN (
+                   SELECT student_id, MAX(assessment_date) AS latest_date
+                   FROM assessments
+                   WHERE school_id = ? AND deleted_at IS NULL
+                   GROUP BY student_id
+               ) latest ON latest.student_id = a.student_id
+                       AND latest.latest_date = a.assessment_date
+               JOIN assessment_scores asco ON asco.assessment_id = a.assessment_id
+               JOIN skills sk ON sk.skill_id = asco.skill_id
+               JOIN skill_domains sd ON sd.domain_id = sk.domain_id
+               WHERE a.school_id = ? AND a.deleted_at IS NULL
+               GROUP BY sk.skill_id, sd.domain_id
+               ORDER BY sd.domain_name, sk.skill_name""",
+            (school_id, school_id),
+        ).fetchall()
+
         audit(db, user["user_id"], "READ", "students", None,
               new_values={"scope": "principal_skill_averages", "school_id": school_id})
         db.commit()
@@ -421,6 +443,12 @@ def principal_skill_averages():
             "by_grade": [
                 {"grade_level": g, "domains": domains}
                 for g, domains in sorted(by_grade.items())
+            ],
+            "by_skill": [
+                {"skill_id": r["skill_id"], "skill_name": r["skill_name"],
+                 "domain_id": r["domain_id"], "domain_name": r["domain_name"],
+                 "avg_raw_level": r["avg_raw_level"], "student_count": r["student_count"]}
+                for r in skill_rows
             ],
         })
     except Exception:
