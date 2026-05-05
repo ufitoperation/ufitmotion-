@@ -102,7 +102,10 @@ def _supabase_pooler_dsns(base_url: str) -> list[str]:
         return [base_url]
 
     user, password, dbname = m.group(1), m.group(2), m.group(3)
-    dsns = []
+    # Try direct URL first (fastest, avoids wrong-region pooler timeouts),
+    # then pooler DSNs as fallback.
+    direct = base_url if "sslmode=" in base_url else base_url + ("&" if "?" in base_url else "?") + "sslmode=require"
+    dsns = [direct]
     for region in _SUPABASE_REGIONS:
         dsns.append(
             f"postgresql://{user}:{password}@{region}.pooler.supabase.com:6543/{dbname}?sslmode=require"
