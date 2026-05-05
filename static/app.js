@@ -2585,15 +2585,16 @@ async function loadPrincipalDashboard(container) {
           <button class="btn btn-ghost btn-sm" onclick="navigate('students')">View Students</button>
         </div>
         ${d.coaches?.length ? `<div class="table-wrap"><table class="data-table">
-          <thead><tr><th>Name</th><th>Role</th><th>Performance Score</th><th>Status</th></tr></thead>
-          <tbody>${(d.coaches || []).map(c => `<tr>
-            <td>${esc(c.first_name)} ${esc(c.last_name)}</td>
+          <thead><tr><th>Name</th><th>Role</th><th>Performance Score</th><th>Status</th><th></th></tr></thead>
+          <tbody>${(d.coaches || []).map(c => `<tr style="cursor:pointer;" onclick="openPrincipalCoachScoreModal(${c.staff_id})">
+            <td style="font-weight:600;">${esc(c.first_name)} ${esc(c.last_name)}</td>
             <td><span class="badge">${fmtLabel(c.role)}</span></td>
             <td>
-              ${c.composite_score != null ? `<span style="font-weight:700;">${Math.round(c.composite_score)}/100</span>` : '—'}
+              ${c.composite_score != null ? `<span style="font-weight:700;">${Math.round(c.composite_score)}/100</span>` : '<span style="color:var(--color-text-secondary);">Not yet scored</span>'}
               ${c.period_label ? `<div class="text-caption">${esc(c.period_label)}</div>` : ''}
             </td>
             <td>${coachBadge(c.reliability_badge)}</td>
+            <td><span style="color:var(--color-primary);font-size:0.8rem;">View breakdown →</span></td>
           </tr>`).join('')}</tbody>
         </table></div>` : `<div class="empty-state" style="padding:24px 0 8px;">
           <div class="empty-state-text">No coaches assigned yet — contact Ufit to add coaches to this school.</div>
@@ -2655,6 +2656,95 @@ async function loadPrincipalSkillAverages(container) {
   } catch (err) {
     container.innerHTML = errorCard(err.message);
   }
+}
+
+async function openPrincipalCoachScoreModal(staffId) {
+  openModal(`<div class="modal-header"><h2 class="modal-title">Coach Performance</h2><button class="modal-close btn btn-ghost btn-sm" aria-label="Close" onclick="closeModal()">${iconClose()}</button></div>
+    <div class="modal-body"><div class="spinner"></div><div class="loading-text">Loading…</div></div>`);
+
+  let d;
+  try {
+    d = await api('GET', `/api/principal/coaches/${staffId}/score`);
+  } catch (err) {
+    const mb = document.querySelector('.modal-body');
+    if (mb) mb.innerHTML = errorCard(err.message);
+    return;
+  }
+
+  const coach = d.coach || {};
+  const snap = d.snapshot;
+  const act = d.activity || {};
+
+  const scoreBar = (score, color) => {
+    const pct = Math.min(Math.round(score ?? 0), 100);
+    const c = color || (pct >= 80 ? 'var(--color-success)' : pct >= 60 ? 'var(--color-warning)' : 'var(--color-danger)');
+    return `<div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
+      <div style="flex:1;background:var(--color-border);border-radius:4px;height:10px;">
+        <div style="width:${pct}%;background:${c};border-radius:4px;height:10px;transition:width 500ms;"></div>
+      </div>
+      <span style="min-width:44px;font-size:0.82rem;font-weight:700;text-align:right;">${score != null ? Math.round(score) : '—'}/100</span>
+    </div>`;
+  };
+
+  const metricRow = (label, desc, score) => `
+    <div style="padding:14px 0;border-bottom:1px solid var(--color-border);">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <span style="font-weight:600;font-size:0.9rem;">${label}</span>
+        <span style="font-size:0.78rem;color:var(--color-text-secondary);">${score != null ? Math.round(score) + '/100' : 'No data'}</span>
+      </div>
+      <div style="font-size:0.75rem;color:var(--color-text-secondary);margin:2px 0 6px;">${desc}</div>
+      ${score != null ? scoreBar(score) : '<div style="font-size:0.75rem;color:var(--color-text-secondary);">Not yet evaluated</div>'}
+    </div>`;
+
+  const bandColors = { exemplary: 'success', proficient: 'info', developing: 'warning', needs_improvement: 'error' };
+  const bandLabel = { exemplary: 'Exemplary', proficient: 'Proficient', developing: 'Developing', needs_improvement: 'Needs Support' };
+  const band = snap?.performance_band;
+
+  const mb = document.querySelector('.modal-body');
+  if (!mb) return;
+  mb.innerHTML = `
+    <div style="margin-bottom:20px;">
+      <div style="font-size:1.1rem;font-weight:700;">${esc(coach.first_name)} ${esc(coach.last_name)}</div>
+      <div style="font-size:0.85rem;color:var(--color-text-secondary);">${fmtLabel(coach.role || '')}</div>
+    </div>
+
+    ${!snap ? `<div class="empty-state" style="padding:24px 0;">
+      <div class="empty-state-text">No performance score available yet for this coach.</div>
+    </div>` : `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px;background:var(--color-bg-secondary);border-radius:10px;margin-bottom:20px;">
+      <div>
+        <div style="font-size:0.75rem;font-weight:700;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em;">Overall Score</div>
+        <div style="font-size:2.2rem;font-weight:800;color:${snap.overall_score >= 80 ? 'var(--color-success)' : snap.overall_score >= 60 ? 'var(--color-warning)' : 'var(--color-danger)'};">${Math.round(snap.overall_score)}<span style="font-size:1rem;font-weight:400;color:var(--color-text-secondary);">/100</span></div>
+        ${snap.period_start ? `<div style="font-size:0.72rem;color:var(--color-text-secondary);">Period: ${esc(snap.period_start)} – ${esc(snap.period_end || '')}</div>` : ''}
+      </div>
+      <span class="badge badge-${bandColors[band] || 'secondary'}" style="font-size:0.85rem;padding:6px 14px;">${bandLabel[band] || esc(band || 'Unscored')}</span>
+    </div>
+
+    <div style="margin-bottom:8px;font-size:0.75rem;font-weight:700;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.06em;">Score Breakdown</div>
+    ${metricRow('Compliance', 'Following Ufit protocols, punctuality, and program standards.', snap.compliance_score)}
+    ${metricRow('Student Outcomes', 'Student skill growth and assessment participation rates.', snap.outcomes_score)}
+    ${metricRow('Observations', 'Quality scores from supervisor observations of sessions.', snap.observations_score)}
+
+    <div style="margin:20px 0 8px;font-size:0.75rem;font-weight:700;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.06em;">Operational Rates (Last 30 Days)</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px;">
+      <div style="background:var(--color-bg-secondary);border-radius:8px;padding:12px;text-align:center;">
+        <div style="font-size:1.5rem;font-weight:800;color:${(snap.eod_ontime_rate??0)>=80?'var(--color-success)':(snap.eod_ontime_rate??0)>=60?'var(--color-warning)':'var(--color-danger)'};">${snap.eod_ontime_rate != null ? Math.round(snap.eod_ontime_rate)+'%' : '—'}</div>
+        <div style="font-size:0.72rem;color:var(--color-text-secondary);margin-top:2px;">EOD Reports On-Time</div>
+      </div>
+      <div style="background:var(--color-bg-secondary);border-radius:8px;padding:12px;text-align:center;">
+        <div style="font-size:1.5rem;font-weight:800;color:${(snap.session_log_rate??0)>=80?'var(--color-success)':(snap.session_log_rate??0)>=60?'var(--color-warning)':'var(--color-danger)'};">${snap.session_log_rate != null ? Math.round(snap.session_log_rate)+'%' : '—'}</div>
+        <div style="font-size:0.72rem;color:var(--color-text-secondary);margin-top:2px;">Sessions Logged Rate</div>
+      </div>
+    </div>
+
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--color-border);">
+      <div style="font-size:0.75rem;font-weight:700;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;">Activity — Last 30 Days</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;">
+        <div style="font-size:0.85rem;"><strong>${act.sessions_logged_30d ?? 0}</strong> sessions logged</div>
+        <div style="font-size:0.85rem;"><strong>${act.eods_filed_30d ?? 0}</strong> EOD reports filed</div>
+        <div style="font-size:0.85rem;"><strong>${act.eods_ontime_30d ?? 0}</strong> on-time</div>
+      </div>
+    </div>`}`;
 }
 
 async function loadPrincipalStudents(container) {

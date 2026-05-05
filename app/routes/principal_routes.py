@@ -237,6 +237,106 @@ def principal_dashboard():
 
 
 
+@principal_bp.route("/api/principal/coaches/<int:staff_id>/score", methods=["GET"])
+@roles_required("principal", "school_staff")
+def principal_coach_score(staff_id: int):
+    """
+    Returns the latest performance score breakdown for a coach at the principal's school.
+    Principal can only view coaches assigned to their school — FERPA hard scope.
+    """
+    user = current_user()
+    db = get_db()
+    try:
+        school_id = _resolve_school_id(db, user["user_id"])
+        if not school_id:
+            return jsonify({"error": "No school assignment found for your account."}), 403
+
+        # Verify coach is at this principal's school
+        coach_row = db.execute(
+            """SELECT u.user_id, u.first_name, u.last_name, u.role, sp.staff_id
+               FROM users u
+               JOIN staff_profiles sp ON sp.user_id = u.user_id AND sp.deleted_at IS NULL
+               JOIN staff_assignments sa ON sa.staff_id = sp.staff_id
+               WHERE sp.staff_id = ?
+                 AND sa.school_id = ?
+                 AND sa.active_status = 1
+                 AND sa.deleted_at IS NULL
+                 AND u.active_status = 1
+                 AND u.deleted_at IS NULL
+                 AND u.role IN ('head_coach', 'assistant_coach', 'site_coordinator', 'coach_overseer')""",
+            (staff_id, school_id),
+        ).fetchone()
+        if not coach_row:
+            return jsonify({"error": "Coach not found at your school."}), 404
+
+        # Latest snapshot
+        snap = db.execute(
+            """SELECT overall_score, compliance_score, outcomes_score, observations_score,
+                      performance_band, eod_ontime_rate, session_log_rate,
+                      incident_file_rate, assessment_part_rate, period_start, period_end
+               FROM coach_performance_snapshots
+               WHERE staff_id = ?
+               ORDER BY created_at DESC LIMIT 1""",
+            (staff_id,),
+        ).fetchone()
+
+        # Recent activity counts (last 30 days)
+        today = _now_pacific().date()
+        thirty_ago = (today - datetime.timedelta(days=30)).isoformat()
+        today_iso = today.isoformat()
+
+        sessions_logged = db.execute(
+            """SELECT COUNT(*) AS cnt FROM sessions s
+               JOIN session_staff ss ON ss.session_id = s.session_id
+               WHERE ss.staff_id = ? AND s.school_id = ?
+                 AND s.session_date BETWEEN ? AND ?
+                 AND s.deleted_at IS NULL""",
+            (staff_id, school_id, thirty_ago, today_iso),
+        ).fetchone()["cnt"]
+
+        eods_filed = db.execute(
+            """SELECT COUNT(*) AS cnt FROM eod_reports
+               WHERE staff_id = ? AND school_id = ?
+                 AND report_date BETWEEN ? AND ?
+                 AND deleted_at IS NULL""",
+            (staff_id, school_id, thirty_ago, today_iso),
+        ).fetchone()["cnt"]
+
+        eods_ontime = db.execute(
+            """SELECT COUNT(*) AS cnt FROM eod_reports
+               WHERE staff_id = ? AND school_id = ?
+                 AND report_date BETWEEN ? AND ?
+                 AND submitted_on_time = 1
+                 AND deleted_at IS NULL""",
+            (staff_id, school_id, thirty_ago, today_iso),
+        ).fetchone()["cnt"]
+
+        audit(db, user["user_id"], "READ", "coach_performance_snapshots", staff_id,
+              new_values={"scope": "principal_coach_score", "school_id": school_id})
+        db.commit()
+
+        return jsonify({
+            "ok": True,
+            "coach": {
+                "staff_id": staff_id,
+                "first_name": coach_row["first_name"],
+                "last_name": coach_row["last_name"],
+                "role": coach_row["role"],
+            },
+            "snapshot": dict(snap) if snap else None,
+            "activity": {
+                "sessions_logged_30d": sessions_logged,
+                "eods_filed_30d": eods_filed,
+                "eods_ontime_30d": eods_ontime,
+            },
+        })
+    except Exception:
+        logging.exception("principal_coach_score error")
+        return jsonify({"error": "Could not load coach score."}), 500
+    finally:
+        db.close()
+
+
 @principal_bp.route("/api/principal/skill-averages", methods=["GET"])
 @roles_required("principal", "school_staff")
 def principal_skill_averages():
