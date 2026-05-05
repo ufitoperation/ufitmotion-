@@ -3,6 +3,7 @@ import logging
 import traceback
 from datetime import timedelta
 from flask import Flask, g, jsonify, request
+from werkzeug.middleware.proxy_fix import ProxyFix
 from app.config import get_config
 from app.extensions import limiter
 
@@ -36,6 +37,9 @@ def create_app(config=None):
             traces_sample_rate=0.1,
             send_default_pii=False,
         )
+
+    # Trust Render's load-balancer so rate-limiter sees the real client IP.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
     limiter.init_app(app)
 
@@ -71,7 +75,9 @@ def create_app(config=None):
         if not request.path.startswith("/api/"):
             return
         # Auth endpoints accept plain form/JSON from password managers — exempt them.
-        if request.path in ("/api/auth/login", "/api/auth/forgot-password", "/api/auth/reset-password"):
+        # Webhook endpoint uses HMAC-SHA256 as its own auth layer — exempt from CSRF.
+        if request.path in ("/api/auth/login", "/api/auth/forgot-password", "/api/auth/reset-password",
+                            "/api/webhooks/hubspot"):
             return
         if request.headers.get("X-Requested-With") != "XMLHttpRequest":
             return jsonify({"error": "Forbidden."}), 403
@@ -92,7 +98,7 @@ def create_app(config=None):
         response.headers["X-Permitted-Cross-Domain-Policies"] = "none"
         csp = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline'; "
+            "script-src 'self'; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; "
             "img-src 'self' data:; "

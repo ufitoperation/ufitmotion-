@@ -76,15 +76,18 @@ def _get_org_scope(db, user) -> Optional[int]:
         ).fetchone()
         return row["organization_id"] if row else None
     if user["role"] == "coach_overseer":
-        # Resolve org via staff_assignments when school_id is missing from session
+        # Resolve org via staff_profiles → staff_assignments.
+        # staff_assignments.staff_id is the staff_profiles PK, not users.user_id.
         row = db.execute(
-            """SELECT sc.organization_id FROM staff_assignments sa
+            """SELECT sc.organization_id FROM staff_profiles sp
+               JOIN staff_assignments sa ON sa.staff_id = sp.staff_id
                JOIN schools sc ON sc.school_id = sa.school_id
-               WHERE sa.staff_id = ? AND sa.active_status = 1
-               AND sc.deleted_at IS NULL LIMIT 1""",
+               WHERE sp.user_id = ? AND sa.active_status = 1
+               AND sp.deleted_at IS NULL AND sc.deleted_at IS NULL LIMIT 1""",
             (user["user_id"],)
         ).fetchone()
-        return row["organization_id"] if row else None
+        # Return -1 (deny-all sentinel) when no org resolves — prevents global access.
+        return row["organization_id"] if row else -1
     return None
 
 
@@ -850,7 +853,7 @@ def create_student():
         )
         new_id = cur.lastrowid
         audit(db, user["user_id"], "INSERT", "students", new_id,
-              new_values={"school_id": school_id, "name": f"{first_name} {last_name}", "grade": grade_level})
+              new_values={"school_id": school_id, "grade": grade_level})
         db.commit()
 
         row = db.execute(
@@ -964,7 +967,7 @@ def import_students():
                     (school_id, first_name, last_name, local_id, grade_level, enrollment_start, ts),
                 )
                 audit(db, user["user_id"], "INSERT", "students", cur.lastrowid,
-                      new_values={"school_id": school_id, "name": f"{first_name} {last_name}", "source": "csv_import"})
+                      new_values={"school_id": school_id, "source": "csv_import"})
                 imported += 1
             except Exception as exc:
                 db.rollback()
@@ -2398,9 +2401,10 @@ def admin_students_growth():
                    JOIN skills sk ON sk.skill_id = asco.skill_id
                    JOIN skill_domains sd ON sd.domain_id = sk.domain_id
                    JOIN assessments a ON a.assessment_id = asco.assessment_id
-                   WHERE a.deleted_at IS NULL
-                   GROUP BY sd.domain_id, sd.domain_name
-                   ORDER BY sd.domain_name ASC"""
+                   WHERE a.deleted_at IS NULL"""
+                + org_assess_filter
+                + " GROUP BY sd.domain_id, sd.domain_name ORDER BY sd.domain_name ASC",
+                org_p,
             ).fetchall()
 
         by_skill_domain = [
@@ -2436,9 +2440,10 @@ def admin_students_growth():
                    JOIN skills sk ON sk.skill_id = asco.skill_id
                    JOIN skill_domains sd ON sd.domain_id = sk.domain_id
                    JOIN assessments a ON a.assessment_id = asco.assessment_id
-                   WHERE a.deleted_at IS NULL
-                   GROUP BY sk.skill_id, sd.domain_id
-                   ORDER BY sd.domain_name, sk.skill_name"""
+                   WHERE a.deleted_at IS NULL"""
+                + org_assess_filter
+                + " GROUP BY sk.skill_id, sd.domain_id ORDER BY sd.domain_name, sk.skill_name",
+                org_p,
             ).fetchall()
 
         by_skill = [

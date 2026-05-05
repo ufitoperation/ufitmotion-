@@ -110,8 +110,11 @@ def _run_migration(db) -> None:
             flush=True,
         )
 
-    # Run skills seed (safe to re-run — uses INSERT OR IGNORE)
-    skills_path = _find_migration_file("002_seed_skills.sql")
+    # Run skills seed — route to the correct dialect file.
+    # 002_seed_skills.sql uses SQLite-only INSERT OR IGNORE syntax.
+    # supabase/step3_seed_skills.sql uses ON CONFLICT DO NOTHING (Postgres).
+    skills_filename = "002_seed_skills.sql" if is_sqlite else "supabase/step3_seed_skills.sql"
+    skills_path = _find_migration_file(skills_filename)
     if skills_path:
         try:
             with open(skills_path, "r", encoding="utf-8") as fh:

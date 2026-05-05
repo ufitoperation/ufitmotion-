@@ -87,7 +87,7 @@ def _compliance_pillar(db, staff_id: int, school_id: int,
     ).fetchone()
     session_days = (session_days_row["session_days"] or 0) if session_days_row else 0
     eod_days = (eod_days_row["eod_days"] or 0) if eod_days_row else 0
-    session_log_rate = _safe_rate(session_days, eod_days)
+    session_log_rate = _safe_rate(eod_days, session_days)
 
     # Incident filing rate (conditional)
     flagged_row = db.execute(

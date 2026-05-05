@@ -1133,7 +1133,7 @@ def list_incidents():
         return jsonify({"error": "Authentication required."}), 401
 
     role = user["role"]
-    staff_id = user["staff_id"]
+    staff_id = user.get("staff_id")
     db = get_db()
 
     # --- Pagination ---
@@ -1423,33 +1423,31 @@ def create_incident():
             },
         )
         db.commit()
+
+        display_row = db.execute(
+            """SELECT ir.incident_id, ir.school_id, sc.school_name,
+                      ir.reported_by_staff_id AS staff_id,
+                      (u.first_name || ' ' || u.last_name) AS coach_name,
+                      ir.session_id, ir.student_id,
+                      ir.report_date, ir.incident_type, ir.severity_level,
+                      ir.description, ir.immediate_action_taken,
+                      ir.school_notified, ir.family_notified, ir.escalated_to_supervisor,
+                      ir.status, ir.resolution_notes, ir.created_at
+               FROM incident_reports ir
+               JOIN schools sc ON sc.school_id = ir.school_id
+               LEFT JOIN users u ON u.user_id = (
+                 SELECT sp2.user_id FROM staff_profiles sp2
+                 WHERE sp2.staff_id = ir.reported_by_staff_id
+               ) AND u.deleted_at IS NULL
+               WHERE ir.incident_id = ?""",
+            (incident_id,),
+        ).fetchone()
+        return jsonify({"ok": True, "incident": serialize_incident(display_row)}), 201
     except Exception:
         db.rollback()
-        db.close()
         raise
-
-    # Fetch display row with school_name + coach_name
-    display_row = db.execute(
-        """SELECT ir.incident_id, ir.school_id, sc.school_name,
-                  ir.reported_by_staff_id AS staff_id,
-                  (u.first_name || ' ' || u.last_name) AS coach_name,
-                  ir.session_id, ir.student_id,
-                  ir.report_date, ir.incident_type, ir.severity_level,
-                  ir.description, ir.immediate_action_taken,
-                  ir.school_notified, ir.family_notified, ir.escalated_to_supervisor,
-                  ir.status, ir.resolution_notes, ir.created_at
-           FROM incident_reports ir
-           JOIN schools sc ON sc.school_id = ir.school_id
-           LEFT JOIN users u ON u.user_id = (
-             SELECT sp2.user_id FROM staff_profiles sp2
-             WHERE sp2.staff_id = ir.reported_by_staff_id
-           ) AND u.deleted_at IS NULL
-           WHERE ir.incident_id = ?""",
-        (incident_id,),
-    ).fetchone()
-    db.close()
-
-    return jsonify({"ok": True, "incident": serialize_incident(display_row)}), 201
+    finally:
+        db.close()
 
 
 # ===========================================================================
