@@ -127,7 +127,6 @@ def create_app(config=None):
         try:
             db = get_db()
             db.execute("SELECT 1")
-            db.execute("SELECT 1 FROM users LIMIT 1")
             return jsonify({"ok": True, "env": cfg.APP_ENV})
         except Exception as e:
             app.logger.error("Health check DB failure: %s", e)
