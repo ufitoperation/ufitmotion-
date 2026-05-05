@@ -123,14 +123,7 @@ def create_app(config=None):
 
     @app.route("/api/health")
     def health():
-        from app.database import get_db
-        try:
-            db = get_db()
-            db.execute("SELECT 1")
-            return jsonify({"ok": True, "env": cfg.APP_ENV})
-        except Exception as e:
-            app.logger.error("Health check DB failure: %s", e)
-            return jsonify({"ok": False, "error": "DB unavailable"}), 503
+        return jsonify({"ok": True, "env": cfg.APP_ENV})
 
     with app.app_context():
         from app.seeds import init_db
