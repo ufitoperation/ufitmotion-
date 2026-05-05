@@ -1881,7 +1881,16 @@ def admin_list_coaches():
                  u.user_id, u.role, u.first_name, u.last_name, u.email,
                  u.active_status, u.created_at,
                  sp.staff_id, sp.position_title,
-                 sp.rolling_score, sp.rolling_band,
+                 COALESCE(sp.rolling_score,
+                   (SELECT cps.overall_score FROM coach_performance_snapshots cps
+                    WHERE cps.staff_id = sp.staff_id
+                    ORDER BY cps.period_end DESC LIMIT 1)
+                 ) AS rolling_score,
+                 COALESCE(sp.rolling_band,
+                   (SELECT cps.performance_band FROM coach_performance_snapshots cps
+                    WHERE cps.staff_id = sp.staff_id
+                    ORDER BY cps.period_end DESC LIMIT 1)
+                 ) AS rolling_band,
                  s.school_id, s.school_name,
                  (SELECT COUNT(*) FROM eod_reports e
                   WHERE e.staff_id = sp.staff_id
@@ -1900,10 +1909,10 @@ def admin_list_coaches():
                     AND ir.deleted_at IS NULL
                  ) AS incidents_filed_this_week
                FROM users u
-               LEFT JOIN staff_profiles sp ON sp.user_id = u.user_id AND sp.deleted_at IS NULL
-               LEFT JOIN staff_assignments sa ON sa.staff_id = sp.staff_id
+               JOIN staff_profiles sp ON sp.user_id = u.user_id AND sp.deleted_at IS NULL
+               JOIN staff_assignments sa ON sa.staff_id = sp.staff_id
                           AND sa.active_status = 1 AND sa.deleted_at IS NULL
-               LEFT JOIN schools s ON s.school_id = sa.school_id
+               JOIN schools s ON s.school_id = sa.school_id AND s.deleted_at IS NULL
                WHERE u.role IN ('head_coach','assistant_coach')
                  AND u.active_status = 1
                  AND u.deleted_at IS NULL
