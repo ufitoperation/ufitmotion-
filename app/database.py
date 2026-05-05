@@ -192,6 +192,43 @@ def _maybe_add_returning(sql: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# SQL statement splitter — handles semicolons inside string literals
+# ---------------------------------------------------------------------------
+
+def _split_sql_statements(sql: str) -> list:
+    """Split a multi-statement SQL block on semicolons, ignoring those inside
+    single-quoted string literals (handles escaped '' pairs too)."""
+    statements = []
+    current: list = []
+    in_string = False
+    i = 0
+    while i < len(sql):
+        ch = sql[i]
+        if ch == "'" and not in_string:
+            in_string = True
+            current.append(ch)
+        elif ch == "'" and in_string:
+            if i + 1 < len(sql) and sql[i + 1] == "'":
+                current.append("''")
+                i += 2
+                continue
+            in_string = False
+            current.append(ch)
+        elif ch == ";" and not in_string:
+            stmt = "".join(current).strip()
+            if stmt:
+                statements.append(stmt)
+            current = []
+        else:
+            current.append(ch)
+        i += 1
+    stmt = "".join(current).strip()
+    if stmt:
+        statements.append(stmt)
+    return statements
+
+
+# ---------------------------------------------------------------------------
 # Postgres connection wrapper
 # ---------------------------------------------------------------------------
 class PostgresConnection:
@@ -217,11 +254,10 @@ class PostgresConnection:
         """
         Execute a multi-statement SQL block. psycopg3 doesn't have executescript,
         so we split on semicolons and execute each statement individually.
+        Handles semicolons inside single-quoted string literals correctly.
         """
         cur = self._conn.cursor()
-        # Split into individual statements, skip empty ones.
-        statements = [s.strip() for s in sql.split(";") if s.strip()]
-        for stmt in statements:
+        for stmt in _split_sql_statements(sql):
             cur.execute(stmt)
         return _PGCursor(cur)
 
