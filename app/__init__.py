@@ -123,7 +123,13 @@ def create_app(config=None):
 
     @app.route("/api/health")
     def health():
-        return jsonify({"ok": True, "env": cfg.APP_ENV})
+        from app.database import get_db
+        try:
+            get_db().execute("SELECT 1")
+            db_ok = True
+        except Exception:
+            db_ok = False
+        return jsonify({"ok": True, "env": cfg.APP_ENV, "db": db_ok})
 
     with app.app_context():
         from app.seeds import init_db

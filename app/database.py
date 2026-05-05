@@ -433,6 +433,9 @@ def _open_postgres(database_url: str) -> PostgresConnection:
     for dsn in dsns:
         try:
             conn = psycopg.connect(dsn, autocommit=False, connect_timeout=10)
+            # PgBouncer transaction mode (Supabase pooler) doesn't support
+            # server-side prepared statements — disable them on every connection.
+            conn.prepare_threshold = None
             return PostgresConnection(conn)
         except Exception as e:
             last_error = e
@@ -441,6 +444,7 @@ def _open_postgres(database_url: str) -> PostgresConnection:
     # Try the original URL as final fallback.
     try:
         conn = psycopg.connect(database_url, autocommit=False, connect_timeout=10)
+        conn.prepare_threshold = None
         return PostgresConnection(conn)
     except Exception as e:
         last_error = e
