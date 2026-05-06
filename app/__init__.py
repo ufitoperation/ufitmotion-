@@ -1,11 +1,30 @@
 import json
 import logging
 import traceback
+import datetime
+import decimal
 from datetime import timedelta
 from flask import Flask, g, jsonify, request
+from flask.json.provider import DefaultJSONProvider
 from werkzeug.middleware.proxy_fix import ProxyFix
 from app.config import get_config
 from app.extensions import limiter
+
+
+class _PostgresJSONProvider(DefaultJSONProvider):
+    """Extend Flask's JSON provider to handle types Postgres returns that
+    SQLite never did: datetime.time, datetime.date, datetime.datetime,
+    decimal.Decimal, and bool (already fine, but explicit for clarity)."""
+
+    @staticmethod
+    def default(obj):
+        if isinstance(obj, (datetime.date, datetime.datetime)):
+            return obj.isoformat()
+        if isinstance(obj, datetime.time):
+            return obj.isoformat()
+        if isinstance(obj, decimal.Decimal):
+            return float(obj)
+        return DefaultJSONProvider.default(obj)
 
 
 class _JSONFormatter(logging.Formatter):
@@ -22,6 +41,8 @@ class _JSONFormatter(logging.Formatter):
 
 def create_app(config=None):
     app = Flask(__name__, static_folder="../static", template_folder="../templates")
+    app.json_provider_class = _PostgresJSONProvider
+    app.json = _PostgresJSONProvider(app)
     cfg = config or get_config()
     app.config["UFIT_CONFIG"] = cfg
     app.config["SECRET_KEY"] = cfg.SECRET_KEY
