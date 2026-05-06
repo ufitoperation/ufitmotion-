@@ -753,7 +753,7 @@ def list_students():
             SELECT s.student_id, s.student_first_name, s.student_last_name,
                    s.grade_level, s.local_student_identifier, s.active_status,
                    s.enrollment_start, sc.school_name, sc.school_id,
-                   (SELECT ROUND(AVG(CAST(asco.raw_level AS REAL)), 1)
+                   (SELECT ROUND(AVG(CAST(asco.raw_level AS NUMERIC)), 1)
                     FROM assessment_scores asco
                     JOIN assessments a ON a.assessment_id = asco.assessment_id
                     WHERE a.student_id = s.student_id AND a.deleted_at IS NULL
@@ -2384,7 +2384,7 @@ def admin_students_growth():
         if window_id is not None:
             domain_rows = db.execute(
                 """SELECT sd.domain_id AS skill_domain_id, sd.domain_name,
-                          ROUND(AVG(CAST(asco.raw_level AS REAL)), 2) AS avg_raw_level
+                          ROUND(AVG(CAST(asco.raw_level AS NUMERIC)), 2) AS avg_raw_level
                    FROM assessment_scores asco
                    JOIN skills sk ON sk.skill_id = asco.skill_id
                    JOIN skill_domains sd ON sd.domain_id = sk.domain_id
@@ -2397,7 +2397,7 @@ def admin_students_growth():
         else:
             domain_rows = db.execute(
                 """SELECT sd.domain_id AS skill_domain_id, sd.domain_name,
-                          ROUND(AVG(CAST(asco.raw_level AS REAL)), 2) AS avg_raw_level
+                          ROUND(AVG(CAST(asco.raw_level AS NUMERIC)), 2) AS avg_raw_level
                    FROM assessment_scores asco
                    JOIN skills sk ON sk.skill_id = asco.skill_id
                    JOIN skill_domains sd ON sd.domain_id = sk.domain_id
@@ -2421,7 +2421,7 @@ def admin_students_growth():
         if window_id is not None:
             skill_rows = db.execute(
                 """SELECT sk.skill_id, sk.skill_name, sd.domain_id, sd.domain_name,
-                          ROUND(AVG(CAST(asco.raw_level AS REAL)), 2) AS avg_raw_level,
+                          ROUND(AVG(CAST(asco.raw_level AS NUMERIC)), 2) AS avg_raw_level,
                           COUNT(DISTINCT a.student_id) AS student_count
                    FROM assessment_scores asco
                    JOIN skills sk ON sk.skill_id = asco.skill_id
@@ -2435,7 +2435,7 @@ def admin_students_growth():
         else:
             skill_rows = db.execute(
                 """SELECT sk.skill_id, sk.skill_name, sd.domain_id, sd.domain_name,
-                          ROUND(AVG(CAST(asco.raw_level AS REAL)), 2) AS avg_raw_level,
+                          ROUND(AVG(CAST(asco.raw_level AS NUMERIC)), 2) AS avg_raw_level,
                           COUNT(DISTINCT a.student_id) AS student_count
                    FROM assessment_scores asco
                    JOIN skills sk ON sk.skill_id = asco.skill_id

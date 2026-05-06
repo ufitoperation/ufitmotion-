@@ -411,7 +411,7 @@ def principal_skill_averages():
         # Per-skill averages using raw_level (1-5 scale) for student-page skill card
         skill_rows = db.execute(
             """SELECT sk.skill_id, sk.skill_name, sd.domain_id, sd.domain_name,
-                      ROUND(AVG(CAST(asco.raw_level AS REAL)), 2) AS avg_raw_level,
+                      ROUND(AVG(CAST(asco.raw_level AS NUMERIC)), 2) AS avg_raw_level,
                       COUNT(DISTINCT a.student_id) AS student_count
                FROM assessments a
                JOIN (

@@ -1996,7 +1996,7 @@ def my_students():
                            s.grade_level, s.school_id, s.active_status, s.created_at,
                            sc.school_name,
                            la.latest_assessment_date,
-                           ROUND(AVG(CAST(asco.raw_level AS REAL)), 1) AS avg_raw_level
+                           ROUND(AVG(CAST(asco.raw_level AS NUMERIC)), 1) AS avg_raw_level
                     FROM students s
                     JOIN schools sc ON sc.school_id = s.school_id
                     LEFT JOIN (
@@ -2026,7 +2026,7 @@ def my_students():
                        s.grade_level, s.school_id, s.active_status, s.created_at,
                        sc.school_name,
                        la.latest_assessment_date,
-                       ROUND(AVG(CAST(asco.raw_level AS REAL)), 1) AS avg_raw_level
+                       ROUND(AVG(CAST(asco.raw_level AS NUMERIC)), 1) AS avg_raw_level
                 FROM students s
                 JOIN schools sc ON sc.school_id = s.school_id
                 LEFT JOIN (
