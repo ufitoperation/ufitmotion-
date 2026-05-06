@@ -2723,6 +2723,7 @@ async function openPrincipalCoachScoreModal(staffId) {
     if (mb) mb.innerHTML = errorCard(err.message);
     return;
   }
+  if (!d) return;
 
   const coach = d.coach || {};
   const snap = d.snapshot;
@@ -3954,6 +3955,7 @@ async function openStudentProgressModal(studentId) {
     const mb = document.querySelector('.modal-body');
     if (mb) mb.innerHTML = errorCard(err.message); return;
   }
+  if (!d) return;
 
   const st = d.student || {};
   const overall = d.overall;
