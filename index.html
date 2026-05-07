@@ -11,9 +11,15 @@
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;overflow:hidden;width:100vw;height:100vh}
-#demo-stage{width:100vw;height:calc(100vh - 60px);position:relative;overflow:hidden}
+#demo-stage{width:100vw;height:calc(100vh - 68px);position:relative;overflow:hidden}
 .screen{position:absolute;inset:0;opacity:0;transition:opacity 0.6s ease;pointer-events:none;display:flex;flex-direction:column}
 .screen.active{opacity:1;pointer-events:all}
+
+/* Callout bubble */
+#callout{position:absolute;bottom:0;left:0;right:0;background:rgba(8,18,36,0.93);backdrop-filter:blur(10px);padding:11px 22px 13px;border-top:1px solid rgba(30,64,175,0.45);z-index:99;transition:opacity .4s ease;pointer-events:none}
+#callout.hidden{opacity:0}
+#callout-label{font-size:9px;font-weight:800;color:#F59E0B;text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px}
+#callout-text{font-size:12.5px;color:rgba(255,255,255,0.82);line-height:1.65;max-width:900px}
 
 /* Controls */
 #controls{height:68px;background:#060E1D;display:flex;align-items:center;gap:12px;padding:0 20px;border-top:1px solid rgba(255,255,255,0.08)}
@@ -24,8 +30,8 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
 .ctrl-btn:hover,.ctrl-btn:active{background:rgba(255,255,255,0.18)}
 #screen-lbl{color:rgba(255,255,255,0.35);font-size:12px;white-space:nowrap;min-width:52px;text-align:right}
 
-/* Tablet optimizations */
-@media (max-width:900px){
+/* Tablet */
+@media(max-width:900px){
   .sidebar{width:160px}
   .sb-name{font-size:12px}
   .nav-item{font-size:11.5px;padding:8px 12px}
@@ -35,6 +41,8 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
   .card-val{font-size:22px}
   #controls{padding:0 12px;gap:8px}
   .ctrl-btn{padding:10px 12px;font-size:13px}
+  #callout{padding:9px 14px 11px}
+  #callout-text{font-size:11.5px}
 }
 
 /* Animations */
@@ -50,12 +58,12 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
 .screen.active .af{animation:fade .8s ease .1s both}
 .screen.active .bar-anim{animation:barGrow .9s ease .6s both}
 
-/* ── FULL-BLEED SCREENS ── */
+/* Full-bleed */
 .splash{align-items:center;justify-content:center;gap:0;text-align:center}
 .portal-card{align-items:center;justify-content:center;gap:0;text-align:center;background:#0F172A}
 
-/* ── APP SHELL ── */
-.app-shell{display:flex;height:100%;flex:1;overflow:hidden}
+/* App shell */
+.app-shell{display:flex;flex:1;overflow:hidden}
 .sidebar{width:210px;background:#1E40AF;display:flex;flex-direction:column;flex-shrink:0}
 .sb-brand{padding:18px 18px 16px;border-bottom:1px solid rgba(255,255,255,0.14);margin-bottom:8px}
 .sb-logo{display:flex;align-items:center;gap:9px}
@@ -121,14 +129,10 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
 .text-xs{font-size:11px;color:#9CA3AF}
 .fw7{font-weight:700}
 .fw8{font-weight:800}
-
-/* Domain block */
 .domain-block{margin-bottom:12px}
 .domain-lbl{font-size:10px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.06em;padding-bottom:5px;border-bottom:1px solid #E5E7EB;margin-bottom:7px}
 .skill-row{padding:5px 0;border-bottom:1px solid #F9FAFB}
 .skill-row:last-child{border-bottom:none}
-
-/* Coach form mocks */
 .form-group{margin-bottom:10px}
 .form-lbl{font-size:11px;font-weight:600;color:#374151;margin-bottom:3px;display:block}
 .mock-input{width:100%;padding:7px 10px;border:1.5px solid #D1D5DB;border-radius:6px;font-size:12.5px;color:#9CA3AF;background:#F9FAFB}
@@ -146,6 +150,12 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
 
 <div id="demo-stage">
 
+<!-- Callout overlay -->
+<div id="callout" class="hidden">
+  <div id="callout-label">What you're seeing</div>
+  <div id="callout-text"></div>
+</div>
+
 <!-- ══════════════════════════════════════════
      SCREEN 1 — INTRO
 ══════════════════════════════════════════ -->
@@ -162,18 +172,19 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
 </div>
 
 <!-- ══════════════════════════════════════════
-     SCREEN 2 — PRINCIPAL PORTAL TITLE
+     SCREEN 2 — ORG LEADER PORTAL TITLE
 ══════════════════════════════════════════ -->
-<div class="screen portal-card" id="s2" data-dur="4000">
+<div class="screen portal-card" id="s2" data-dur="5000">
   <div class="a1" style="font-size:52px;margin-bottom:16px">🏫</div>
-  <div class="a2" style="font-size:36px;font-weight:900;color:#F59E0B;letter-spacing:-0.5px">Principal Portal</div>
-  <div class="a3" style="font-size:15px;color:rgba(255,255,255,0.55);margin-top:10px;max-width:420px;line-height:1.6">Real-time visibility into your school's PE program — student growth, coach performance, and program health at a glance.</div>
+  <div class="a2" style="font-size:34px;font-weight:900;color:#F59E0B;letter-spacing:-0.5px">Organizational Leader Overview</div>
+  <div class="a3" style="font-size:15px;color:rgba(255,255,255,0.55);margin-top:10px;max-width:460px;line-height:1.6">Real-time visibility into your school's PE program — student growth, coach performance, and program health, all in one place.</div>
 </div>
 
 <!-- ══════════════════════════════════════════
-     SCREEN 3 — PRINCIPAL DASHBOARD
+     SCREEN 3 — ORG LEADER DASHBOARD
 ══════════════════════════════════════════ -->
-<div class="screen" id="s3" data-dur="9000">
+<div class="screen" id="s3" data-dur="12000"
+  data-note="This is the Organizational Leader dashboard — a real-time snapshot of the entire school's PE program. Student enrollment, coach performance scores, total sessions logged, and end-of-day compliance are all visible the moment you log in.">
   <div class="app-shell">
     <div class="sidebar">
       <div class="sb-brand"><div class="sb-logo"><div class="sb-icon">U</div><div><div class="sb-name">Ufit Motion</div><div class="sb-sub">Lincoln Elementary</div></div></div></div>
@@ -187,7 +198,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
     <div class="main">
       <div class="topbar">
         <div class="tb-title a1">Good morning, Patricia 👋</div>
-        <div class="tb-user"><div class="avatar">PM</div><div><div class="u-name">Patricia Moore</div><div class="u-role">Principal · Lincoln Elementary</div></div></div>
+        <div class="tb-user"><div class="avatar">PM</div><div><div class="u-name">Patricia Moore</div><div class="u-role">Org Leader · Lincoln Elementary</div></div></div>
       </div>
       <div class="content">
         <div class="g4 a2">
@@ -226,9 +237,10 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
 </div>
 
 <!-- ══════════════════════════════════════════
-     SCREEN 4 — PRINCIPAL STUDENTS LIST
+     SCREEN 4 — ORG LEADER STUDENTS LIST
 ══════════════════════════════════════════ -->
-<div class="screen" id="s4" data-dur="8000">
+<div class="screen" id="s4" data-dur="11000"
+  data-note="Every student enrolled in the program is listed here with their current average skill level and performance band — Emerging, Developing, On Track, Proficient, or Advanced. Leaders can instantly see who is thriving and who may need extra attention, and click any student to see their full skill breakdown.">
   <div class="app-shell">
     <div class="sidebar">
       <div class="sb-brand"><div class="sb-logo"><div class="sb-icon">U</div><div><div class="sb-name">Ufit Motion</div><div class="sb-sub">Lincoln Elementary</div></div></div></div>
@@ -240,13 +252,13 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
       <div class="nav-item"><span class="ni">📝</span> Survey</div>
     </div>
     <div class="main">
-      <div class="topbar"><div class="tb-title">Students</div><div class="tb-user"><div class="avatar">PM</div><div><div class="u-name">Patricia Moore</div><div class="u-role">Principal</div></div></div></div>
+      <div class="topbar"><div class="tb-title">Students</div><div class="tb-user"><div class="avatar">PM</div><div><div class="u-name">Patricia Moore</div><div class="u-role">Org Leader</div></div></div></div>
       <div class="content">
         <div class="card a1" style="flex:1">
           <table class="tbl">
             <thead><tr><th>Student</th><th>Grade</th><th>Avg Level</th><th>Band</th><th></th></tr></thead>
             <tbody>
-              <tr class="hl a2"><td class="fw7">Johnson, Emma</td><td>3</td><td><span class="fw7" style="color:#1E40AF">4.1</span> /5</td><td><span class="badge bg-success">On Track</span></td><td><span style="color:#1E40AF;font-size:11px;font-weight:600;cursor:pointer">View Progress →</span></td></tr>
+              <tr class="hl a2"><td class="fw7">Johnson, Emma</td><td>3</td><td><span class="fw7" style="color:#1E40AF">4.1</span> /5</td><td><span class="badge bg-success">On Track</span></td><td><span style="color:#1E40AF;font-size:11px;font-weight:600">View Progress →</span></td></tr>
               <tr class="a3"><td class="fw7">Davis, Marcus</td><td>4</td><td><span class="fw7" style="color:#10B981">4.4</span> /5</td><td><span class="badge bg-success">Proficient</span></td><td><span style="color:#1E40AF;font-size:11px;font-weight:600">View Progress →</span></td></tr>
               <tr class="a3"><td class="fw7">Williams, Zoe</td><td>2</td><td><span class="fw7" style="color:#F59E0B">3.1</span> /5</td><td><span class="badge bg-warning">Developing</span></td><td><span style="color:#1E40AF;font-size:11px;font-weight:600">View Progress →</span></td></tr>
               <tr class="a4"><td class="fw7">Torres, Miguel</td><td>5</td><td><span class="fw7" style="color:#10B981">4.6</span> /5</td><td><span class="badge bg-success">Advanced</span></td><td><span style="color:#1E40AF;font-size:11px;font-weight:600">View Progress →</span></td></tr>
@@ -265,7 +277,8 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
 <!-- ══════════════════════════════════════════
      SCREEN 5 — STUDENT PROGRESS (EMMA JOHNSON)
 ══════════════════════════════════════════ -->
-<div class="screen" id="s5" data-dur="14000">
+<div class="screen" id="s5" data-dur="18000"
+  data-note="Clicking any student opens their complete skill breakdown. Scores are organized across three domains — Physical, Social-Emotional, and Game Application — each broken into individual skills. The green arrows show growth since the baseline assessment. This is how the program proves measurable student development over time.">
   <div class="app-shell">
     <div class="sidebar">
       <div class="sb-brand"><div class="sb-logo"><div class="sb-icon">U</div><div><div class="sb-name">Ufit Motion</div><div class="sb-sub">Lincoln Elementary</div></div></div></div>
@@ -277,9 +290,8 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
       <div class="nav-item"><span class="ni">📝</span> Survey</div>
     </div>
     <div class="main">
-      <div class="topbar"><div class="tb-title">Emma Johnson — Progress</div><div class="tb-user"><div class="avatar">PM</div><div><div class="u-name">Patricia Moore</div><div class="u-role">Principal</div></div></div></div>
+      <div class="topbar"><div class="tb-title">Emma Johnson — Progress</div><div class="tb-user"><div class="avatar">PM</div><div><div class="u-name">Patricia Moore</div><div class="u-role">Org Leader</div></div></div></div>
       <div class="content" style="flex-direction:row;gap:14px">
-        <!-- Overall + domains column -->
         <div class="col" style="width:220px;flex-shrink:0">
           <div class="card a1" style="text-align:center;padding:18px 12px">
             <div style="font-size:40px;font-weight:900;color:#1E40AF">78</div>
@@ -288,7 +300,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
             <div style="margin-top:10px;font-size:11px;color:#10B981;font-weight:600">↑ +6 pts since baseline</div>
           </div>
           <div class="card a2">
-            <div class="card-hd">Domains</div>
+            <div class="card-hd">By Domain</div>
             <div style="margin-top:8px">
               <div style="margin-bottom:10px">
                 <div class="flex-between" style="margin-bottom:4px"><span class="text-sm fw7">Physical</span><span style="font-size:12px;font-weight:700;color:#1E40AF">82</span></div>
@@ -305,68 +317,43 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
             </div>
           </div>
         </div>
-        <!-- Skills breakdown -->
         <div class="card a3" style="flex:1;overflow:hidden">
-          <div class="card-hd">Skill Breakdown — Grade 3</div>
-          <div style="margin-top:10px;overflow:auto;max-height:520px">
-            <!-- Physical -->
+          <div class="card-hd">Individual Skill Scores — Grade 3</div>
+          <div style="margin-top:10px;overflow:auto;max-height:460px">
             <div class="domain-block a3">
-              <div class="domain-lbl">🏃 Physical</div>
+              <div class="domain-lbl">🏃 Physical — how kids move their bodies</div>
               <div class="skill-row">
-                <div class="flex-between" style="margin-bottom:4px">
-                  <span style="font-size:12.5px;font-weight:500">Locomotor Skills</span>
-                  <div class="flex-center"><span class="grow-tag grow-up">↑ +8 pts</span><span class="badge bg-success" style="margin-left:6px">85</span></div>
-                </div>
+                <div class="flex-between" style="margin-bottom:4px"><span style="font-size:12.5px;font-weight:500">Locomotor Skills</span><div class="flex-center"><span class="grow-tag grow-up">↑ +8 pts</span><span class="badge bg-success" style="margin-left:6px">85</span></div></div>
                 <div class="ptrack"><div class="pfill p-green bar-anim" style="width:85%"></div></div>
               </div>
               <div class="skill-row">
-                <div class="flex-between" style="margin-bottom:4px">
-                  <span style="font-size:12.5px;font-weight:500">Manipulative Skills</span>
-                  <div class="flex-center"><span class="grow-tag grow-up">↑ +5 pts</span><span class="badge bg-info" style="margin-left:6px">79</span></div>
-                </div>
+                <div class="flex-between" style="margin-bottom:4px"><span style="font-size:12.5px;font-weight:500">Manipulative Skills</span><div class="flex-center"><span class="grow-tag grow-up">↑ +5 pts</span><span class="badge bg-info" style="margin-left:6px">79</span></div></div>
                 <div class="ptrack"><div class="pfill p-blue bar-anim" style="width:79%"></div></div>
               </div>
               <div class="skill-row">
-                <div class="flex-between" style="margin-bottom:4px">
-                  <span style="font-size:12.5px;font-weight:500">Fitness Components</span>
-                  <div class="flex-center"><span class="grow-tag grow-up">↑ +3 pts</span><span class="badge bg-info" style="margin-left:6px">80</span></div>
-                </div>
+                <div class="flex-between" style="margin-bottom:4px"><span style="font-size:12.5px;font-weight:500">Fitness Components</span><div class="flex-center"><span class="grow-tag grow-up">↑ +3 pts</span><span class="badge bg-info" style="margin-left:6px">80</span></div></div>
                 <div class="ptrack"><div class="pfill p-blue bar-anim" style="width:80%"></div></div>
               </div>
             </div>
-            <!-- Social-Emotional -->
             <div class="domain-block a4">
-              <div class="domain-lbl">🤝 Social-Emotional</div>
+              <div class="domain-lbl">🤝 Social-Emotional — how kids work with others</div>
               <div class="skill-row">
-                <div class="flex-between" style="margin-bottom:4px">
-                  <span style="font-size:12.5px;font-weight:500">Self-Regulation</span>
-                  <div class="flex-center"><span class="grow-tag grow-up">↑ +3 pts</span><span class="badge bg-info" style="margin-left:6px">71</span></div>
-                </div>
+                <div class="flex-between" style="margin-bottom:4px"><span style="font-size:12.5px;font-weight:500">Self-Regulation</span><div class="flex-center"><span class="grow-tag grow-up">↑ +3 pts</span><span class="badge bg-info" style="margin-left:6px">71</span></div></div>
                 <div class="ptrack"><div class="pfill p-blue bar-anim" style="width:71%"></div></div>
               </div>
               <div class="skill-row">
-                <div class="flex-between" style="margin-bottom:4px">
-                  <span style="font-size:12.5px;font-weight:500">Teamwork & Cooperation</span>
-                  <div class="flex-center"><span class="grow-tag grow-up">↑ +6 pts</span><span class="badge bg-success" style="margin-left:6px">77</span></div>
-                </div>
+                <div class="flex-between" style="margin-bottom:4px"><span style="font-size:12.5px;font-weight:500">Teamwork & Cooperation</span><div class="flex-center"><span class="grow-tag grow-up">↑ +6 pts</span><span class="badge bg-success" style="margin-left:6px">77</span></div></div>
                 <div class="ptrack"><div class="pfill p-green bar-anim" style="width:77%"></div></div>
               </div>
             </div>
-            <!-- Game Application -->
             <div class="domain-block a5">
-              <div class="domain-lbl">🎯 Game Application</div>
+              <div class="domain-lbl">🎯 Game Application — how kids apply skills in play</div>
               <div class="skill-row">
-                <div class="flex-between" style="margin-bottom:4px">
-                  <span style="font-size:12.5px;font-weight:500">Invasion Games</span>
-                  <div class="flex-center"><span class="grow-tag grow-flat">→ 0 pts</span><span class="badge bg-warning" style="margin-left:6px">72</span></div>
-                </div>
+                <div class="flex-between" style="margin-bottom:4px"><span style="font-size:12.5px;font-weight:500">Invasion Games</span><div class="flex-center"><span class="grow-tag grow-flat">→ 0 pts</span><span class="badge bg-warning" style="margin-left:6px">72</span></div></div>
                 <div class="ptrack"><div class="pfill p-yellow bar-anim" style="width:72%"></div></div>
               </div>
               <div class="skill-row">
-                <div class="flex-between" style="margin-bottom:4px">
-                  <span style="font-size:12.5px;font-weight:500">Strike & Kick</span>
-                  <div class="flex-center"><span class="grow-tag grow-up">↑ +4 pts</span><span class="badge bg-warning" style="margin-left:6px">68</span></div>
-                </div>
+                <div class="flex-between" style="margin-bottom:4px"><span style="font-size:12.5px;font-weight:500">Strike & Kick</span><div class="flex-center"><span class="grow-tag grow-up">↑ +4 pts</span><span class="badge bg-warning" style="margin-left:6px">68</span></div></div>
                 <div class="ptrack"><div class="pfill p-yellow bar-anim" style="width:68%"></div></div>
               </div>
             </div>
@@ -378,9 +365,10 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
 </div>
 
 <!-- ══════════════════════════════════════════
-     SCREEN 6 — PRINCIPAL COACH SCORECARD
+     SCREEN 6 — COACH SCORECARD
 ══════════════════════════════════════════ -->
-<div class="screen" id="s6" data-dur="10000">
+<div class="screen" id="s6" data-dur="14000"
+  data-note="Every coach has a rolling performance score calculated automatically from three pillars: Compliance (EOD timeliness, sessions logged, punctuality), Student Outcomes (student growth rates, attendance), and Observations (supervisor evaluation ratings). No manual scoring — the system does it all.">
   <div class="app-shell">
     <div class="sidebar">
       <div class="sb-brand"><div class="sb-logo"><div class="sb-icon">U</div><div><div class="sb-name">Ufit Motion</div><div class="sb-sub">Lincoln Elementary</div></div></div></div>
@@ -392,7 +380,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
       <div class="nav-item"><span class="ni">📝</span> Survey</div>
     </div>
     <div class="main">
-      <div class="topbar"><div class="tb-title">Coach Performance</div><div class="tb-user"><div class="avatar">PM</div><div><div class="u-name">Patricia Moore</div><div class="u-role">Principal</div></div></div></div>
+      <div class="topbar"><div class="tb-title">Coach Performance</div><div class="tb-user"><div class="avatar">PM</div><div><div class="u-name">Patricia Moore</div><div class="u-role">Org Leader</div></div></div></div>
       <div class="content" style="flex-direction:row;gap:14px">
         <div class="card a1" style="width:230px;flex-shrink:0;text-align:center;padding:22px 18px">
           <div style="font-size:13px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Derek Thompson</div>
@@ -411,7 +399,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
               <div class="flex-between" style="margin-bottom:6px">
                 <div>
                   <div style="font-weight:700;font-size:14px">Compliance</div>
-                  <div class="text-xs">EOD on-time: 96% · Sessions logged: 100% · Incident filing: N/A</div>
+                  <div class="text-xs">EOD on-time: 96% · Sessions logged: 100% · Punctuality</div>
                 </div>
                 <span style="font-weight:700;font-size:16px;color:#10B981">91<span style="font-size:12px;color:#9CA3AF">/100</span></span>
               </div>
@@ -421,7 +409,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
               <div class="flex-between" style="margin-bottom:6px">
                 <div>
                   <div style="font-weight:700;font-size:14px">Student Outcomes</div>
-                  <div class="text-xs">Avg growth: +6 pts · Attendance: 89% · Assessment coverage: 87%</div>
+                  <div class="text-xs">Avg student growth: +6 pts · Attendance: 89% · Assessment rate: 87%</div>
                 </div>
                 <span style="font-weight:700;font-size:16px;color:#1E40AF">84<span style="font-size:12px;color:#9CA3AF">/100</span></span>
               </div>
@@ -445,9 +433,10 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
 </div>
 
 <!-- ══════════════════════════════════════════
-     SCREEN 7 — PRINCIPAL EOD SUMMARY
+     SCREEN 7 — EOD SUMMARY
 ══════════════════════════════════════════ -->
-<div class="screen" id="s7" data-dur="8000">
+<div class="screen" id="s7" data-dur="12000"
+  data-note="After every session, coaches must file an End-of-Day report. Organizational leaders can see a full submission history — how many sessions were logged, which EODs were filed on time, and which were late. Late submissions are automatically flagged and tied to the coach's compliance score.">
   <div class="app-shell">
     <div class="sidebar">
       <div class="sb-brand"><div class="sb-logo"><div class="sb-icon">U</div><div><div class="sb-name">Ufit Motion</div><div class="sb-sub">Lincoln Elementary</div></div></div></div>
@@ -459,7 +448,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
       <div class="nav-item"><span class="ni">📝</span> Survey</div>
     </div>
     <div class="main">
-      <div class="topbar"><div class="tb-title">EOD Reports</div><div class="tb-user"><div class="avatar">PM</div><div><div class="u-name">Patricia Moore</div><div class="u-role">Principal</div></div></div></div>
+      <div class="topbar"><div class="tb-title">EOD Reports</div><div class="tb-user"><div class="avatar">PM</div><div><div class="u-name">Patricia Moore</div><div class="u-role">Org Leader</div></div></div></div>
       <div class="content">
         <div class="g4 a1">
           <div class="card card-accent"><div class="card-hd">Total Sessions</div><div class="card-val">116</div><div class="card-sub">Logged this semester</div></div>
@@ -470,7 +459,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
         <div class="card a2" style="flex:1">
           <div class="card-hd">Recent Session Reports</div>
           <table class="tbl" style="margin-top:8px">
-            <thead><tr><th>Date</th><th>Coach</th><th>Students</th><th>EOD</th><th>On Time</th></tr></thead>
+            <thead><tr><th>Date</th><th>Coach</th><th>Students</th><th>EOD Status</th><th>On Time</th></tr></thead>
             <tbody>
               <tr class="a3"><td>May 5, 2026</td><td class="fw7">Derek Thompson</td><td>29</td><td><span class="badge bg-success">Submitted</span></td><td>✅</td></tr>
               <tr class="a3"><td>May 2, 2026</td><td class="fw7">Aaliyah Brooks</td><td>27</td><td><span class="badge bg-success">Submitted</span></td><td>✅</td></tr>
@@ -488,16 +477,17 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
 <!-- ══════════════════════════════════════════
      SCREEN 8 — COACH PORTAL TITLE
 ══════════════════════════════════════════ -->
-<div class="screen portal-card" id="s8" data-dur="4000">
+<div class="screen portal-card" id="s8" data-dur="5000">
   <div class="a1" style="font-size:52px;margin-bottom:16px">🏃</div>
   <div class="a2" style="font-size:36px;font-weight:900;color:#F59E0B;letter-spacing:-0.5px">Coach Portal</div>
-  <div class="a3" style="font-size:15px;color:rgba(255,255,255,0.55);margin-top:10px;max-width:420px;line-height:1.6">Built for coaches in the field — log sessions, file EOD reports, and track student progress from any device.</div>
+  <div class="a3" style="font-size:15px;color:rgba(255,255,255,0.55);margin-top:10px;max-width:420px;line-height:1.6">Built for coaches in the field — log sessions, file EOD reports, and assess students from any device, anywhere.</div>
 </div>
 
 <!-- ══════════════════════════════════════════
      SCREEN 9 — COACH DASHBOARD
 ══════════════════════════════════════════ -->
-<div class="screen" id="s9" data-dur="8000">
+<div class="screen" id="s9" data-dur="12000"
+  data-note="Coaches see everything they need for the day at a glance — their scheduled session, quick-action buttons to log sessions, submit EOD reports, or assess students. The app is designed to be used one-handed on a phone, outdoors, under time pressure. No desktop required.">
   <div class="app-shell">
     <div class="sidebar">
       <div class="sb-brand"><div class="sb-logo"><div class="sb-icon">U</div><div><div class="sb-name">Ufit Motion</div><div class="sb-sub">Lincoln Elementary</div></div></div></div>
@@ -526,8 +516,8 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
               <div class="fw7" style="font-size:14px;color:#1E40AF">Lincoln Elementary — Period 2</div>
               <div class="text-sm" style="margin-top:4px">9:00 AM · Grades 3–4 · Locomotor Skills Unit</div>
               <div style="margin-top:10px;display:flex;gap:8px">
-                <div style="background:#1E40AF;color:#fff;padding:7px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">Log Session</div>
-                <div style="background:#F3F4F6;color:#374151;padding:7px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">Submit EOD</div>
+                <div style="background:#1E40AF;color:#fff;padding:7px 14px;border-radius:6px;font-size:12px;font-weight:600">Log Session</div>
+                <div style="background:#F3F4F6;color:#374151;padding:7px 14px;border-radius:6px;font-size:12px;font-weight:600">Submit EOD</div>
               </div>
             </div>
           </div>
@@ -547,9 +537,10 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
 </div>
 
 <!-- ══════════════════════════════════════════
-     SCREEN 10 — COACH LOG SESSION
+     SCREEN 10 — LOG SESSION
 ══════════════════════════════════════════ -->
-<div class="screen" id="s10" data-dur="9000">
+<div class="screen" id="s10" data-dur="12000"
+  data-note="Logging a session takes under 60 seconds. Coaches fill in the school, date, how many students were present, the activity focus, and any notes from the session — then hit submit. Every logged session feeds directly into their performance record and the organizational leader's dashboard.">
   <div class="app-shell">
     <div class="sidebar">
       <div class="sb-brand"><div class="sb-logo"><div class="sb-icon">U</div><div><div class="sb-name">Ufit Motion</div><div class="sb-sub">Lincoln Elementary</div></div></div></div>
@@ -566,33 +557,15 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
         <div class="card a1" style="max-width:560px">
           <div class="card-hd">New Session — May 6, 2026</div>
           <div style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:12px">
-            <div class="form-group a2">
-              <span class="form-lbl">School</span>
-              <div class="mock-input filled">Lincoln Elementary</div>
-            </div>
-            <div class="form-group a2">
-              <span class="form-lbl">Session Date</span>
-              <div class="mock-input filled">May 6, 2026</div>
-            </div>
-            <div class="form-group a3">
-              <span class="form-lbl">Students Present</span>
-              <div class="mock-input filled">28</div>
-            </div>
-            <div class="form-group a3">
-              <span class="form-lbl">Session Type</span>
-              <div class="mock-input filled">Regular</div>
-            </div>
-            <div class="form-group a4" style="grid-column:1/-1">
-              <span class="form-lbl">Activity Focus</span>
-              <div class="mock-input filled">Locomotor Skills — Running Form & Jumping</div>
-            </div>
-            <div class="form-group a5" style="grid-column:1/-1">
-              <span class="form-lbl">Session Notes</span>
-              <div class="mock-input filled" style="height:54px;padding-top:10px">Students engaged well. Focused on proper arm swing and landing mechanics. 4 students showing strong growth in form.</div>
-            </div>
+            <div class="form-group a2"><span class="form-lbl">School</span><div class="mock-input filled">Lincoln Elementary</div></div>
+            <div class="form-group a2"><span class="form-lbl">Session Date</span><div class="mock-input filled">May 6, 2026</div></div>
+            <div class="form-group a3"><span class="form-lbl">Students Present</span><div class="mock-input filled">28</div></div>
+            <div class="form-group a3"><span class="form-lbl">Session Type</span><div class="mock-input filled">Regular</div></div>
+            <div class="form-group a4" style="grid-column:1/-1"><span class="form-lbl">Activity Focus</span><div class="mock-input filled">Locomotor Skills — Running Form & Jumping</div></div>
+            <div class="form-group a5" style="grid-column:1/-1"><span class="form-lbl">Session Notes</span><div class="mock-input filled" style="height:54px;padding-top:10px">Students engaged well. Focused on proper arm swing and landing mechanics. 4 students showing strong growth in form.</div></div>
           </div>
           <div class="a6" style="margin-top:14px">
-            <div style="background:#1E40AF;color:#fff;padding:10px 22px;border-radius:8px;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:8px;cursor:pointer">✓ Session Logged Successfully</div>
+            <div style="background:#1E40AF;color:#fff;padding:10px 22px;border-radius:8px;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:8px">✓ Session Logged Successfully</div>
           </div>
         </div>
       </div>
@@ -601,9 +574,10 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
 </div>
 
 <!-- ══════════════════════════════════════════
-     SCREEN 11 — COACH EOD REPORT
+     SCREEN 11 — EOD REPORT
 ══════════════════════════════════════════ -->
-<div class="screen" id="s11" data-dur="10000">
+<div class="screen" id="s11" data-dur="14000"
+  data-note="After each session, coaches complete an end-of-day checklist confirming Ufit operational standards were met — uniforms, equipment, yard supervision, curriculum, and coach readiness. Submitting on time counts toward their compliance score, which the organizational leader can see in real time.">
   <div class="app-shell">
     <div class="sidebar">
       <div class="sb-brand"><div class="sb-logo"><div class="sb-icon">U</div><div><div class="sb-name">Ufit Motion</div><div class="sb-sub">Lincoln Elementary</div></div></div></div>
@@ -650,9 +624,10 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
 </div>
 
 <!-- ══════════════════════════════════════════
-     SCREEN 12 — COACH ASSESS STUDENT
+     SCREEN 12 — ASSESS STUDENT
 ══════════════════════════════════════════ -->
-<div class="screen" id="s12" data-dur="9000">
+<div class="screen" id="s12" data-dur="13000"
+  data-note="Coaches score individual students on specific skills using a 1–5 level scale right after a session. The system automatically compares the new score to the previous assessment, detects growth, and flags it in green. This data instantly updates the student's progress record — visible to the organizational leader and the parent.">
   <div class="app-shell">
     <div class="sidebar">
       <div class="sb-brand"><div class="sb-logo"><div class="sb-icon">U</div><div><div class="sb-name">Ufit Motion</div><div class="sb-sub">Lincoln Elementary</div></div></div></div>
@@ -666,7 +641,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
     <div class="main">
       <div class="topbar"><div class="tb-title">Assess Student</div><div class="tb-user"><div class="avatar">DT</div><div><div class="u-name">Derek Thompson</div><div class="u-role">Head Coach</div></div></div></div>
       <div class="content">
-        <div class="row a1" style="align-items:flex-start">
+        <div class="row a1">
           <div class="card" style="width:220px;flex-shrink:0">
             <div style="text-align:center;padding:8px 0 12px">
               <div style="width:52px;height:52px;background:#EFF6FF;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:20px">👧</div>
@@ -680,26 +655,23 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
             </div>
           </div>
           <div class="card a2" style="flex:1">
-            <div class="card-hd">Skill Assessment — Locomotor: Running Form</div>
+            <div class="card-hd">Skill — Locomotor: Running Form</div>
             <div style="margin-top:16px">
               <div class="form-lbl">Performance Level <span style="color:#9CA3AF;font-weight:400">(1 = Emerging · 5 = Mastery)</span></div>
               <div class="lvl-btns a3" style="margin-top:8px">
-                <div class="lvl-btn">1</div>
-                <div class="lvl-btn">2</div>
-                <div class="lvl-btn">3</div>
-                <div class="lvl-btn sel">4</div>
-                <div class="lvl-btn">5</div>
+                <div class="lvl-btn">1</div><div class="lvl-btn">2</div><div class="lvl-btn">3</div>
+                <div class="lvl-btn sel">4</div><div class="lvl-btn">5</div>
               </div>
               <div style="margin-top:14px;padding:10px 14px;background:#F0FDF4;border-radius:8px;border-left:3px solid #10B981" class="a4">
                 <div style="font-size:12px;font-weight:700;color:#065F46">↑ Growth Detected!</div>
                 <div style="font-size:11px;color:#065F46;margin-top:2px">Level 4 — up from Level 3 at last assessment (May 2)</div>
               </div>
               <div style="margin-top:12px" class="a5">
-                <div class="form-lbl">Assessment Notes</div>
+                <div class="form-lbl">Notes</div>
                 <div class="mock-input filled" style="height:48px;margin-top:4px;padding-top:8px">Strong arm drive and soft landings. Ready to progress to hurdle step pattern.</div>
               </div>
               <div style="margin-top:14px" class="a6">
-                <div style="background:#1E40AF;color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:8px;cursor:pointer">✓ Score Saved</div>
+                <div style="background:#1E40AF;color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:8px">✓ Score Saved</div>
               </div>
             </div>
           </div>
@@ -712,16 +684,17 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
 <!-- ══════════════════════════════════════════
      SCREEN 13 — PARENT PORTAL TITLE
 ══════════════════════════════════════════ -->
-<div class="screen portal-card" id="s13" data-dur="4000">
+<div class="screen portal-card" id="s13" data-dur="5000">
   <div class="a1" style="font-size:52px;margin-bottom:16px">👨‍👩‍👧</div>
   <div class="a2" style="font-size:36px;font-weight:900;color:#F59E0B;letter-spacing:-0.5px">Parent Portal</div>
-  <div class="a3" style="font-size:15px;color:rgba(255,255,255,0.55);margin-top:10px;max-width:420px;line-height:1.6">Stay connected to your child's fitness journey — view their growth, skills, and latest assessments anytime.</div>
+  <div class="a3" style="font-size:15px;color:rgba(255,255,255,0.55);margin-top:10px;max-width:420px;line-height:1.6">Parents stay connected to their child's fitness journey — viewing growth, skills, and latest assessments anytime from any device.</div>
 </div>
 
 <!-- ══════════════════════════════════════════
      SCREEN 14 — PARENT HOME
 ══════════════════════════════════════════ -->
-<div class="screen" id="s14" data-dur="8000">
+<div class="screen" id="s14" data-dur="12000"
+  data-note="Parents log in and immediately see all their children — each child's current overall score, performance band, and the date of their most recent assessment. For the first time, parents have direct visibility into what their kids are actually doing and learning in PE class.">
   <div class="app-shell">
     <div class="sidebar">
       <div class="sb-brand"><div class="sb-logo"><div class="sb-icon">U</div><div><div class="sb-name">Ufit Motion</div><div class="sb-sub">Parent Portal</div></div></div></div>
@@ -740,10 +713,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
               <div style="width:40px;height:40px;background:#EFF6FF;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px">👧</div>
               <div><div class="fw7" style="font-size:14px">Emma Johnson</div><div class="text-xs">Grade 3</div></div>
             </div>
-            <div class="flex-between" style="margin-bottom:6px">
-              <div style="font-size:32px;font-weight:900;color:#1E40AF">78</div>
-              <span class="badge bg-info">On Track</span>
-            </div>
+            <div class="flex-between" style="margin-bottom:6px"><div style="font-size:32px;font-weight:900;color:#1E40AF">78</div><span class="badge bg-info">On Track</span></div>
             <div class="text-xs">Last assessed May 2, 2026</div>
             <div style="margin-top:8px;color:#10B981;font-size:12px;font-weight:600">↑ +6 pts since start</div>
           </div>
@@ -752,10 +722,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
               <div style="width:40px;height:40px;background:#EFF6FF;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px">👦</div>
               <div><div class="fw7" style="font-size:14px">Liam Johnson</div><div class="text-xs">Grade 2</div></div>
             </div>
-            <div class="flex-between" style="margin-bottom:6px">
-              <div style="font-size:32px;font-weight:900;color:#F59E0B">65</div>
-              <span class="badge bg-warning">Developing</span>
-            </div>
+            <div class="flex-between" style="margin-bottom:6px"><div style="font-size:32px;font-weight:900;color:#F59E0B">65</div><span class="badge bg-warning">Developing</span></div>
             <div class="text-xs">Last assessed Apr 28, 2026</div>
             <div style="margin-top:8px;color:#F59E0B;font-size:12px;font-weight:600">↑ +4 pts since start</div>
           </div>
@@ -764,10 +731,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
               <div style="width:40px;height:40px;background:#EFF6FF;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px">👧</div>
               <div><div class="fw7" style="font-size:14px">Sofia Johnson</div><div class="text-xs">Grade 4</div></div>
             </div>
-            <div class="flex-between" style="margin-bottom:6px">
-              <div style="font-size:32px;font-weight:900;color:#10B981">84</div>
-              <span class="badge bg-success">Proficient</span>
-            </div>
+            <div class="flex-between" style="margin-bottom:6px"><div style="font-size:32px;font-weight:900;color:#10B981">84</div><span class="badge bg-success">Proficient</span></div>
             <div class="text-xs">Last assessed May 1, 2026</div>
             <div style="margin-top:8px;color:#10B981;font-size:12px;font-weight:600">↑ +9 pts since start</div>
           </div>
@@ -780,7 +744,8 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
 <!-- ══════════════════════════════════════════
      SCREEN 15 — PARENT: EMMA'S SKILLS
 ══════════════════════════════════════════ -->
-<div class="screen" id="s15" data-dur="10000">
+<div class="screen" id="s15" data-dur="14000"
+  data-note="Parents can drill into any child's full skill breakdown — seeing their score across every domain and individual skill, with arrows showing exactly how much they've grown since the program started. This gives parents real data to talk about with their child and their teacher.">
   <div class="app-shell">
     <div class="sidebar">
       <div class="sb-brand"><div class="sb-logo"><div class="sb-icon">U</div><div><div class="sb-name">Ufit Motion</div><div class="sb-sub">Parent Portal</div></div></div></div>
@@ -853,16 +818,17 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
 <!-- ══════════════════════════════════════════
      SCREEN 16 — ADMIN PORTAL TITLE
 ══════════════════════════════════════════ -->
-<div class="screen portal-card" id="s16" data-dur="4000">
+<div class="screen portal-card" id="s16" data-dur="5000">
   <div class="a1" style="font-size:52px;margin-bottom:16px">🏢</div>
   <div class="a2" style="font-size:36px;font-weight:900;color:#F59E0B;letter-spacing:-0.5px">Admin Portal</div>
-  <div class="a3" style="font-size:15px;color:rgba(255,255,255,0.55);margin-top:10px;max-width:420px;line-height:1.6">Complete oversight across every school, every coach, and every student — org-wide in one view.</div>
+  <div class="a3" style="font-size:15px;color:rgba(255,255,255,0.55);margin-top:10px;max-width:440px;line-height:1.6">Complete oversight across every school, every coach, and every student — the entire organization in one view.</div>
 </div>
 
 <!-- ══════════════════════════════════════════
      SCREEN 17 — ADMIN DASHBOARD
 ══════════════════════════════════════════ -->
-<div class="screen" id="s17" data-dur="8000">
+<div class="screen" id="s17" data-dur="12000"
+  data-note="Ufit administrators see the entire organization at once — all schools, all students, all coaches, and all sessions in a single dashboard. Any compliance gap, coach performance issue, or program anomaly across any school surfaces here immediately, without needing to check each school one by one.">
   <div class="app-shell">
     <div class="sidebar">
       <div class="sb-brand"><div class="sb-logo"><div class="sb-icon">U</div><div><div class="sb-name">Ufit Motion</div><div class="sb-sub">Ufit Demo Unified</div></div></div></div>
@@ -885,18 +851,16 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
           <div class="card card-green"><div class="card-hd">Active Coaches</div><div class="card-val">9</div><div class="card-sub">All assigned</div></div>
           <div class="card"><div class="card-hd">Sessions Logged</div><div class="card-val">116</div><div class="card-sub">This semester</div></div>
         </div>
-        <div class="row a3" style="flex:1">
-          <div class="card" style="flex:1">
-            <div class="card-hd">Schools at a Glance</div>
-            <table class="tbl" style="margin-top:8px">
-              <thead><tr><th>School</th><th>Students</th><th>Coaches</th><th>Avg Level</th><th>EOD Rate</th></tr></thead>
-              <tbody>
-                <tr class="a3"><td class="fw7">Lincoln Elementary</td><td>31</td><td>3</td><td><span style="color:#10B981;font-weight:700">4.1</span></td><td><span class="badge bg-success">94%</span></td></tr>
-                <tr class="a4"><td class="fw7">Jefferson Middle</td><td>29</td><td>3</td><td><span style="color:#10B981;font-weight:700">3.9</span></td><td><span class="badge bg-success">91%</span></td></tr>
-                <tr class="a5"><td class="fw7">Roosevelt K-8</td><td>23</td><td>3</td><td><span style="color:#F59E0B;font-weight:700">3.6</span></td><td><span class="badge bg-info">88%</span></td></tr>
-              </tbody>
-            </table>
-          </div>
+        <div class="card a3" style="flex:1">
+          <div class="card-hd">Schools at a Glance</div>
+          <table class="tbl" style="margin-top:8px">
+            <thead><tr><th>School</th><th>Students</th><th>Coaches</th><th>Avg Level</th><th>EOD Compliance</th></tr></thead>
+            <tbody>
+              <tr class="a3"><td class="fw7">Lincoln Elementary</td><td>31</td><td>3</td><td><span style="color:#10B981;font-weight:700">4.1</span></td><td><span class="badge bg-success">94%</span></td></tr>
+              <tr class="a4"><td class="fw7">Jefferson Middle</td><td>29</td><td>3</td><td><span style="color:#10B981;font-weight:700">3.9</span></td><td><span class="badge bg-success">91%</span></td></tr>
+              <tr class="a5"><td class="fw7">Roosevelt K-8</td><td>23</td><td>3</td><td><span style="color:#F59E0B;font-weight:700">3.6</span></td><td><span class="badge bg-info">88%</span></td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -906,7 +870,8 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
 <!-- ══════════════════════════════════════════
      SCREEN 18 — ADMIN COACH MANAGEMENT
 ══════════════════════════════════════════ -->
-<div class="screen" id="s18" data-dur="9000">
+<div class="screen" id="s18" data-dur="13000"
+  data-note="Administrators can monitor every coach's rolling performance score, submission activity, and incident count across all schools at the same time. This makes it easy to identify top performers, spot coaches who may need additional support, and ensure program standards are being met district-wide.">
   <div class="app-shell">
     <div class="sidebar">
       <div class="sb-brand"><div class="sb-logo"><div class="sb-icon">U</div><div><div class="sb-name">Ufit Motion</div><div class="sb-sub">Ufit Demo Unified</div></div></div></div>
@@ -921,7 +886,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
       <div class="topbar"><div class="tb-title">Coach Management</div><div class="tb-user"><div class="avatar">SN</div><div><div class="u-name">Sarah Nguyen</div><div class="u-role">Admin</div></div></div></div>
       <div class="content">
         <div class="card a1" style="flex:1">
-          <div class="card-hd">All Coaches — Rolling Performance</div>
+          <div class="card-hd">All Coaches — Rolling Performance (30 Days)</div>
           <table class="tbl" style="margin-top:10px">
             <thead><tr><th>Coach</th><th>Role</th><th>School</th><th>Score</th><th>Band</th><th>EODs This Week</th><th>Late</th></tr></thead>
             <tbody>
@@ -942,7 +907,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
 <!-- ══════════════════════════════════════════
      SCREEN 19 — OUTRO
 ══════════════════════════════════════════ -->
-<div class="screen splash" id="s19" data-dur="12000" style="background:#0A1628">
+<div class="screen splash" id="s19" data-dur="14000" style="background:#0A1628">
   <div class="a1" style="margin-bottom:6px">
     <div style="width:80px;height:80px;background:rgba(245,158,11,0.12);border:2px solid rgba(245,158,11,0.35);border-radius:22px;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:36px;font-weight:900;color:#F59E0B">U</div>
     <div style="font-size:48px;font-weight:900;color:#fff;letter-spacing:-1.5px">Ufit Motion</div>
@@ -960,7 +925,6 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
 
 </div><!-- /demo-stage -->
 
-<!-- Controls -->
 <div id="controls">
   <button class="ctrl-btn" id="restart-btn">↺ Restart</button>
   <button class="ctrl-btn" id="prev-btn">‹ Prev</button>
@@ -974,14 +938,25 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#1F2937;o
 const screens = Array.from(document.querySelectorAll('.screen'));
 const durations = screens.map(s => parseInt(s.dataset.dur) || 6000);
 const total = durations.reduce((a,b) => a+b, 0);
-
 let cur = 0, playing = true, timer = null, pInterval = null, elapsed = 0;
+
+function updateCallout(n) {
+  const note = screens[n].dataset.note;
+  const el = document.getElementById('callout');
+  if (note) {
+    document.getElementById('callout-text').textContent = note;
+    el.classList.remove('hidden');
+  } else {
+    el.classList.add('hidden');
+  }
+}
 
 function show(n) {
   screens[cur].classList.remove('active');
   cur = Math.max(0, Math.min(n, screens.length - 1));
   screens[cur].classList.add('active');
   document.getElementById('screen-lbl').textContent = (cur+1) + ' / ' + screens.length;
+  updateCallout(cur);
 }
 
 function startTimer() {
@@ -1003,7 +978,6 @@ function startTimer() {
 function updateBtn() {
   document.getElementById('play-btn').textContent = playing ? '⏸ Pause' : '▶ Play';
 }
-
 function pause() { playing = false; clearTimeout(timer); clearInterval(pInterval); updateBtn(); }
 function play()  { playing = true; updateBtn(); startTimer(); }
 
@@ -1011,6 +985,7 @@ document.getElementById('play-btn').addEventListener('click', () => playing ? pa
 document.getElementById('prev-btn').addEventListener('click', () => { pause(); show(cur-1); play(); });
 document.getElementById('next-btn').addEventListener('click', () => { pause(); show(cur+1); play(); });
 document.getElementById('restart-btn').addEventListener('click', () => { show(0); play(); });
+
 document.getElementById('progress-track').addEventListener('click', e => {
   const rect = e.currentTarget.getBoundingClientRect();
   const pct = (e.clientX - rect.left) / rect.width;
@@ -1018,7 +993,6 @@ document.getElementById('progress-track').addEventListener('click', e => {
   for (let i = 0; i < durations.length; i++) { acc += durations[i]; if (acc/total >= pct) { pause(); show(i); play(); break; } }
 });
 
-// Touch swipe support for tablets
 let touchStartX = 0;
 document.getElementById('demo-stage').addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; }, {passive:true});
 document.getElementById('demo-stage').addEventListener('touchend', e => {
@@ -1026,7 +1000,6 @@ document.getElementById('demo-stage').addEventListener('touchend', e => {
   if (Math.abs(dx) > 50) { pause(); show(dx < 0 ? cur+1 : cur-1); play(); }
 }, {passive:true});
 
-// Keyboard shortcuts
 document.addEventListener('keydown', e => {
   if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); document.getElementById('next-btn').click(); }
   if (e.key === 'ArrowLeft') { e.preventDefault(); document.getElementById('prev-btn').click(); }
@@ -1034,7 +1007,6 @@ document.addEventListener('keydown', e => {
   if (e.key === 'r' || e.key === 'R') document.getElementById('restart-btn').click();
 });
 
-// Start
 show(0); play();
 </script>
 </body>
