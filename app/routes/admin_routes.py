@@ -248,7 +248,7 @@ def create_school():
                (organization_id, region_id, school_name, school_type,
                 address, city, state, zip_code,
                 principal_name, principal_email, active_status, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, ?)""",
             (
                 organization_id, data.get("region_id"), school_name, school_type,
                 data.get("address"), data.get("city"), data.get("state"), data.get("zip_code"),
@@ -554,7 +554,7 @@ def create_user():
         cur = db.execute(
             """INSERT INTO users
                (role, first_name, last_name, email, password_hash, active_status, created_at)
-               VALUES (?, ?, ?, ?, ?, 1, ?)""",
+               VALUES (?, ?, ?, ?, ?, TRUE, ?)""",
             (role, first_name, last_name, email, password_hash, ts),
         )
         new_user_id = cur.lastrowid
@@ -565,7 +565,7 @@ def create_user():
             p_cur = db.execute(
                 """INSERT INTO parents
                    (user_id, first_name, last_name, email, portal_access_status, created_at)
-                   VALUES (?, ?, ?, ?, 1, ?)""",
+                   VALUES (?, ?, ?, ?, TRUE, ?)""",
                 (new_user_id, first_name, last_name, email, ts),
             )
             new_parent_id = p_cur.lastrowid
@@ -582,7 +582,7 @@ def create_user():
                 db.execute(
                     """INSERT INTO staff_assignments
                        (staff_id, school_id, assignment_role, start_date, active_status, created_at)
-                       VALUES (?, ?, ?, ?, 1, ?)""",
+                       VALUES (?, ?, ?, ?, TRUE, ?)""",
                     (staff_id, school_id, role, ts[:10], ts),
                 )
 
@@ -847,7 +847,7 @@ def create_student():
             """INSERT INTO students
                (school_id, student_first_name, student_last_name, local_student_identifier,
                 grade_level, homeroom_teacher, gender, active_status, enrollment_start, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, TRUE, ?, ?)""",
             (school_id, first_name, last_name, local_id,
              grade_level, homeroom, gender, enrollment_start, now_utc()),
         )
@@ -964,7 +964,7 @@ def import_students():
                     """INSERT INTO students
                        (school_id, student_first_name, student_last_name, local_student_identifier,
                         grade_level, active_status, enrollment_start, created_at)
-                       VALUES (?, ?, ?, ?, ?, 1, ?, ?)""",
+                       VALUES (?, ?, ?, ?, ?, TRUE, ?, ?)""",
                     (school_id, first_name, last_name, local_id, grade_level, enrollment_start, ts),
                 )
                 audit(db, user["user_id"], "INSERT", "students", cur.lastrowid,
@@ -1021,7 +1021,7 @@ def update_student(student_id: int):
                 fields[key] = val or None
 
         if "active_status" in data:
-            fields["active_status"] = 1 if data["active_status"] else 0
+            fields["active_status"] = True if data["active_status"] else False
 
         # Parent linking — validate parent exists in same org before linking
         for pk in ("parent_primary_id", "parent_secondary_id"):

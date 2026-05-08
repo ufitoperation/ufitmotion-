@@ -447,7 +447,7 @@ def hubspot_webhook():
                 """INSERT INTO schools
                    (organization_id, school_name, school_type, city, state,
                     active_status, created_at)
-                   VALUES (?, ?, 'elementary', ?, ?, 1, ?)""",
+                   VALUES (?, ?, 'elementary', ?, ?, TRUE, ?)""",
                 (org_id, company_name[:200], city[:100], state[:50], now_utc()),
             )
             db.commit()
