@@ -38,9 +38,6 @@ def notify_school_created(school: dict) -> None:
         "name": school.get("school_name", ""),
         "city": school.get("city") or "",
         "state": school.get("state") or "",
-        "industry": "EDUCATION",
-        "type": "PROSPECT",
-        "description": f"Ufit Motion school — added via platform on school creation.",
     }
 
     try:
