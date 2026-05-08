@@ -374,7 +374,8 @@ def hubspot_webhook():
 
     sig_header = request.headers.get("X-HubSpot-Signature", "")
     body = request.get_data()
-    expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    # HubSpot v1 signature: SHA256(client_secret + raw_body), NOT HMAC
+    expected = hashlib.sha256(secret.encode() + body).hexdigest()
     if not hmac.compare_digest(sig_header, expected):
         _hs_logger.warning("HubSpot webhook signature mismatch")
         return jsonify({"error": "Invalid signature"}), 401
