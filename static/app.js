@@ -951,7 +951,7 @@ async function loadCoachesPage(container) {
 }
 
 async function deleteSchool(schoolId, schoolName) {
-  if (!confirm(`Delete "${schoolName}"?\n\nThis will soft-delete the school and deactivate all associated staff assignments, programs, and sessions. Students must be deactivated first.`)) return;
+  if (!confirm(`Delete "${schoolName}"? This cannot be undone.`)) return;
   try {
     await api('DELETE', `/api/schools/${schoolId}`);
     showAlert(`School "${schoolName}" deleted.`, 'success');

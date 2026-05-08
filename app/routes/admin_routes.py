@@ -401,15 +401,9 @@ def delete_school(school_id: int):
         if not row:
             return jsonify({"error": "School not found."}), 404
 
-        active_students = db.execute(
-            "SELECT COUNT(*) AS cnt FROM students WHERE school_id = ? AND active_status = TRUE AND deleted_at IS NULL",
-            (school_id,),
-        ).fetchone()["cnt"]
-        if active_students > 0:
-            return jsonify({"error": f"Cannot delete school with {active_students} active student(s). Deactivate or transfer students first."}), 409
-
         ts = now_utc()
         db.execute("UPDATE schools SET deleted_at = ? WHERE school_id = ?", (ts, school_id))
+        db.execute("UPDATE students SET deleted_at = ?, active_status = FALSE WHERE school_id = ? AND deleted_at IS NULL", (ts, school_id))
         db.execute("UPDATE staff_assignments SET active_status = FALSE WHERE school_id = ?", (school_id,))
         db.execute("UPDATE programs SET program_status = 'inactive' WHERE school_id = ?", (school_id,))
         db.execute("UPDATE sessions SET deleted_at = ? WHERE school_id = ? AND deleted_at IS NULL", (ts, school_id))
