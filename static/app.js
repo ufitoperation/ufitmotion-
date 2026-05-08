@@ -654,7 +654,7 @@ async function loadSchoolsPage(container) {
               <td>${fmtDate(s.last_eod_date)}</td>
               <td style="white-space:nowrap;">
                 <button class="btn btn-ghost btn-sm" aria-label="Edit school" data-school-id="${s.school_id}" onclick="openEditSchoolModal(${s.school_id})">${iconEdit()}</button>
-                <button class="btn btn-ghost btn-sm" aria-label="Delete school" style="color:var(--error,#dc2626)" data-school-id="${s.school_id}" onclick="deleteSchool(${s.school_id},${JSON.stringify(esc(s.school_name))})">${iconTrash()}</button>
+                <button class="btn btn-ghost btn-sm" aria-label="Delete school" style="color:var(--error,#dc2626)" data-school-id="${s.school_id}" data-school-name="${esc(s.school_name)}" onclick="deleteSchool(${s.school_id},this.dataset.schoolName)">${iconTrash()}</button>
               </td>
             </tr>`).join('')}
           </tbody>
