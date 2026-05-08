@@ -2138,7 +2138,8 @@ def admin_incidents():
                GROUP BY ir.report_date""",
             (window_start_str, window_end_str) + org_params,
         ).fetchall():
-            d = datetime.date.fromisoformat(week_rows["report_date"])
+            rd = week_rows["report_date"]
+            d = rd if isinstance(rd, datetime.date) else datetime.date.fromisoformat(str(rd))
             # Align to Monday of that week
             monday = (d - datetime.timedelta(days=d.weekday())).isoformat()
             week_counts[monday] = week_counts.get(monday, 0) + week_rows["cnt"]
