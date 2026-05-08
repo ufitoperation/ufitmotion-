@@ -413,6 +413,23 @@ def delete_school(school_id: int):
         db.execute("UPDATE assessments SET deleted_at = ? WHERE school_id = ? AND deleted_at IS NULL", (ts, school_id))
         db.execute("UPDATE behavior_observations SET deleted_at = ? WHERE school_id = ? AND deleted_at IS NULL", (ts, school_id))
         db.execute("UPDATE coach_observations SET deleted_at = ? WHERE school_id = ? AND deleted_at IS NULL", (ts, school_id))
+        # Soft-delete users and staff_profiles for staff assigned to this school
+        db.execute(
+            """UPDATE users SET deleted_at = ?, active_status = FALSE
+               WHERE user_id IN (
+                   SELECT sp.user_id FROM staff_profiles sp
+                   JOIN staff_assignments sa ON sa.staff_id = sp.staff_id
+                   WHERE sa.school_id = ? AND sp.deleted_at IS NULL
+               ) AND deleted_at IS NULL""",
+            (ts, school_id),
+        )
+        db.execute(
+            """UPDATE staff_profiles SET deleted_at = ?
+               WHERE staff_id IN (
+                   SELECT staff_id FROM staff_assignments WHERE school_id = ?
+               ) AND deleted_at IS NULL""",
+            (ts, school_id),
+        )
         audit(db, user["user_id"], "DELETE", "schools", school_id,
               old_values={"school_name": row["school_name"]})
         db.commit()
