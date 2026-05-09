@@ -304,74 +304,223 @@ function syncNavActive() {
 /* ============================================================
    10. LOGIN PAGE
    ============================================================ */
+const LOGIN_PORTALS = [
+  { key: 'admin',  label: 'Admin Portal',        emoji: '🏢', desc: 'Ufit operations & administrators' },
+  { key: 'coach',  label: 'Coach Portal',        emoji: '🏃', desc: 'Head and assistant coaches' },
+  { key: 'org',    label: 'Organization Portal', emoji: '🏫', desc: 'Principals and school staff' },
+  { key: 'parent', label: 'Parent Portal',       emoji: '👨‍👩‍👧', desc: 'View your child\'s progress' },
+];
+
 function renderLogin() {
-  const portals = [
-    { key: 'admin', label: 'Admin Portal',    emoji: '🏢' },
-    { key: 'coach', label: 'Coach Portal',    emoji: '🏃' },
-    { key: 'staff', label: 'Staff / Parent',  emoji: '👤' },
-  ];
-  const sel = state._loginPortal || 'admin';
+  const sel = state._loginPortal || null;
+  const isParent = sel === 'parent';
+  const showRegister = isParent && state._showParentRegister === true;
+  const selPortal = LOGIN_PORTALS.find(p => p.key === sel);
   return `
     <div class="login-page">
-      <div class="login-card">
+      <div class="login-shell">
         <div class="login-logo">
           <div class="login-logo-mark"><span class="login-logo-ufit">UFIT</span><span class="login-logo-motion">MOTION</span></div>
           <div class="login-logo-tagline">School Fitness Platform</div>
         </div>
-        <div class="portal-selector-label">Select your portal</div>
-        <div class="portal-selector" id="portal-selector">
-          ${portals.map(p => `<button class="portal-btn ${sel === p.key ? 'active' : ''}" data-portal="${p.key}" type="button">
-            <div class="portal-btn-icon">${p.emoji}</div>${p.label}</button>`).join('')}
+        <div class="portal-grid">
+          ${LOGIN_PORTALS.map(p => `
+            <button class="portal-card ${sel === p.key ? 'active' : ''}" data-portal="${p.key}" type="button">
+              <div class="portal-card-icon">${p.emoji}</div>
+              <div class="portal-card-label">${p.label}</div>
+              <div class="portal-card-desc">${p.desc}</div>
+            </button>
+          `).join('')}
         </div>
-        <form id="login-form" novalidate>
-          <div class="form-stack">
-            <div id="login-alert-area"></div>
-            <div class="form-group">
-              <label class="form-label" for="email">Email address</label>
-              <input class="form-input" type="email" id="email" name="email" placeholder="you@school.edu" autocomplete="username" inputmode="email" required />
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="password">Password</label>
-              <input class="form-input" type="password" id="password" name="password" placeholder="Enter your password" autocomplete="current-password" required />
-            </div>
-            <button class="btn btn-primary btn-full" type="submit" id="signin-btn">Sign In</button>
-            <div style="text-align:center;margin-top:4px;">
-              <button class="btn btn-ghost btn-sm" type="button" id="forgot-pw-link" style="font-size:0.875rem;">Forgot password?</button>
-            </div>
+        ${selPortal ? `
+          <div class="login-form-wrap">
+            ${showRegister ? renderParentRegister() : renderPortalLoginForm(selPortal, isParent)}
           </div>
-        </form>
+        ` : `<div class="login-hint">Select a portal above to sign in.</div>`}
         <div class="login-footer-text">Ufit Motion &mdash; &copy; ${new Date().getFullYear()} Ufit Online</div>
       </div>
     </div>`;
 }
 
+function renderPortalLoginForm(portal, allowRegister) {
+  return `
+    <div class="login-card-form">
+      <div class="login-card-form-header"><span class="login-card-form-icon">${portal.emoji}</span> Sign in to ${portal.label}</div>
+      <form id="login-form" novalidate>
+        <div class="form-stack">
+          <div id="login-alert-area"></div>
+          <div class="form-group">
+            <label class="form-label" for="email">Email address</label>
+            <input class="form-input" type="email" id="email" name="email" placeholder="you@school.edu" autocomplete="username" inputmode="email" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="password">Password</label>
+            <input class="form-input" type="password" id="password" name="password" placeholder="Enter your password" autocomplete="current-password" required />
+          </div>
+          <button class="btn btn-primary btn-full" type="submit" id="signin-btn">Sign In</button>
+          <div style="text-align:center;margin-top:4px;display:flex;flex-direction:column;gap:6px;">
+            <button class="btn btn-ghost btn-sm" type="button" id="forgot-pw-link" style="font-size:0.875rem;">Forgot password?</button>
+            ${allowRegister ? `<button class="btn btn-ghost btn-sm" type="button" id="parent-register-link" style="font-size:0.875rem;color:var(--color-primary,#1E40AF);font-weight:600;">New here? Create Account</button>` : ''}
+          </div>
+        </div>
+      </form>
+    </div>`;
+}
+
+// Defined fully in attachLoginListeners flow; placeholder here so renderLogin can call it.
+function renderParentRegister() {
+  const step = state._parentRegStep || 1;
+  if (step === 1) {
+    return `
+      <div class="login-card-form">
+        <div class="login-card-form-header"><span class="login-card-form-icon">👨‍👩‍👧</span> Create Parent Account &mdash; Step 1 of 2</div>
+        <p style="color:#6b7280;font-size:0.875rem;margin:0 0 16px;">First, verify your child's information.</p>
+        <form id="parent-verify-form" novalidate>
+          <div class="form-stack">
+            <div id="parent-verify-alert"></div>
+            <div class="form-group">
+              <label class="form-label">Student First Name</label>
+              <input class="form-input" name="first" required />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Student Last Name</label>
+              <input class="form-input" name="last" required />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Student ID</label>
+              <input class="form-input" name="sid" inputmode="numeric" placeholder="e.g., 1234" required />
+            </div>
+            <button class="btn btn-primary btn-full" type="submit">Verify</button>
+            <button class="btn btn-ghost btn-full btn-sm" type="button" id="parent-back-to-login" style="margin-top:4px;">Back to Sign In</button>
+          </div>
+        </form>
+      </div>`;
+  }
+  const verified = state._parentRegVerified || {};
+  return `
+    <div class="login-card-form">
+      <div class="login-card-form-header"><span class="login-card-form-icon">👨‍👩‍👧</span> Create Parent Account &mdash; Step 2 of 2</div>
+      <p style="color:#6b7280;font-size:0.875rem;margin:0 0 16px;">Verified at <strong>${esc(verified.school_name || '')}</strong>. Now create your account.</p>
+      <form id="parent-create-form" novalidate>
+        <div class="form-stack">
+          <div id="parent-create-alert"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="form-group"><label class="form-label">Your First Name</label><input class="form-input" name="first_name" required /></div>
+            <div class="form-group"><label class="form-label">Your Last Name</label><input class="form-input" name="last_name" required /></div>
+          </div>
+          <div class="form-group"><label class="form-label">Email</label><input class="form-input" type="email" name="email" required /></div>
+          <div class="form-group"><label class="form-label">Phone</label><input class="form-input" type="tel" name="phone" placeholder="optional" /></div>
+          <div class="form-group"><label class="form-label">Relationship to Student</label>
+            <select class="form-input" name="relationship" required>
+              <option value="">Select...</option>
+              <option value="mother">Mother</option>
+              <option value="father">Father</option>
+              <option value="guardian">Guardian</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div class="form-group"><label class="form-label">Password (min 8 chars)</label><input class="form-input" type="password" name="password" minlength="8" required /></div>
+          <button class="btn btn-primary btn-full" type="submit" id="parent-create-submit">Create Account</button>
+          <button class="btn btn-ghost btn-full btn-sm" type="button" id="parent-back-to-step1" style="margin-top:4px;">Back</button>
+        </div>
+      </form>
+    </div>`;
+}
+
 function attachLoginListeners() {
-  $$('.portal-btn').forEach(btn => btn.addEventListener('click', () => {
+  $$('.portal-card').forEach(btn => btn.addEventListener('click', () => {
     state._loginPortal = btn.dataset.portal;
-    $$('.portal-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
+    state._showParentRegister = false;
+    state._parentRegStep = 1;
+    render();
   }));
 
   document.getElementById('forgot-pw-link')?.addEventListener('click', openForgotPasswordModal);
 
+  document.getElementById('parent-register-link')?.addEventListener('click', () => {
+    state._showParentRegister = true;
+    state._parentRegStep = 1;
+    render();
+  });
+
+  attachParentRegisterListeners();
+
   const form = document.getElementById('login-form');
-  if (!form) return;
-  form.addEventListener('submit', async e => {
+  if (form) {
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const email = form.querySelector('#email').value.trim();
+      const password = form.querySelector('#password').value;
+      if (!email || !password) { showLoginError('Please enter your email and password.'); return; }
+      const btn = document.getElementById('signin-btn');
+      btn.disabled = true;
+      btn.innerHTML = `<span class="spinner spinner-white"></span> Signing in…`;
+      try {
+        const data = await api('POST', '/api/auth/login', { email, password, portal: state._loginPortal || 'admin' });
+        state.user = data.user || data;
+        state.currentPage = 'dashboard';
+        render();
+      } catch (err) {
+        showLoginError(err.message || 'Invalid email or password.');
+        btn.disabled = false; btn.innerHTML = 'Sign In';
+      }
+    });
+  }
+}
+
+function attachParentRegisterListeners() {
+  document.getElementById('parent-back-to-login')?.addEventListener('click', () => {
+    state._showParentRegister = false;
+    state._parentRegStep = 1;
+    render();
+  });
+  document.getElementById('parent-back-to-step1')?.addEventListener('click', () => {
+    state._parentRegStep = 1;
+    render();
+  });
+
+  document.getElementById('parent-verify-form')?.addEventListener('submit', async e => {
     e.preventDefault();
-    const email = form.querySelector('#email').value.trim();
-    const password = form.querySelector('#password').value;
-    if (!email || !password) { showLoginError('Please enter your email and password.'); return; }
-    const btn = document.getElementById('signin-btn');
-    btn.disabled = true;
-    btn.innerHTML = `<span class="spinner spinner-white"></span> Signing in…`;
+    const f = e.target;
+    const alertEl = document.getElementById('parent-verify-alert');
+    if (alertEl) alertEl.innerHTML = '';
     try {
-      const data = await api('POST', '/api/auth/login', { email, password, portal: state._loginPortal || 'admin' });
-      state.user = data.user || data;
-      state.currentPage = 'dashboard';
+      const data = await api('POST', '/api/auth/parent-register/verify-student', {
+        student_first_name: f.first.value.trim(),
+        student_last_name: f.last.value.trim(),
+        student_id: f.sid.value.trim(),
+      });
+      state._parentRegVerified = data;
+      state._parentRegStep = 2;
       render();
     } catch (err) {
-      showLoginError(err.message || 'Invalid email or password.');
-      btn.disabled = false; btn.innerHTML = 'Sign In';
+      if (alertEl) alertEl.innerHTML = errorCard(err.message || 'Verification failed.');
+    }
+  });
+
+  document.getElementById('parent-create-form')?.addEventListener('submit', async e => {
+    e.preventDefault();
+    const f = e.target;
+    const alertEl = document.getElementById('parent-create-alert');
+    const btn = document.getElementById('parent-create-submit');
+    const verified = state._parentRegVerified || {};
+    if (alertEl) alertEl.innerHTML = '';
+    if (btn) { btn.disabled = true; btn.innerHTML = `<span class="spinner spinner-white"></span> Creating…`; }
+    try {
+      await api('POST', '/api/auth/parent-register/create', {
+        student_id: verified.student_id,
+        first_name: f.first_name.value.trim(),
+        last_name: f.last_name.value.trim(),
+        email: f.email.value.trim(),
+        phone: f.phone.value.trim(),
+        password: f.password.value,
+        relationship: f.relationship.value,
+      });
+      // Server auto-logs in; reload to enter parent portal.
+      window.location.href = '/';
+    } catch (err) {
+      if (alertEl) alertEl.innerHTML = errorCard(err.message || 'Could not create account.');
+      if (btn) { btn.disabled = false; btn.innerHTML = 'Create Account'; }
     }
   });
 }

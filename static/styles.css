@@ -991,6 +991,93 @@ table.data-table .td-actions {
   margin-bottom: 4px;
 }
 
+/* === New 4-portal card grid (replaces .login-card / .portal-selector) === */
+.login-shell {
+  max-width: 880px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 32px 16px;
+}
+.portal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin: 24px 0 8px;
+}
+.portal-card {
+  background: var(--color-surface, #fff);
+  border: 2px solid var(--color-border, #e5e7eb);
+  border-radius: 12px;
+  padding: 20px 18px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-height: 116px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--font);
+}
+.portal-card:hover {
+  border-color: var(--color-primary, #1E40AF);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.06);
+}
+.portal-card.active {
+  border-color: var(--color-primary, #1E40AF);
+  background: #EFF6FF;
+}
+.portal-card-icon {
+  font-size: 28px;
+  line-height: 1;
+}
+.portal-card-label {
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--color-text, #111827);
+  margin-top: 4px;
+}
+.portal-card-desc {
+  color: var(--color-text-secondary, #6b7280);
+  font-size: 0.8125rem;
+  line-height: 1.35;
+}
+.login-form-wrap {
+  margin-top: 12px;
+  max-width: 480px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.login-card-form {
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,0.04));
+}
+.login-card-form-header {
+  font-weight: 700;
+  font-size: 1.0625rem;
+  margin-bottom: 16px;
+  color: var(--color-text, #111827);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.login-card-form-icon {
+  font-size: 1.25rem;
+}
+.login-hint {
+  text-align: center;
+  color: var(--color-text-secondary, #6b7280);
+  font-size: 0.875rem;
+  padding: 16px 0;
+}
+@media (max-width: 640px) {
+  .portal-grid { grid-template-columns: 1fr; }
+  .portal-card { min-height: auto; }
+}
+
 .login-divider {
   display: flex;
   align-items: center;
