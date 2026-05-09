@@ -67,7 +67,7 @@ def login():
 
     allowed_roles = PORTAL_ROLES.get(portal)
     if allowed_roles is None:
-        return jsonify({"error": "Invalid portal. Must be admin, coach, or staff."}), 400
+        return jsonify({"error": "Invalid portal. Must be admin, coach, org, or parent."}), 400
 
     db = get_db()
     try:
@@ -97,6 +97,13 @@ def login():
                   new_values={"email": email, "reason": "user_not_found", "ip": request.remote_addr})
             db.commit()
             return jsonify({"error": "Invalid email or password."}), 401
+
+        # Pending invite users have no password_hash yet — block before bcrypt to avoid TypeError.
+        if not row["password_hash"]:
+            audit(db, row["user_id"], "LOGIN_FAILED", "users", row["user_id"],
+                  new_values={"reason": "pending_invite", "ip": request.remote_addr})
+            db.commit()
+            return jsonify({"error": "Account is pending — check your email for a setup link."}), 403
 
         if not check_password_hash(row["password_hash"], password):
             audit(db, row["user_id"], "LOGIN_FAILED", "users", row["user_id"],
