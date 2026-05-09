@@ -195,6 +195,36 @@ function closeModal(cb) {
   if (cb) cb();
 }
 
+/**
+ * In-app confirmation modal — replaces native window.confirm() so the demo
+ * never shows the "<host> says..." Chrome dialog. Pass a message and an
+ * onConfirm callback. Optionally pass {danger: true} to use red destructive
+ * styling for the primary button.
+ */
+function showConfirm(message, onConfirm, opts = {}) {
+  const isDanger = !!opts.danger;
+  const confirmLabel = opts.confirmLabel || (isDanger ? 'Delete' : 'Confirm');
+  const cancelLabel = opts.cancelLabel || 'Cancel';
+  openModal(`
+    <div class="modal-header">
+      <h2 class="modal-title">${esc(opts.title || 'Are you sure?')}</h2>
+      <button class="modal-close btn btn-ghost btn-sm" aria-label="Close" onclick="closeModal()">${iconClose()}</button>
+    </div>
+    <div class="modal-body">
+      <p style="margin:0 0 16px;color:var(--color-text);font-size:0.9375rem;line-height:1.5;">${esc(message)}</p>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button class="btn btn-ghost" type="button" id="confirm-cancel">${esc(cancelLabel)}</button>
+        <button class="btn ${isDanger ? 'btn-danger' : 'btn-primary'}" type="button" id="confirm-ok" autofocus>${esc(confirmLabel)}</button>
+      </div>
+    </div>
+  `);
+  document.getElementById('confirm-cancel')?.addEventListener('click', () => closeModal());
+  document.getElementById('confirm-ok')?.addEventListener('click', () => {
+    closeModal();
+    try { onConfirm(); } catch (e) { console.error(e); }
+  });
+}
+
 /* ============================================================
    8. LOADING PLACEHOLDER
    ============================================================ */
@@ -1145,15 +1175,20 @@ async function resendInvite(userId) {
 }
 
 async function deleteSchool(schoolId, schoolName) {
-  if (!confirm(`Delete "${schoolName}"? This cannot be undone.`)) return;
-  try {
-    await api('DELETE', `/api/schools/${schoolId}`);
-    showAlert(`School "${schoolName}" deleted.`, 'success');
-    const container = document.getElementById('main-content');
-    if (container) loadSchoolsPage(container);
-  } catch (err) {
-    showAlert(err.message || 'Delete failed.', 'error');
-  }
+  showConfirm(
+    `Delete "${schoolName}"? This will remove the school and all of its students, coaches, and reports. This cannot be undone.`,
+    async () => {
+      try {
+        await api('DELETE', `/api/schools/${schoolId}`);
+        showAlert(`School "${schoolName}" deleted.`, 'success');
+        const container = document.getElementById('main-content');
+        if (container) loadSchoolsPage(container);
+      } catch (err) {
+        showAlert(err.message || 'Delete failed.', 'error');
+      }
+    },
+    { danger: true, confirmLabel: 'Delete School', title: 'Delete this school?' }
+  );
 }
 
 async function openCoachScorecardModal(coach) {
@@ -5188,8 +5223,7 @@ function openEditProgramModal(p) {
 /* ============================================================
    28. LOGOUT
    ============================================================ */
-async function handleLogout(skipConfirm = false) {
-  if (!skipConfirm && !confirm('Sign out of Ufit Motion?')) return;
+async function _doLogout() {
   try { await api('POST', '/api/auth/logout'); } catch (_) {}
   state.user = null;
   state.currentPage = 'login';
@@ -5199,6 +5233,15 @@ async function handleLogout(skipConfirm = false) {
   window.history.replaceState({}, '', '/');
   render();
   showAlert('You have been signed out.', 'success');
+}
+
+async function handleLogout(skipConfirm = false) {
+  if (skipConfirm) return _doLogout();
+  showConfirm(
+    'Are you sure you want to sign out of Ufit Motion?',
+    _doLogout,
+    { confirmLabel: 'Sign Out', title: 'Sign out?' }
+  );
 }
 
 /* ============================================================
