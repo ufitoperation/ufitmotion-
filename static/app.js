@@ -390,7 +390,7 @@ function renderParentRegister() {
               <label class="form-label">Student ID</label>
               <input class="form-input" name="sid" inputmode="numeric" placeholder="e.g., 1234" required />
             </div>
-            <button class="btn btn-primary btn-full" type="submit">Verify</button>
+            <button class="btn btn-primary btn-full" type="submit" id="parent-verify-submit">Verify</button>
             <button class="btn btn-ghost btn-full btn-sm" type="button" id="parent-back-to-login" style="margin-top:4px;">Back to Sign In</button>
           </div>
         </form>
@@ -483,7 +483,9 @@ function attachParentRegisterListeners() {
     e.preventDefault();
     const f = e.target;
     const alertEl = document.getElementById('parent-verify-alert');
+    const btn = document.getElementById('parent-verify-submit');
     if (alertEl) alertEl.innerHTML = '';
+    if (btn) { btn.disabled = true; btn.innerHTML = `<span class="spinner spinner-white"></span> Verifying…`; }
     try {
       const data = await api('POST', '/api/auth/parent-register/verify-student', {
         student_first_name: f.first.value.trim(),
@@ -495,6 +497,7 @@ function attachParentRegisterListeners() {
       render();
     } catch (err) {
       if (alertEl) alertEl.innerHTML = errorCard(err.message || 'Verification failed.');
+      if (btn) { btn.disabled = false; btn.innerHTML = 'Verify'; }
     }
   });
 
@@ -516,7 +519,22 @@ function attachParentRegisterListeners() {
         password: f.password.value,
         relationship: f.relationship.value,
       });
-      // Server auto-logs in; reload to enter parent portal.
+      // Verify the session cookie has actually landed before navigating, to avoid
+      // the race where window.location.href fires before Set-Cookie is committed
+      // on slow mobile networks (UX-002).
+      try {
+        const sess = await api('GET', '/api/auth/session');
+        if (sess && sess.user) {
+          state.user = sess.user;
+          state._showParentRegister = false;
+          state._parentRegStep = 1;
+          state._parentRegVerified = null;
+          state._loginPortal = null;
+          state.currentPage = 'dashboard';
+          render();
+          return;
+        }
+      } catch (_) { /* fall through to reload */ }
       window.location.href = '/';
     } catch (err) {
       if (alertEl) alertEl.innerHTML = errorCard(err.message || 'Could not create account.');
@@ -1081,10 +1099,10 @@ async function loadCoachesPage(container) {
             const bandClass = {'Exceptional':'badge-success','Strong':'badge-success','Meeting Expectations':'badge-info','Developing':'badge-warning','Needs Improvement':'badge-error'}[band] || '';
             const status = c.account_status || 'active';
             const statusBadge = status === 'pending_invite'
-              ? `<span class="badge badge-warning">Pending Invite</span>`
+              ? `<span class="badge badge-warning" title="Pending invite — user has not yet set their password">⏱ Pending Invite</span>`
               : status === 'active'
-              ? `<span class="badge badge-success">Active</span>`
-              : `<span class="badge">Inactive</span>`;
+              ? `<span class="badge badge-success" title="Account is active">✓ Active</span>`
+              : `<span class="badge" title="Account is deactivated">— Inactive</span>`;
             const isPending = status === 'pending_invite';
             const _sid = _modalStore.set(c);
             return `<tr${isPending ? ' style="opacity:0.85;"' : ''}>

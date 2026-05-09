@@ -183,7 +183,7 @@ def _seed_default_admin(db) -> None:
         db.execute(
             """INSERT INTO users (role, first_name, last_name, email, password_hash,
                                   active_status, created_at)
-               VALUES (?, ?, ?, ?, ?, 1, ?)""",
+               VALUES (?, ?, ?, ?, ?, TRUE, ?)""",
             ("admin", "Admin", "User", "admin@ufit.com", password_hash, ts),
         )
         db.commit()
@@ -202,17 +202,34 @@ def _ensure_missa_ceo(db) -> None:
     """
     Seed Miss A's CEO account (Ufit founder) if it doesn't already exist.
     Email: missa@ufitonline.com  Password: from UFIT_SEED_PASSWORD or default 'UfitDemo2026!'
+
+    Idempotent across deletion: if a soft-deleted Miss A row exists, restore it
+    rather than INSERTing (which would UNIQUE-violate on email).
     """
     from app.routes._helpers import now_utc
     try:
-        exists = db.execute(
-            "SELECT user_id FROM users WHERE email = ? AND deleted_at IS NULL",
+        # Check for ANY row with this email (active or soft-deleted) since the
+        # UNIQUE constraint on users.email applies regardless of deleted_at.
+        existing = db.execute(
+            "SELECT user_id, role, deleted_at FROM users WHERE email = ?",
             ("missa@ufitonline.com",),
         ).fetchone()
-        if exists:
-            return
         ceo_password = os.environ.get("UFIT_SEED_PASSWORD", "UfitDemo2026!")
         ceo_hash = generate_password_hash(ceo_password, method="pbkdf2:sha256")
+        if existing:
+            # Restore if soft-deleted, leave alone otherwise.
+            if existing["deleted_at"] is not None:
+                db.execute(
+                    """UPDATE users
+                       SET role = 'ceo', deleted_at = NULL, active_status = TRUE,
+                           email_verified = TRUE, password_hash = ?,
+                           password_reset_token = NULL, password_reset_expires_at = NULL
+                       WHERE user_id = ?""",
+                    (ceo_hash, existing["user_id"]),
+                )
+                db.commit()
+                print("[seeds] Miss A CEO account restored from soft-delete.", flush=True)
+            return
         db.execute(
             """INSERT INTO users (role, first_name, last_name, email, password_hash,
                                   active_status, email_verified, created_at)

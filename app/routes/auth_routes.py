@@ -99,11 +99,14 @@ def login():
             return jsonify({"error": "Invalid email or password."}), 401
 
         # Pending invite users have no password_hash yet — block before bcrypt to avoid TypeError.
+        # Use generic "invalid email or password" to avoid enumerating which emails
+        # have pending invites pending (SEC-010).
         if not row["password_hash"]:
+            check_password_hash(_TIMING_HASH, password)  # constant-time hash check
             audit(db, row["user_id"], "LOGIN_FAILED", "users", row["user_id"],
                   new_values={"reason": "pending_invite", "ip": request.remote_addr})
             db.commit()
-            return jsonify({"error": "Account is pending — check your email for a setup link."}), 403
+            return jsonify({"error": "Invalid email or password."}), 401
 
         if not check_password_hash(row["password_hash"], password):
             audit(db, row["user_id"], "LOGIN_FAILED", "users", row["user_id"],
@@ -440,9 +443,25 @@ def parent_register_verify_student():
         ).fetchone()
 
         if not row:
+            audit(db, None, "parent_register_verify_failed", "students", student_id,
+                  new_values={"reason": "student_not_found", "ip": request.remote_addr})
+            db.commit()
             return jsonify({
                 "error": "We couldn't find that student. Please check the spelling and ID, or contact your school."
             }), 404
+
+        # Bind the verified student to this session — the create endpoint will only
+        # accept a student_id that matches the most recent successful verify in the
+        # same session. Prevents an attacker from calling create with a guessed
+        # student_id without going through verify first, AND prevents replay across
+        # different visitors who happened to verify different students.
+        session["pending_parent_student_id"] = row["student_id"]
+        session["pending_parent_school_id"] = row["school_id"]
+        session.permanent = True
+
+        audit(db, None, "parent_register_verify_ok", "students", row["student_id"],
+              new_values={"ip": request.remote_addr})
+        db.commit()
 
         return jsonify({
             "ok": True,
@@ -483,6 +502,14 @@ def parent_register_create():
     except (ValueError, TypeError):
         return jsonify({"error": "Invalid student ID."}), 400
 
+    # SEC-002: require that this session previously verified the SAME student.
+    # Without this, an attacker can call create directly with a guessed student_id.
+    pending_student_id = session.get("pending_parent_student_id")
+    if pending_student_id is None or int(pending_student_id) != student_id:
+        return jsonify({
+            "error": "Please verify your child's information first."
+        }), 403
+
     if not all([first_name, last_name, email, password]):
         return jsonify({"error": "All fields are required."}), 400
     if len(password) < 8:
@@ -499,7 +526,9 @@ def parent_register_create():
                       sc.school_name
                FROM students s
                JOIN schools sc ON sc.school_id = s.school_id
-               WHERE s.student_id = ? AND s.deleted_at IS NULL AND s.active_status = TRUE""",
+               JOIN organizations o ON o.organization_id = sc.organization_id
+               WHERE s.student_id = ? AND s.deleted_at IS NULL AND s.active_status = TRUE
+                 AND sc.deleted_at IS NULL AND o.deleted_at IS NULL""",
             (student_id,),
         ).fetchone()
         if not student:
@@ -510,7 +539,14 @@ def parent_register_create():
             (email,),
         ).fetchone()
         if existing:
-            return jsonify({"error": "An account with that email already exists."}), 409
+            # SEC-004: don't leak whether the email is registered. Generic 400 message
+            # mirrors what an attacker would see for any other validation error.
+            audit(db, None, "parent_register_create_blocked", "users", existing["user_id"],
+                  new_values={"reason": "email_in_use", "ip": request.remote_addr})
+            db.commit()
+            return jsonify({
+                "error": "We couldn't create your account with that information. Please try again or contact your school."
+            }), 400
 
         ts = now_utc()
         password_hash = generate_password_hash(password, method="pbkdf2:sha256")
@@ -532,25 +568,44 @@ def parent_register_create():
         )
         parent_id = p_cur.lastrowid
 
-        if student["parent_primary_id"] is None:
-            db.execute(
-                "UPDATE students SET parent_primary_id = ? WHERE student_id = ?",
+        # SEC-003 / DATA-003: conditional UPDATEs prevent two concurrent registrations
+        # from both observing the same NULL slot and overwriting each other.
+        # Try primary first; if rowcount==0 (someone else got it), try secondary.
+        primary_res = db.execute(
+            """UPDATE students SET parent_primary_id = ?
+               WHERE student_id = ? AND parent_primary_id IS NULL""",
+            (parent_id, student_id),
+        )
+        linked = primary_res.rowcount > 0
+        if not linked:
+            secondary_res = db.execute(
+                """UPDATE students SET parent_secondary_id = ?
+                   WHERE student_id = ? AND parent_secondary_id IS NULL""",
                 (parent_id, student_id),
             )
-        elif student["parent_secondary_id"] is None:
+            linked = secondary_res.rowcount > 0
+        # If both slots filled, parent record exists but is unlinked. Leave a note in
+        # parents.notes so an admin can resolve manually.
+        if not linked:
             db.execute(
-                "UPDATE students SET parent_secondary_id = ? WHERE student_id = ?",
-                (parent_id, student_id),
+                """UPDATE parents SET notes = ? WHERE parent_id = ?""",
+                (f"Relationship: {relationship} | UNLINKED — both parent slots full on student {student_id}",
+                 parent_id),
             )
 
         audit(db, user_id, "parent_self_register", "users", user_id,
-              new_values={"student_id": student_id, "school_id": student["school_id"]})
+              new_values={"student_id": student_id, "school_id": student["school_id"],
+                          "linked": linked})
         db.commit()
 
-        # Auto-login: set session
+        # Auto-login: rotate session ID to prevent session-fixation (SEC-006).
+        # Flask's session is signed-cookie-based, so .clear() + new SID isn't directly
+        # available, but clearing and re-setting permanent=True with a new key prefix
+        # forces the cookie to be re-issued on the next response.
         session.clear()
         session["user_id"] = user_id
         session["role"] = "parent"
+        session["_session_id"] = secrets.token_urlsafe(16)
         session.permanent = True
 
         # Fire HubSpot sync in background — non-blocking, errors swallowed.

@@ -458,9 +458,12 @@ def delete_school(school_id: int):
         db.execute("UPDATE assessments SET deleted_at = ? WHERE school_id = ? AND deleted_at IS NULL", (ts, school_id))
         db.execute("UPDATE behavior_observations SET deleted_at = ? WHERE school_id = ? AND deleted_at IS NULL", (ts, school_id))
         db.execute("UPDATE coach_observations SET deleted_at = ? WHERE school_id = ? AND deleted_at IS NULL", (ts, school_id))
-        # Soft-delete users and staff_profiles for staff assigned to this school
+        # Soft-delete users and staff_profiles for staff assigned to this school.
+        # Clear invite tokens so stale links can't reactivate the account post-cascade.
         db.execute(
-            """UPDATE users SET deleted_at = ?, active_status = FALSE
+            """UPDATE users
+               SET deleted_at = ?, active_status = FALSE,
+                   password_reset_token = NULL, password_reset_expires_at = NULL
                WHERE user_id IN (
                    SELECT sp.user_id FROM staff_profiles sp
                    JOIN staff_assignments sa ON sa.staff_id = sp.staff_id
@@ -769,8 +772,12 @@ def delete_user(user_id: int):
                 return jsonify({"error": "Cannot delete the last CEO account."}), 409
 
         ts = now_utc()
+        # Clear pending invite token on delete so a stolen invite link can't reactivate the account.
         db.execute(
-            "UPDATE users SET deleted_at = ?, active_status = FALSE WHERE user_id = ?",
+            """UPDATE users
+               SET deleted_at = ?, active_status = FALSE,
+                   password_reset_token = NULL, password_reset_expires_at = NULL
+               WHERE user_id = ?""",
             (ts, user_id),
         )
         db.execute(
@@ -781,6 +788,21 @@ def delete_user(user_id: int):
             "UPDATE staff_assignments SET active_status = FALSE WHERE staff_id = (SELECT staff_id FROM staff_profiles WHERE user_id = ?)",
             (user_id,),
         )
+        # If this is a parent user, clear any student parent FK pointers so deleted parents
+        # don't hang as orphans referenced by students.
+        if row["role"] == "parent":
+            db.execute(
+                """UPDATE students
+                   SET parent_primary_id = NULL
+                   WHERE parent_primary_id IN (SELECT parent_id FROM parents WHERE user_id = ?)""",
+                (user_id,),
+            )
+            db.execute(
+                """UPDATE students
+                   SET parent_secondary_id = NULL
+                   WHERE parent_secondary_id IN (SELECT parent_id FROM parents WHERE user_id = ?)""",
+                (user_id,),
+            )
         audit(db, current["user_id"], "DELETE", "users", user_id,
               old_values={"email": row["email"], "role": row["role"]})
         db.commit()
