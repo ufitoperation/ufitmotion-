@@ -1985,3 +1985,87 @@ table.data-table .td-actions {
 @media print {
   .site-footer { display: none; }
 }
+
+/* ---------------------------------------------------------------------------
+   B6 — School Picker (multi-school coach selector shown after login when
+   the user has more than one active staff_assignment).
+   --------------------------------------------------------------------------- */
+
+.school-picker-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  background: linear-gradient(135deg, #1E40AF 0%, #1E3A8A 100%);
+}
+
+.school-picker-card {
+  width: 100%;
+  max-width: 560px;
+  background: white;
+  border-radius: 16px;
+  padding: 36px 32px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.25);
+}
+
+.school-picker-title {
+  margin: 0 0 8px;
+  font-size: 24px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.school-picker-sub {
+  margin: 0 0 24px;
+  color: #6B7280;
+  font-size: 14px;
+}
+
+.school-picker-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.school-pick-card {
+  text-align: left;
+  padding: 18px 20px;
+  border: 1px solid #E5E7EB;
+  background: #F9FAFB;
+  border-radius: 10px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 120ms, transform 120ms, background 120ms;
+}
+
+.school-pick-card:hover,
+.school-pick-card:focus-visible {
+  border-color: #1E40AF;
+  background: white;
+  transform: translateY(-1px);
+}
+
+.school-pick-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 4px;
+}
+
+.school-pick-role {
+  font-size: 12px;
+  color: #6B7280;
+  text-transform: capitalize;
+  letter-spacing: 0.3px;
+}
+
+.school-picker-signout {
+  display: block;
+  margin: 24px auto 0;
+  color: #6B7280;
+}
+
+@media (min-width: 480px) {
+  .school-picker-grid { grid-template-columns: 1fr 1fr; }
+}

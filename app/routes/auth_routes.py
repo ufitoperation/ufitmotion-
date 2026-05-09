@@ -130,11 +130,92 @@ def login():
         session["user_id"] = row["user_id"]
         session.permanent = True
 
+        # Multi-school: pull every active assignment for this user. If exactly
+        # one, auto-select it into the session. If more than one, the SPA shows
+        # a "Where are you working today?" picker before the dashboard renders.
+        assignments = []
+        if row["staff_id"]:
+            assignment_rows = db.execute(
+                """SELECT s.school_id, s.school_name, sa.assignment_role
+                   FROM staff_assignments sa
+                   JOIN schools s ON s.school_id = sa.school_id AND s.deleted_at IS NULL
+                   WHERE sa.staff_id = ? AND sa.active_status = TRUE
+                         AND (sa.deleted_at IS NULL)
+                   ORDER BY s.school_name""",
+                (row["staff_id"],),
+            ).fetchall()
+            assignments = [
+                {"school_id": r["school_id"],
+                 "school_name": r["school_name"],
+                 "role": r["assignment_role"]}
+                for r in assignment_rows
+            ]
+
+        needs_school_selection = len(assignments) > 1
+        if len(assignments) == 1:
+            session["current_school_id"] = assignments[0]["school_id"]
+
         audit(db, row["user_id"], "LOGIN", "users", row["user_id"],
-              new_values={"portal": portal, "ip": request.remote_addr})
+              new_values={"portal": portal, "ip": request.remote_addr,
+                          "assignment_count": len(assignments)})
         db.commit()
 
-        return jsonify({"ok": True, "user": serialize_user(dict(row))})
+        user_dict = serialize_user(dict(row))
+        user_dict["assignments"] = assignments
+        return jsonify({
+            "ok": True,
+            "user": user_dict,
+            "needs_school_selection": needs_school_selection,
+        })
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# POST /api/auth/select-school
+# ---------------------------------------------------------------------------
+@auth_bp.route("/api/auth/select-school", methods=["POST"])
+def select_school():
+    """
+    Set the active school for a multi-school coach.
+
+    Validates the user has an active staff_assignment to the requested school,
+    then writes the school_id to session.current_school_id. Subsequent
+    school-scoped queries should prefer session.current_school_id over the
+    user's default first-assignment.
+    """
+    user = current_user()
+    if user is None:
+        return jsonify({"error": "Authentication required."}), 401
+
+    data = parse_json()
+    school_id = data.get("school_id")
+    if not isinstance(school_id, int):
+        return jsonify({"error": "school_id (integer) is required."}), 400
+
+    db = get_db()
+    try:
+        row = db.execute(
+            """SELECT s.school_id, s.school_name
+               FROM schools s
+               JOIN staff_assignments sa
+                    ON sa.school_id = s.school_id
+                    AND sa.active_status = TRUE
+                    AND (sa.deleted_at IS NULL)
+               JOIN staff_profiles sp
+                    ON sp.staff_id = sa.staff_id
+                    AND (sp.deleted_at IS NULL)
+               WHERE sp.user_id = ? AND s.school_id = ? AND s.deleted_at IS NULL""",
+            (user["user_id"], school_id),
+        ).fetchone()
+        if row is None:
+            return jsonify({"error": "You don't have an active assignment to that school."}), 403
+
+        session["current_school_id"] = row["school_id"]
+        audit(db, user["user_id"], "school_selected", "users", user["user_id"],
+              new_values={"school_id": row["school_id"]})
+        db.commit()
+        return jsonify({"ok": True, "school": dict(row)})
     finally:
         db.close()
 

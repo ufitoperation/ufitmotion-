@@ -324,9 +324,58 @@ function render() {
     attachLoginListeners();
     return;
   }
+  // Multi-school coach: pick the active school before rendering the shell.
+  if (state.currentPage === 'school-picker') {
+    app.innerHTML = renderSchoolPicker();
+    attachSchoolPickerListeners();
+    return;
+  }
   app.innerHTML = renderShell();
   attachShellListeners();
   renderPage();
+}
+
+function renderSchoolPicker() {
+  const assignments = (state.user && state.user.assignments) || [];
+  const cards = assignments.map(a => `
+    <button type="button" class="school-pick-card" data-school-id="${a.school_id}">
+      <div class="school-pick-name">${esc(a.school_name)}</div>
+      <div class="school-pick-role">${esc((a.role || '').replace(/_/g, ' '))}</div>
+    </button>
+  `).join('');
+  return `
+    <main class="school-picker-shell">
+      <div class="school-picker-card">
+        <h1 class="school-picker-title">Where are you working today?</h1>
+        <p class="school-picker-sub">Select the school you're coaching at right now. You can switch any time from the top nav.</p>
+        <div class="school-picker-grid">${cards}</div>
+        <button type="button" class="btn btn-ghost school-picker-signout" id="school-picker-signout">Sign out</button>
+      </div>
+    </main>
+  `;
+}
+
+function attachSchoolPickerListeners() {
+  document.querySelectorAll('.school-pick-card').forEach(el => {
+    el.addEventListener('click', async () => {
+      const schoolId = parseInt(el.dataset.schoolId, 10);
+      el.disabled = true;
+      try {
+        await api('POST', '/api/auth/select-school', { school_id: schoolId });
+        state.currentSchoolId = schoolId;
+        state._needsSchoolSelection = false;
+        // Tag the assignment-derived current school name so the top-nav chip can render it.
+        const a = (state.user.assignments || []).find(x => x.school_id === schoolId);
+        if (a) state.currentSchoolName = a.school_name;
+        state.currentPage = 'dashboard';
+        render();
+      } catch (err) {
+        el.disabled = false;
+        showAlert(err?.message || 'Could not switch schools.', 'error');
+      }
+    });
+  });
+  document.getElementById('school-picker-signout')?.addEventListener('click', () => handleLogout(true));
 }
 
 function renderPage() {
@@ -555,7 +604,18 @@ function attachLoginListeners() {
       try {
         const data = await api('POST', '/api/auth/login', { email, password, portal: state._loginPortal || 'admin' });
         state.user = data.user || data;
-        state.currentPage = 'dashboard';
+        // Multi-school: server says we need to pick. Show picker before dashboard.
+        if (data.needs_school_selection && Array.isArray(state.user.assignments) && state.user.assignments.length > 1) {
+          state._needsSchoolSelection = true;
+          state.currentPage = 'school-picker';
+        } else {
+          // Single assignment auto-selected on the server; proceed.
+          state._needsSchoolSelection = false;
+          if (Array.isArray(state.user.assignments) && state.user.assignments.length === 1) {
+            state.currentSchoolId = state.user.assignments[0].school_id;
+          }
+          state.currentPage = 'dashboard';
+        }
         render();
       } catch (err) {
         showLoginError(err.message || 'Invalid email or password.');
@@ -767,6 +827,7 @@ function renderShell() {
             <span class="nav-page-title">${esc(PAGE_TITLES[state.currentPage] || 'Dashboard')}</span>
           </div>
           <div class="top-nav-right">
+            ${renderSchoolSwitcher()}
             <button class="bell-btn" id="help-btn" aria-label="Help and feedback" title="Help & feedback">${iconHelp()}</button>
             <button class="bell-btn" id="bell-btn" aria-label="Notifications" style="position:relative;">
               ${iconBell()}
@@ -785,7 +846,32 @@ function renderShell() {
     <nav class="mobile-nav" role="navigation" aria-label="Mobile navigation">${mobileItems}</nav>`;
 }
 
+/**
+ * Render the school-switcher chip in the top-nav. Visible only when the
+ * current user has more than one active assignment. Click → opens the
+ * school-picker again so the user can pick mid-day.
+ */
+function renderSchoolSwitcher() {
+  const assignments = (state.user && state.user.assignments) || [];
+  if (assignments.length < 2) return '';
+  const current = assignments.find(a => a.school_id === state.currentSchoolId)
+    || assignments[0];
+  return `
+    <button class="school-switcher-chip" id="school-switcher-btn"
+      title="Switch school" aria-label="Switch school"
+      style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid var(--color-border,#E5E7EB);border-radius:999px;background:white;font-size:12px;font-weight:600;color:var(--color-text,#111827);cursor:pointer;">
+      <span style="width:6px;height:6px;border-radius:50%;background:#10B981;"></span>
+      <span>${esc(current.school_name)}</span>
+      <span style="color:var(--color-text-secondary,#6B7280);font-size:10px;">▾</span>
+    </button>
+  `;
+}
+
 function attachShellListeners() {
+  document.getElementById('school-switcher-btn')?.addEventListener('click', () => {
+    state.currentPage = 'school-picker';
+    render();
+  });
   $$('.nav-item[data-page]').forEach(el => {
     el.addEventListener('click', () => { navigate(el.dataset.page); if (window.innerWidth < 769) closeSidebar(); });
     el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(el.dataset.page); if (window.innerWidth < 769) closeSidebar(); } });
