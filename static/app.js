@@ -431,7 +431,10 @@ function renderParentRegister() {
             </div>
             <div class="form-group">
               <label class="form-label">Student ID</label>
-              <input class="form-input" name="sid" inputmode="numeric" placeholder="e.g., 1234" required />
+              <input class="form-input" name="sid" placeholder="From your school (e.g. 1234 or LAUSD-2026-0123)" required />
+              <div style="font-size:0.75rem;color:var(--color-text-secondary,#6b7280);margin-top:4px;">
+                Use either the Ufit student number or your school district's student ID.
+              </div>
             </div>
             <button class="btn btn-primary btn-full" type="submit" id="parent-verify-submit">Verify</button>
             <button class="btn btn-ghost btn-full btn-sm" type="button" id="parent-back-to-login" style="margin-top:4px;">Back to Sign In</button>

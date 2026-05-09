@@ -434,40 +434,70 @@ def parent_register_verify_student():
     """
     Verify a student's identity for parent self-registration.
     Body: { student_first_name, student_last_name, student_id }
-    Returns the matched student's school info on success.
+
+    student_id may be either:
+      - the Ufit-generated integer student_id (e.g. 94), OR
+      - the school district's local_student_identifier (e.g. 'LAUSD-2026-0123'),
+        which districts already communicate to parents via report cards / portal.
+    Tries integer match first; falls back to text match against
+    students.local_student_identifier.
     """
     data = parse_json()
     first = (data.get("student_first_name") or "").strip()
     last = (data.get("student_last_name") or "").strip()
-    student_id_raw = data.get("student_id")
+    student_id_raw = (str(data.get("student_id") or "")).strip()
 
-    try:
-        student_id = int(student_id_raw)
-    except (ValueError, TypeError):
-        return jsonify({"error": "Invalid student ID."}), 400
-
+    if not student_id_raw:
+        return jsonify({"error": "Student ID is required."}), 400
     if not first or not last:
         return jsonify({"error": "Student first and last name are required."}), 400
 
+    # Try integer (Ufit-generated student_id). If that fails or finds nothing,
+    # fall back to local_student_identifier text match.
+    int_student_id = None
+    try:
+        int_student_id = int(student_id_raw)
+    except ValueError:
+        int_student_id = None
+
     db = get_db()
     try:
-        row = db.execute(
-            """SELECT s.student_id, s.school_id, s.parent_primary_id, s.parent_secondary_id,
-                      sc.school_name
-               FROM students s
-               JOIN schools sc ON sc.school_id = s.school_id
-               WHERE s.student_id = ?
-                 AND LOWER(s.student_first_name) = LOWER(?)
-                 AND LOWER(s.student_last_name) = LOWER(?)
-                 AND s.deleted_at IS NULL
-                 AND s.active_status = TRUE
-                 AND sc.deleted_at IS NULL""",
-            (student_id, first, last),
-        ).fetchone()
+        row = None
+        if int_student_id is not None:
+            row = db.execute(
+                """SELECT s.student_id, s.school_id, s.parent_primary_id, s.parent_secondary_id,
+                          sc.school_name
+                   FROM students s
+                   JOIN schools sc ON sc.school_id = s.school_id
+                   WHERE s.student_id = ?
+                     AND LOWER(s.student_first_name) = LOWER(?)
+                     AND LOWER(s.student_last_name) = LOWER(?)
+                     AND s.deleted_at IS NULL
+                     AND s.active_status = TRUE
+                     AND sc.deleted_at IS NULL""",
+                (int_student_id, first, last),
+            ).fetchone()
 
         if not row:
-            audit(db, None, "parent_register_verify_failed", "students", student_id,
-                  new_values={"reason": "student_not_found", "ip": request.remote_addr})
+            # Fall back to local_student_identifier match (case-insensitive)
+            row = db.execute(
+                """SELECT s.student_id, s.school_id, s.parent_primary_id, s.parent_secondary_id,
+                          sc.school_name
+                   FROM students s
+                   JOIN schools sc ON sc.school_id = s.school_id
+                   WHERE LOWER(s.local_student_identifier) = LOWER(?)
+                     AND LOWER(s.student_first_name) = LOWER(?)
+                     AND LOWER(s.student_last_name) = LOWER(?)
+                     AND s.deleted_at IS NULL
+                     AND s.active_status = TRUE
+                     AND sc.deleted_at IS NULL""",
+                (student_id_raw, first, last),
+            ).fetchone()
+
+        if not row:
+            audit(db, None, "parent_register_verify_failed", "students", int_student_id,
+                  new_values={"reason": "student_not_found", "id_input": student_id_raw[:50],
+                              "ip": request.remote_addr})
             db.commit()
             return jsonify({
                 "error": "We couldn't find that student. Please check the spelling and ID, or contact your school."
