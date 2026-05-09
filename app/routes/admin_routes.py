@@ -419,8 +419,10 @@ def update_school(school_id: int):
             principal_first = parts[0]
             principal_last = parts[1] if len(parts) > 1 else ""
 
-            # Auto-create principal user + send invite if this email isn't already a user
-            # (parity with create_school's principal flow — XPOL-003).
+            # Auto-create principal user + send invite if this email isn't already
+            # an active user (parity with create_school's principal flow — XPOL-003).
+            # If a soft-deleted user exists, skip auto-create — admin can resolve
+            # via the user-restore path. We don't INSERT around UNIQUE constraints.
             existing_user = db.execute(
                 "SELECT user_id, deleted_at FROM users WHERE email = ?",
                 (new_email,),
