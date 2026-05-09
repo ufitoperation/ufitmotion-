@@ -35,6 +35,9 @@ _TIMING_HASH = generate_password_hash("constant_timing_dummy_ufit", method="pbkd
 PORTAL_ROLES: dict[str, tuple[str, ...]] = {
     "admin": ADMIN_ROLES,
     "coach": COACH_ROLES,
+    "org": SCHOOL_ROLES,
+    "parent": ("parent",),
+    # Backward-compatible alias used by older clients.
     "staff": SCHOOL_ROLES + ("parent",),
 }
 
@@ -385,5 +388,183 @@ def reset_password():
         db.commit()
 
         return jsonify({"ok": True, "message": "Password updated successfully."})
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# POST /api/auth/parent-register/verify-student
+# ---------------------------------------------------------------------------
+@auth_bp.route("/api/auth/parent-register/verify-student", methods=["POST"])
+@limiter.limit("10 per minute")
+def parent_register_verify_student():
+    """
+    Verify a student's identity for parent self-registration.
+    Body: { student_first_name, student_last_name, student_id }
+    Returns the matched student's school info on success.
+    """
+    data = parse_json()
+    first = (data.get("student_first_name") or "").strip()
+    last = (data.get("student_last_name") or "").strip()
+    student_id_raw = data.get("student_id")
+
+    try:
+        student_id = int(student_id_raw)
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid student ID."}), 400
+
+    if not first or not last:
+        return jsonify({"error": "Student first and last name are required."}), 400
+
+    db = get_db()
+    try:
+        row = db.execute(
+            """SELECT s.student_id, s.school_id, s.parent_primary_id, s.parent_secondary_id,
+                      sc.school_name
+               FROM students s
+               JOIN schools sc ON sc.school_id = s.school_id
+               WHERE s.student_id = ?
+                 AND LOWER(s.student_first_name) = LOWER(?)
+                 AND LOWER(s.student_last_name) = LOWER(?)
+                 AND s.deleted_at IS NULL
+                 AND s.active_status = TRUE
+                 AND sc.deleted_at IS NULL""",
+            (student_id, first, last),
+        ).fetchone()
+
+        if not row:
+            return jsonify({
+                "error": "We couldn't find that student. Please check the spelling and ID, or contact your school."
+            }), 404
+
+        return jsonify({
+            "ok": True,
+            "student_id": row["student_id"],
+            "school_id": row["school_id"],
+            "school_name": row["school_name"],
+            "primary_filled": row["parent_primary_id"] is not None,
+            "secondary_filled": row["parent_secondary_id"] is not None,
+        })
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# POST /api/auth/parent-register/create
+# ---------------------------------------------------------------------------
+@auth_bp.route("/api/auth/parent-register/create", methods=["POST"])
+@limiter.limit("5 per minute")
+def parent_register_create():
+    """
+    Create a parent account after student verification has succeeded.
+    Body: { student_id, first_name, last_name, email, phone, password, relationship }
+    Re-verifies student exists to prevent tampering between verify and create.
+    Auto-logs the parent in on success.
+    """
+    import logging
+    data = parse_json()
+    student_id_raw = data.get("student_id")
+    first_name = (data.get("first_name") or "").strip()
+    last_name = (data.get("last_name") or "").strip()
+    email = (data.get("email") or "").strip().lower()
+    phone = (data.get("phone") or "").strip()
+    password = data.get("password") or ""
+    relationship = (data.get("relationship") or "").strip().lower()
+
+    try:
+        student_id = int(student_id_raw)
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid student ID."}), 400
+
+    if not all([first_name, last_name, email, password]):
+        return jsonify({"error": "All fields are required."}), 400
+    if len(password) < 8:
+        return jsonify({"error": "Password must be at least 8 characters."}), 400
+    if "@" not in email or "." not in email.split("@")[-1]:
+        return jsonify({"error": "Invalid email format."}), 400
+    if relationship not in ("mother", "father", "guardian", "other"):
+        relationship = "guardian"
+
+    db = get_db()
+    try:
+        student = db.execute(
+            """SELECT s.student_id, s.school_id, s.parent_primary_id, s.parent_secondary_id,
+                      sc.school_name
+               FROM students s
+               JOIN schools sc ON sc.school_id = s.school_id
+               WHERE s.student_id = ? AND s.deleted_at IS NULL AND s.active_status = TRUE""",
+            (student_id,),
+        ).fetchone()
+        if not student:
+            return jsonify({"error": "Student not found."}), 404
+
+        existing = db.execute(
+            "SELECT user_id FROM users WHERE email = ? AND deleted_at IS NULL",
+            (email,),
+        ).fetchone()
+        if existing:
+            return jsonify({"error": "An account with that email already exists."}), 409
+
+        ts = now_utc()
+        password_hash = generate_password_hash(password, method="pbkdf2:sha256")
+
+        u_cur = db.execute(
+            """INSERT INTO users (first_name, last_name, email, phone, password_hash,
+                                  role, active_status, email_verified, created_at)
+               VALUES (?, ?, ?, ?, ?, 'parent', TRUE, TRUE, ?)""",
+            (first_name, last_name, email, phone or None, password_hash, ts),
+        )
+        user_id = u_cur.lastrowid
+
+        p_cur = db.execute(
+            """INSERT INTO parents (user_id, first_name, last_name, email, phone,
+                                    notes, portal_access_status, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, TRUE, ?)""",
+            (user_id, first_name, last_name, email, phone or None,
+             f"Relationship: {relationship}", ts),
+        )
+        parent_id = p_cur.lastrowid
+
+        if student["parent_primary_id"] is None:
+            db.execute(
+                "UPDATE students SET parent_primary_id = ? WHERE student_id = ?",
+                (parent_id, student_id),
+            )
+        elif student["parent_secondary_id"] is None:
+            db.execute(
+                "UPDATE students SET parent_secondary_id = ? WHERE student_id = ?",
+                (parent_id, student_id),
+            )
+
+        audit(db, user_id, "parent_self_register", "users", user_id,
+              new_values={"student_id": student_id, "school_id": student["school_id"]})
+        db.commit()
+
+        # Auto-login: set session
+        session.clear()
+        session["user_id"] = user_id
+        session["role"] = "parent"
+        session.permanent = True
+
+        # Fire HubSpot sync in background — non-blocking, errors swallowed.
+        try:
+            from app.routes._hubspot import notify_parent_registered
+            import threading
+            threading.Thread(
+                target=notify_parent_registered,
+                args=({
+                    "first_name": first_name,
+                    "last_name": last_name,
+                    "email": email,
+                    "phone": phone,
+                    "relationship": relationship,
+                    "school_name": student["school_name"],
+                },),
+                daemon=True,
+            ).start()
+        except Exception as exc:
+            logging.getLogger(__name__).warning("Parent HubSpot sync failed to launch: %s", exc)
+
+        return jsonify({"ok": True, "user_id": user_id})
     finally:
         db.close()
