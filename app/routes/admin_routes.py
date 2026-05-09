@@ -518,6 +518,7 @@ def list_users():
         rows = db.execute(
             f"""SELECT u.user_id, u.role, u.first_name, u.last_name, u.email,
                        u.active_status, u.created_at,
+                       u.password_hash, u.password_reset_token,
                        sp.position_title, s.school_id, s.school_name
                 FROM users u
                 LEFT JOIN staff_profiles sp ON sp.user_id = u.user_id AND sp.deleted_at IS NULL
@@ -529,11 +530,19 @@ def list_users():
             params + [per_page, offset],
         ).fetchall()
 
+        def _status(r):
+            if r["active_status"]:
+                return "active"
+            if r["password_reset_token"]:
+                return "pending_invite"
+            return "inactive"
+
         users = [
             {
                 "user_id": r["user_id"], "role": r["role"],
                 "first_name": r["first_name"], "last_name": r["last_name"],
                 "email": r["email"], "active_status": r["active_status"],
+                "account_status": _status(r),
                 "position_title": r["position_title"],
                 "school_id": r["school_id"], "school_name": r["school_name"],
                 "created_at": r["created_at"],
