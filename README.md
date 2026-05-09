@@ -72,8 +72,8 @@ flask run --debug
 | `APP_ENV` | Yes | One of `development`, `staging`, `production`. Controls debug mode and error verbosity. |
 | `UFIT_APP_BASE_URL` | Prod | Base URL for email links (e.g. `https://ufitmotion.onrender.com`). Defaults to `http://localhost:5000`. |
 | `UFIT_APP_ROOT` | Prod | Render deploy root — set to `/opt/render/project/src`. Not needed in dev. |
-| `RESEND_API_KEY` | Prod | Resend API key for password reset and invite emails. |
-| `EMAIL_FROM` | Prod | Sender address (e.g. `Ufit Motion <noreply@yourdomain.com>`). |
+| `GMAIL_USER` | Prod | Google Workspace mailbox the app sends from (e.g. `operations@ufitonline.net`). |
+| `GMAIL_APP_PASSWORD` | Prod | Google App Password for SMTP auth. Generate at Account → Security → 2-Step Verification → App passwords. Leave blank locally — emails log to stdout. |
 | `SENTRY_DSN` | Optional | Sentry DSN for error tracking. App runs without it; errors only go to logs. |
 | `HUBSPOT_API_KEY` | Optional | HubSpot CRM integration. Webhook routes return 503 if unset. |
 | `HUBSPOT_WEBHOOK_SECRET` | Optional | Validates HubSpot webhook signatures. Required if HubSpot integration is active. |
@@ -156,8 +156,8 @@ This project deploys to Render via the configuration in `render.yaml`. Deploymen
 - `APP_ENV=production`
 - `UFIT_APP_BASE_URL` — your public domain (e.g. `https://ufitmotion.onrender.com`)
 - `UFIT_APP_ROOT=/opt/render/project/src` — Render's deploy root
-- `RESEND_API_KEY` — for password reset and invite emails
-- `EMAIL_FROM` — sender address (e.g. `Ufit Motion <noreply@yourdomain.com>`)
+- `GMAIL_USER` — Google Workspace mailbox the app sends from (e.g. `operations@ufitonline.net`)
+- `GMAIL_APP_PASSWORD` — Google App Password (Account → Security → 2-Step Verification → App passwords)
 - `SENTRY_DSN` — Sentry project DSN for error tracking (optional but strongly recommended)
 - `HUBSPOT_API_KEY` — HubSpot CRM integration (optional)
 - `HUBSPOT_WEBHOOK_SECRET` — HubSpot webhook validation (optional, required if HubSpot active)

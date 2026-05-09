@@ -1,42 +1,75 @@
 """
-email.py — Transactional email via Resend.
+email.py — Transactional email via Gmail SMTP.
 
-Set RESEND_API_KEY in your environment. If unset, emails are logged to
-stdout (development mode) so the app never crashes due to missing config.
+Set GMAIL_USER and GMAIL_APP_PASSWORD in your environment. If
+GMAIL_APP_PASSWORD is unset, emails are logged to stdout (development /
+local dev) so the app never crashes due to missing config.
+
+Why Gmail SMTP and not Resend / SES / Postmark:
+  - Operations team is non-technical; using a Gmail App Password avoids
+    DNS / SPF / DKIM setup.
+  - Google Workspace handles the auth domain (operations@ufitonline.net),
+    so deliverability is "free."
+  - 2,000 emails/day quota is well above the realistic onboarding volume
+    (~30 per school).
 
 Usage:
     from app.email import send_invite_email, send_password_reset_email
 """
 
+from __future__ import annotations
+
 import os
+import re
+import smtplib
 import sys
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from html import escape as _html_escape
 
 APP_BASE_URL = os.environ.get("UFIT_APP_BASE_URL", "http://localhost:5000")
-RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
-FROM_ADDRESS = os.environ.get("EMAIL_FROM", "Ufit Motion <noreply@ufitonline.net>")
+GMAIL_USER = os.environ.get("GMAIL_USER", "operations@ufitonline.net")
+GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
+FROM_ADDRESS = f"Ufit Motion <{GMAIL_USER}>"
+
+
+def _html_to_text(html: str) -> str:
+    """Minimal HTML → plaintext for the multipart/alternative fallback.
+    Spam filters and screen readers prefer a real text/plain part."""
+    text = re.sub(r"<\s*br\s*/?\s*>", "\n", html, flags=re.IGNORECASE)
+    text = re.sub(r"</\s*p\s*>", "\n\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"\s+\n", "\n", text)
+    text = re.sub(r"[ \t]+", " ", text)
+    return text.strip()
 
 
 def _send(to: str, subject: str, html: str) -> bool:
-    """Send an email via Resend. Returns True on success, False on failure."""
-    if not RESEND_API_KEY:
+    """Send an email via Gmail SMTP. Returns True on success, False on failure.
+
+    Without GMAIL_APP_PASSWORD, no network call is made — the message is
+    logged to stdout so local development never blocks on missing creds.
+    """
+    if not GMAIL_APP_PASSWORD:
         print(
-            f"[email] DEV MODE — would send to {to}\n  Subject: {subject}\n  (Set RESEND_API_KEY to enable real delivery)",
+            f"[email] DEV MODE — would send to {to}\n"
+            f"  Subject: {subject}\n"
+            f"  (Set GMAIL_APP_PASSWORD to enable real delivery)",
             flush=True,
         )
         return True
 
     try:
-        import httpx
-        resp = httpx.post(
-            "https://api.resend.com/emails",
-            headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
-            json={"from": FROM_ADDRESS, "to": [to], "subject": subject, "html": html},
-            timeout=10,
-        )
-        if resp.status_code not in (200, 201):
-            print(f"[email] Resend error {resp.status_code}: {resp.text}", file=sys.stderr, flush=True)
-            return False
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = FROM_ADDRESS
+        msg["To"] = to
+        msg.attach(MIMEText(_html_to_text(html), "plain", "utf-8"))
+        msg.attach(MIMEText(html, "html", "utf-8"))
+
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+            smtp.login(GMAIL_USER, GMAIL_APP_PASSWORD)
+            smtp.sendmail(FROM_ADDRESS, [to], msg.as_string())
         return True
     except Exception as exc:
         print(f"[email] Send failed: {exc}", file=sys.stderr, flush=True)

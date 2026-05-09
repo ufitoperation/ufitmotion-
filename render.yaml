@@ -32,10 +32,14 @@ services:
       # Add a Render Redis instance and set this if you ever scale to 2+ workers.
       - key: REDIS_URL
         sync: false
-      # Email delivery via Resend — required for password resets and user invites.
-      - key: RESEND_API_KEY
+      # Email delivery via Gmail SMTP — required for password resets and user invites.
+      # GMAIL_USER is the Google Workspace mailbox; GMAIL_APP_PASSWORD is a Google
+      # App Password (Account → Security → 2-Step Verification → App passwords).
+      # The legacy RESEND_API_KEY / EMAIL_FROM vars are no longer read but can
+      # remain set without affecting the app.
+      - key: GMAIL_USER
         sync: false
-      - key: EMAIL_FROM
+      - key: GMAIL_APP_PASSWORD
         sync: false
       # Error tracking — optional but strongly recommended
       - key: SENTRY_DSN
