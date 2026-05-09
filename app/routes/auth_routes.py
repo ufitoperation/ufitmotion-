@@ -349,7 +349,7 @@ def reset_password():
         row = db.execute(
             """SELECT user_id, password_reset_expires_at
                FROM users
-               WHERE password_reset_token = ? AND deleted_at IS NULL AND active_status = TRUE""",
+               WHERE password_reset_token = ? AND deleted_at IS NULL""",
             (token_hash,),
         ).fetchone()
 
@@ -374,6 +374,8 @@ def reset_password():
         db.execute(
             """UPDATE users
                SET password_hash = ?,
+                   active_status = TRUE,
+                   email_verified = TRUE,
                    password_reset_token = NULL,
                    password_reset_expires_at = NULL
                WHERE user_id = ?""",
