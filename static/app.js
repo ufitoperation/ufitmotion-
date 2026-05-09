@@ -105,9 +105,16 @@ function fmtSkillName(s) {
   return s ? s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '—';
 }
 
+const _ACRONYMS = new Set(['ceo', 'hr', 'pe', 'sel', 'eod', 'usa']);
 function fmtLabel(v) {
   if (!v || v === '—') return '—';
-  return esc(v.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()));
+  return esc(
+    v.replace(/_/g, ' ').replace(/\b\w+\b/g, w =>
+      _ACRONYMS.has(w.toLowerCase())
+        ? w.toUpperCase()
+        : w.charAt(0).toUpperCase() + w.slice(1)
+    )
+  );
 }
 
 function todayFull() {
@@ -373,7 +380,7 @@ function renderLogin() {
             ${showRegister ? renderParentRegister() : renderPortalLoginForm(selPortal, isParent)}
           </div>
         ` : `<div class="login-hint">Select a portal above to sign in.</div>`}
-        <div class="login-footer-text">Ufit Motion &mdash; &copy; ${new Date().getFullYear()} Ufit Online</div>
+        <div class="login-footer-text">Ufit Motion &middot; &copy; ${new Date().getFullYear()} Ufit Online</div>
       </div>
     </div>`;
 }
@@ -409,7 +416,7 @@ function renderParentRegister() {
   if (step === 1) {
     return `
       <div class="login-card-form">
-        <div class="login-card-form-header"><span class="login-card-form-icon">👨‍👩‍👧</span> Create Parent Account &mdash; Step 1 of 2</div>
+        <div class="login-card-form-header"><span class="login-card-form-icon">👨‍👩‍👧</span> Create Parent Account &middot; Step 1 of 2</div>
         <p style="color:#6b7280;font-size:0.875rem;margin:0 0 16px;">First, verify your child's information.</p>
         <form id="parent-verify-form" novalidate>
           <div class="form-stack">
@@ -435,7 +442,7 @@ function renderParentRegister() {
   const verified = state._parentRegVerified || {};
   return `
     <div class="login-card-form">
-      <div class="login-card-form-header"><span class="login-card-form-icon">👨‍👩‍👧</span> Create Parent Account &mdash; Step 2 of 2</div>
+      <div class="login-card-form-header"><span class="login-card-form-icon">👨‍👩‍👧</span> Create Parent Account &middot; Step 2 of 2</div>
       <p style="color:#6b7280;font-size:0.875rem;margin:0 0 16px;">Verified at <strong>${esc(verified.school_name || '')}</strong>. Now create your account.</p>
       <form id="parent-create-form" novalidate>
         <div class="form-stack">
@@ -935,19 +942,8 @@ async function openAddSchoolModal(onSuccess) {
           <input class="form-input" type="email" name="principal_email" placeholder="principal@school.edu" id="principal-email-field" />
         </div>
       </div>
-      <div id="principal-login-section" style="display:none; border:1px solid #e5e7eb; border-radius:8px; padding:16px; background:#f9fafb;">
-        <p style="margin:0 0 12px; font-weight:600; font-size:14px;">Principal Login Credentials</p>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">Temporary Password *</label>
-            <input class="form-input" type="password" name="principal_password" placeholder="Min 8 characters" minlength="8" />
-          </div>
-          <div class="form-group">
-            <label class="form-label">Confirm Password *</label>
-            <input class="form-input" type="password" name="principal_password_confirm" placeholder="Re-enter password" />
-          </div>
-        </div>
-        <p style="margin:4px 0 0; font-size:12px; color:#6b7280;">The principal will use their email and this password to log in. They can change it after signing in.</p>
+      <div id="principal-invite-hint" style="display:none; background:#EFF6FF; border:1px solid #BFDBFE; border-radius:8px; padding:10px 12px; font-size:0.8125rem; color:#1E40AF;">
+        ✉️ The principal will receive an email invite to set their own password. The link expires in 24 hours.
       </div>
       <div class="modal-footer">
         <button class="btn btn-ghost" type="button" onclick="closeModal()">Cancel</button>
@@ -955,10 +951,10 @@ async function openAddSchoolModal(onSuccess) {
       </div>
     </form>`);
 
-  // Show principal login section when email is entered
+  // Show invite-email hint when principal email is entered
   document.getElementById('principal-email-field')?.addEventListener('input', function() {
-    const section = document.getElementById('principal-login-section');
-    if (section) section.style.display = this.value.trim() ? 'block' : 'none';
+    const hint = document.getElementById('principal-invite-hint');
+    if (hint) hint.style.display = this.value.trim() ? 'block' : 'none';
   });
 
   document.getElementById('add-school-form')?.addEventListener('submit', async e => {
@@ -968,21 +964,8 @@ async function openAddSchoolModal(onSuccess) {
     btn.disabled = true; btn.innerHTML = '<span class="spinner spinner-white"></span>';
 
     const principalEmail = fd.get('principal_email').trim().toLowerCase();
-    const principalPassword = fd.get('principal_password') || '';
-    const principalPasswordConfirm = fd.get('principal_password_confirm') || '';
     const principalFirstName = fd.get('principal_first_name').trim();
     const principalLastName = fd.get('principal_last_name').trim();
-
-    if (principalEmail && principalPassword) {
-      if (principalPassword.length < 8) {
-        showAlert('Principal password must be at least 8 characters.', 'error');
-        btn.disabled = false; btn.innerHTML = 'Add School'; return;
-      }
-      if (principalPassword !== principalPasswordConfirm) {
-        showAlert('Passwords do not match.', 'error');
-        btn.disabled = false; btn.innerHTML = 'Add School'; return;
-      }
-    }
 
     try {
       let orgId = fd.get('organization_id') ? parseInt(fd.get('organization_id')) : null;
@@ -1004,30 +987,16 @@ async function openAddSchoolModal(onSuccess) {
         principal_email: principalEmail || null,
       });
 
-      // Create principal login account if email + password were provided
-      if (principalEmail && principalPassword && principalFirstName) {
-        const newSchoolId = schoolRes.school?.school_id;
-        try {
-          await api('POST', '/api/users', {
-            first_name: principalFirstName,
-            last_name: principalLastName || principalFirstName,
-            email: principalEmail,
-            role: 'principal',
-            password: principalPassword,
-            school_id: newSchoolId,
-          });
-        } catch (userErr) {
-          // School was created — warn but don't roll back
-          closeModal();
-          showAlert(`School added, but could not create principal login: ${userErr.message}`, 'warning');
-          if (onSuccess) onSuccess();
-          else loadSchoolsPage(document.getElementById('page-main'));
-          return;
-        }
-      }
-
+      // Backend (POST /api/schools) already auto-creates the principal user
+      // and sends an invite email when principal_email + principal_name are both
+      // present. No separate /api/users call needed.
       closeModal();
-      showAlert(principalEmail && principalPassword ? 'School added and principal account created!' : 'School added successfully!', 'success');
+      showAlert(
+        principalEmail && principalFirstName
+          ? 'School added — principal will receive an invite email shortly.'
+          : 'School added successfully.',
+        'success'
+      );
       if (onSuccess) onSuccess();
       else loadSchoolsPage(document.getElementById('page-main'));
     } catch (err) {
@@ -1181,7 +1150,7 @@ async function deleteSchool(schoolId, schoolName) {
       try {
         await api('DELETE', `/api/schools/${schoolId}`);
         showAlert(`School "${schoolName}" deleted.`, 'success');
-        const container = document.getElementById('main-content');
+        const container = document.getElementById('page-main');
         if (container) loadSchoolsPage(container);
       } catch (err) {
         showAlert(err.message || 'Delete failed.', 'error');
@@ -5286,27 +5255,33 @@ async function init() {
 
 function renderSetPasswordScreen(app, token) {
   app.innerHTML = `
-    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--color-background);padding:24px;">
-      <div style="width:100%;max-width:400px;">
-        <div style="background:var(--color-primary);padding:24px;border-radius:8px 8px 0 0;text-align:center;">
-          <span style="color:#fff;font-size:1.5rem;font-weight:700;letter-spacing:0.04em;">UFIT MOTION</span>
+    <div class="login-page">
+      <div class="login-shell" style="max-width:480px;">
+        <div class="login-logo">
+          <div class="login-logo-mark"><span class="login-logo-ufit">UFIT</span><span class="login-logo-motion">MOTION</span></div>
+          <div class="login-logo-tagline">School Fitness Platform</div>
         </div>
-        <div style="background:var(--color-surface);border:1px solid var(--color-border);border-top:none;padding:32px;border-radius:0 0 8px 8px;">
-          <h2 style="margin:0 0 6px;font-size:1.25rem;">Set your password</h2>
-          <p style="margin:0 0 24px;color:var(--color-text-secondary);font-size:0.875rem;">Choose a password to activate your Ufit Motion account.</p>
-          <div id="set-pw-alert" style="margin-bottom:12px;"></div>
-          <form id="set-pw-form" class="form-stack">
-            <div class="form-group">
-              <label class="form-label">New Password</label>
-              <input class="form-input" type="password" id="set-pw-input" minlength="8" placeholder="At least 8 characters" required autofocus />
-            </div>
-            <div class="form-group">
-              <label class="form-label">Confirm Password</label>
-              <input class="form-input" type="password" id="set-pw-confirm" minlength="8" placeholder="Repeat password" required />
-            </div>
-            <button class="btn btn-primary btn-full" type="submit" id="set-pw-btn">Set Password &amp; Sign In</button>
-          </form>
+        <div class="login-form-wrap">
+          <div class="login-card-form">
+            <div class="login-card-form-header">Set your password</div>
+            <p style="color:var(--color-text-secondary,#6b7280);font-size:0.875rem;margin:0 0 16px;">
+              Choose a password to activate your Ufit Motion account.
+            </p>
+            <div id="set-pw-alert" style="margin-bottom:12px;"></div>
+            <form id="set-pw-form" class="form-stack">
+              <div class="form-group">
+                <label class="form-label">New Password</label>
+                <input class="form-input" type="password" id="set-pw-input" minlength="8" placeholder="At least 8 characters" required autofocus />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Confirm Password</label>
+                <input class="form-input" type="password" id="set-pw-confirm" minlength="8" placeholder="Repeat password" required />
+              </div>
+              <button class="btn btn-primary btn-full" type="submit" id="set-pw-btn">Set Password &amp; Sign In</button>
+            </form>
+          </div>
         </div>
+        <div class="login-footer-text">Ufit Motion &copy; ${new Date().getFullYear()} Ufit Online</div>
       </div>
     </div>`;
 
