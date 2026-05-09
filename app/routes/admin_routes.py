@@ -519,8 +519,8 @@ def create_user():
     role = (data.get("role") or "").strip()
     password = data.get("password") or ""
 
-    if not all([first_name, last_name, email, role, password]):
-        return jsonify({"error": "first_name, last_name, email, role, and password are required."}), 400
+    if not all([first_name, last_name, email, role]):
+        return jsonify({"error": "first_name, last_name, email, and role are required."}), 400
 
     if "@" not in email or "." not in email.split("@")[-1]:
         return jsonify({"error": "Invalid email format."}), 400
@@ -532,7 +532,10 @@ def create_user():
     if role not in valid_roles:
         return jsonify({"error": f"role must be one of: {', '.join(valid_roles)}."}), 400
 
-    if len(password) < 8:
+    # Password is optional. If provided, must be 8+ chars (legacy direct-create path).
+    # If omitted, an invite token is generated and the user must set their own
+    # password via the emailed link before they can log in.
+    if password and len(password) < 8:
         return jsonify({"error": "Password must be at least 8 characters."}), 400
 
     school_id = data.get("school_id")
@@ -561,13 +564,30 @@ def create_user():
                 return jsonify({"error": "School not found."}), 404
 
         ts = now_utc()
-        password_hash = generate_password_hash(password, method="pbkdf2:sha256")
-        cur = db.execute(
-            """INSERT INTO users
-               (role, first_name, last_name, email, password_hash, active_status, created_at)
-               VALUES (?, ?, ?, ?, ?, TRUE, ?)""",
-            (role, first_name, last_name, email, password_hash, ts),
-        )
+        # Two creation modes:
+        #   (a) Caller provided a password — create active user immediately (legacy).
+        #   (b) No password — create inactive user with an invite token; user
+        #       activates by setting their password via the emailed link.
+        invite_token_plain = None
+        if password:
+            password_hash = generate_password_hash(password, method="pbkdf2:sha256")
+            cur = db.execute(
+                """INSERT INTO users
+                   (role, first_name, last_name, email, password_hash, active_status, created_at)
+                   VALUES (?, ?, ?, ?, ?, TRUE, ?)""",
+                (role, first_name, last_name, email, password_hash, ts),
+            )
+        else:
+            invite_token_plain = secrets.token_urlsafe(32)
+            invite_token_hash = hashlib.sha256(invite_token_plain.encode()).hexdigest()
+            invite_expires = (datetime.datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+            cur = db.execute(
+                """INSERT INTO users
+                   (role, first_name, last_name, email, active_status,
+                    password_reset_token, password_reset_expires_at, created_at)
+                   VALUES (?, ?, ?, ?, FALSE, ?, ?, ?)""",
+                (role, first_name, last_name, email, invite_token_hash, invite_expires, ts),
+            )
         new_user_id = cur.lastrowid
 
         staff_id = None
@@ -624,6 +644,14 @@ def create_user():
                 org_id=school["organization_id"],
                 org_name=school["organization_name"],
             )
+
+        # Auto-send invite email when an invite token was generated.
+        if invite_token_plain:
+            try:
+                from app.email import send_invite_email
+                send_invite_email(email, first_name or "there", role, invite_token_plain)
+            except Exception as exc:
+                logging.getLogger(__name__).warning("Invite email send failed for %s: %s", email, exc)
 
         user_dict = serialize_user(dict(user))
         if new_parent_id is not None:
