@@ -143,12 +143,14 @@ Scenes:
 
 These are NOT in the build queue but are go-live blockers:
 
-- **Signed contract / Data Processing Agreement** with the first school district
-- **FERPA Designation of School Official** form executed
-- **Pricing model** locked (per-school flat fee? per-student? annual?)
-- **SLA** documented (uptime + response-time promises)
-- **Liability insurance** verified — most districts require contractor coverage
-- **Privacy Policy review by an attorney** (we provide boilerplate; legal must approve before production)
+- **Signed contract / Data Processing Agreement** with the first school district (handled outside this app — Ufit's existing sales process)
+- **FERPA Designation of School Official** form executed (handled outside this app)
+- **Liability insurance** verified — most districts require contractor coverage (handled outside this app)
+
+**Explicitly NOT a gap:**
+- **Pricing/billing** — Ufit charges schools through their existing process, not via this app. The app is a service-delivery tool only; school staff log in with credentials we provision.
+- **SLA documentation** — informal expectations are fine for the first school; can formalize later.
+- **Privacy Policy attorney review** — no legal team access. Phase A item 3 will generate a standards-based FERPA-aware Privacy Policy + Terms of Service. We iterate as feedback comes in. The policy is required for iOS App Store submission (later milestone) and basic legitimacy, not for day-1 LAUSD-style onboarding.
 
 ---
 
