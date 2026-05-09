@@ -169,6 +169,8 @@ def _seed_default_admin(db) -> None:
         return
 
     if existing:
+        # Already have an admin/ceo — make sure Miss A's CEO account exists too.
+        _ensure_missa_ceo(db)
         return
 
     from app.routes._helpers import now_utc
@@ -192,6 +194,36 @@ def _seed_default_admin(db) -> None:
     except Exception as exc:
         db.rollback()
         print(f"[seeds] Could not create default admin: {exc}", file=sys.stderr, flush=True)
+
+    _ensure_missa_ceo(db)
+
+
+def _ensure_missa_ceo(db) -> None:
+    """
+    Seed Miss A's CEO account (Ufit founder) if it doesn't already exist.
+    Email: missa@ufitonline.com  Password: from UFIT_SEED_PASSWORD or default 'UfitDemo2026!'
+    """
+    from app.routes._helpers import now_utc
+    try:
+        exists = db.execute(
+            "SELECT user_id FROM users WHERE email = ? AND deleted_at IS NULL",
+            ("missa@ufitonline.com",),
+        ).fetchone()
+        if exists:
+            return
+        ceo_password = os.environ.get("UFIT_SEED_PASSWORD", "UfitDemo2026!")
+        ceo_hash = generate_password_hash(ceo_password, method="pbkdf2:sha256")
+        db.execute(
+            """INSERT INTO users (role, first_name, last_name, email, password_hash,
+                                  active_status, email_verified, created_at)
+               VALUES ('ceo', 'Miss', 'A', 'missa@ufitonline.com', ?, TRUE, TRUE, ?)""",
+            (ceo_hash, now_utc()),
+        )
+        db.commit()
+        print("[seeds] Miss A CEO account seeded: missa@ufitonline.com", flush=True)
+    except Exception as exc:
+        db.rollback()
+        print(f"[seeds] Could not seed Miss A CEO: {exc}", file=sys.stderr, flush=True)
 
 
 # ---------------------------------------------------------------------------
