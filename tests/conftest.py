@@ -130,7 +130,7 @@ def admin_client(app):
             ).fetchone()
 
             if row is None:
-                ph = generate_password_hash("admin123")
+                ph = generate_password_hash("admin123", method="pbkdf2:sha256")
                 ts = now_utc()
                 cur = db.execute(
                     """INSERT INTO users (role, first_name, last_name, email, password_hash,
@@ -170,7 +170,7 @@ def coach_client(app):
             ).fetchone()
 
             if row is None:
-                ph = generate_password_hash("coach123")
+                ph = generate_password_hash("coach123", method="pbkdf2:sha256")
                 ts = now_utc()
                 cur = db.execute(
                     """INSERT INTO users (role, first_name, last_name, email, password_hash,
