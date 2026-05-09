@@ -43,7 +43,9 @@ def bootstrap():
                ORDER BY school_name ASC
                LIMIT 1000""",
         ).fetchall()
-        schools = [serialize_school(r) for r in school_rows]
+        # Bootstrap is unauthenticated; suppress PII (principal_name, principal_email)
+        # so anonymous callers can't harvest a directory of school admins.
+        schools = [serialize_school(r, public=True) for r in school_rows]
 
         # App settings — all key/value pairs.
         setting_rows = db.execute(

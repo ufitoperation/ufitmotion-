@@ -274,8 +274,9 @@ def create_school():
             principal_last = parts[1] if len(parts) > 1 else ""
 
             # Create the principal user account if one doesn't already exist for this email.
+            # UNIQUE constraint on email applies regardless of soft-delete, so check both states.
             existing_user = db.execute(
-                "SELECT user_id FROM users WHERE email = ? AND deleted_at IS NULL",
+                "SELECT user_id, deleted_at FROM users WHERE email = ?",
                 (principal_email,),
             ).fetchone()
             if not existing_user:
@@ -600,11 +601,15 @@ def create_user():
 
     db = get_db()
     try:
+        # users.email is UNIQUE regardless of soft-delete; if a deleted row exists,
+        # we still can't INSERT a new one with the same email. Surface a clear 409.
         dup = db.execute(
-            "SELECT user_id FROM users WHERE email = ? AND deleted_at IS NULL",
+            "SELECT user_id, deleted_at FROM users WHERE email = ?",
             (email,),
         ).fetchone()
         if dup:
+            if dup["deleted_at"] is not None:
+                return jsonify({"error": "This email belonged to a previously-deleted account. Choose a different email or contact support to restore."}), 409
             return jsonify({"error": "An account with that email already exists."}), 409
 
         school = None

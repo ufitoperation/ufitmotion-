@@ -66,8 +66,12 @@ def serialize_user(row: dict) -> dict:
     return {k: row[k] for k in SAFE_FIELDS if k in row}
 
 
-def serialize_school(row: dict) -> dict:
-    """Convert a schools DB row to a public dict."""
+def serialize_school(row: dict, public: bool = False) -> dict:
+    """
+    Convert a schools DB row to a dict.
+    public=True omits principal_name and principal_email so the row can be
+    safely returned from unauthenticated endpoints (e.g. /api/bootstrap).
+    """
     if row is None:
         return {}
     SAFE_FIELDS = (
@@ -84,7 +88,8 @@ def serialize_school(row: dict) -> dict:
         "active_status",
         "created_at",
     )
-    return {k: row[k] for k in SAFE_FIELDS if k in row}
+    PUBLIC_OMIT = {"principal_name", "principal_email"}
+    return {k: row[k] for k in SAFE_FIELDS if k in row and (not public or k not in PUBLIC_OMIT)}
 
 
 def serialize_session(row: dict) -> dict:

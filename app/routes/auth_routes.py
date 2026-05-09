@@ -384,16 +384,39 @@ def reset_password():
                 return jsonify({"error": "Reset token has expired. Please request a new one."}), 400
 
         new_hash = generate_password_hash(password, method="pbkdf2:sha256")
-        db.execute(
-            """UPDATE users
-               SET password_hash = ?,
-                   active_status = TRUE,
-                   email_verified = TRUE,
-                   password_reset_token = NULL,
-                   password_reset_expires_at = NULL
-               WHERE user_id = ?""",
-            (new_hash, row["user_id"]),
+        # Re-fetch row to determine if this is an invite-completion (user has no
+        # password_hash yet) or a normal password reset for an existing active user.
+        # Only invite-completion should set active_status=TRUE; normal resets must
+        # not silently re-activate a deactivated account.
+        cur_row = db.execute(
+            "SELECT password_hash, active_status FROM users WHERE user_id = ?",
+            (row["user_id"],),
+        ).fetchone()
+        is_invite_completion = (
+            cur_row is not None and not cur_row["password_hash"]
         )
+        if is_invite_completion:
+            db.execute(
+                """UPDATE users
+                   SET password_hash = ?,
+                       active_status = TRUE,
+                       email_verified = TRUE,
+                       password_reset_token = NULL,
+                       password_reset_expires_at = NULL
+                   WHERE user_id = ?""",
+                (new_hash, row["user_id"]),
+            )
+        else:
+            # Normal password reset — preserve active_status (admin may have
+            # intentionally deactivated this user).
+            db.execute(
+                """UPDATE users
+                   SET password_hash = ?,
+                       password_reset_token = NULL,
+                       password_reset_expires_at = NULL
+                   WHERE user_id = ?""",
+                (new_hash, row["user_id"]),
+            )
         audit(db, row["user_id"], "reset_password", "users", row["user_id"])
         db.commit()
 
@@ -534,8 +557,10 @@ def parent_register_create():
         if not student:
             return jsonify({"error": "Student not found."}), 404
 
+        # Check for ANY row with this email — UNIQUE constraint on users.email applies
+        # regardless of soft-delete state, so we cannot INSERT around it.
         existing = db.execute(
-            "SELECT user_id FROM users WHERE email = ? AND deleted_at IS NULL",
+            "SELECT user_id, deleted_at FROM users WHERE email = ?",
             (email,),
         ).fetchone()
         if existing:

@@ -312,7 +312,13 @@ const LOGIN_PORTALS = [
 ];
 
 function renderLogin() {
-  const sel = state._loginPortal || null;
+  // Default to Admin portal so the email/password form is visible on cold load.
+  // Users can switch portals with one click — but they never see a blank "select"
+  // state on first load, which felt broken in user testing.
+  if (state._loginPortal === undefined || state._loginPortal === null) {
+    state._loginPortal = 'admin';
+  }
+  const sel = state._loginPortal;
   const isParent = sel === 'parent';
   const showRegister = isParent && state._showParentRegister === true;
   const selPortal = LOGIN_PORTALS.find(p => p.key === sel);
@@ -2070,7 +2076,7 @@ async function loadEodPage(container) {
 
 function openEodModal(onSuccess) {
   if (!state.user?.school_id) {
-    alert('You are not assigned to a school. Please contact your administrator before submitting an EOD report.');
+    showAlert('You are not assigned to a school. Please contact your administrator before submitting an EOD report.', 'warning', 6500);
     return;
   }
   const todayStr = new Date().toISOString().split('T')[0];
@@ -5182,7 +5188,8 @@ function openEditProgramModal(p) {
 /* ============================================================
    28. LOGOUT
    ============================================================ */
-async function handleLogout() {
+async function handleLogout(skipConfirm = false) {
+  if (!skipConfirm && !confirm('Sign out of Ufit Motion?')) return;
   try { await api('POST', '/api/auth/logout'); } catch (_) {}
   state.user = null;
   state.currentPage = 'login';
