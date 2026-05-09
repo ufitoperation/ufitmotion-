@@ -1977,6 +1977,7 @@ def admin_list_coaches():
             f"""SELECT
                  u.user_id, u.role, u.first_name, u.last_name, u.email,
                  u.active_status, u.created_at,
+                 u.password_reset_token,
                  sp.staff_id, sp.position_title,
                  COALESCE(sp.rolling_score,
                    (SELECT cps.overall_score FROM coach_performance_snapshots cps
@@ -2011,7 +2012,6 @@ def admin_list_coaches():
                           AND sa.active_status = TRUE AND sa.deleted_at IS NULL
                JOIN schools s ON s.school_id = sa.school_id AND s.deleted_at IS NULL
                WHERE u.role IN ('head_coach','assistant_coach')
-                 AND u.active_status = TRUE
                  AND u.deleted_at IS NULL
                  {org_filter}
                ORDER BY u.last_name ASC, u.first_name ASC
@@ -2027,6 +2027,12 @@ def admin_list_coaches():
             coach["incidents_filed_this_week"] = r["incidents_filed_this_week"]
             coach["rolling_score"] = r["rolling_score"]
             coach["rolling_band"] = r["rolling_band"]
+            if r["active_status"]:
+                coach["account_status"] = "active"
+            elif r["password_reset_token"]:
+                coach["account_status"] = "pending_invite"
+            else:
+                coach["account_status"] = "inactive"
             coaches.append(coach)
 
         audit(db, user["user_id"], "READ", "users", None,

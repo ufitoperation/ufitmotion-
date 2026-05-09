@@ -1073,22 +1073,34 @@ async function loadCoachesPage(container) {
     cc.innerHTML = `
       <div class="table-wrap">
         <table class="data-table">
-          <thead><tr><th>Coach</th><th>Role</th><th>School</th><th>Score</th><th>EODs This Week</th><th>Late</th><th>Incidents</th><th></th></tr></thead>
+          <thead><tr><th>Coach</th><th>Role</th><th>School</th><th>Status</th><th>Score</th><th>EODs This Week</th><th>Late</th><th>Incidents</th><th></th></tr></thead>
           <tbody>${coaches.map(c => {
             const late = c.late_submissions_this_week ?? 0;
             const score = c.rolling_score != null ? Math.round(c.rolling_score) : null;
             const band = c.rolling_band || '';
             const bandClass = {'Exceptional':'badge-success','Strong':'badge-success','Meeting Expectations':'badge-info','Developing':'badge-warning','Needs Improvement':'badge-error'}[band] || '';
+            const status = c.account_status || 'active';
+            const statusBadge = status === 'pending_invite'
+              ? `<span class="badge badge-warning">Pending Invite</span>`
+              : status === 'active'
+              ? `<span class="badge badge-success">Active</span>`
+              : `<span class="badge">Inactive</span>`;
+            const isPending = status === 'pending_invite';
             const _sid = _modalStore.set(c);
-            return `<tr>
+            return `<tr${isPending ? ' style="opacity:0.85;"' : ''}>
               <td><strong>${esc(c.first_name)} ${esc(c.last_name)}</strong><div class="text-caption">${esc(c.email)}</div></td>
               <td><span class="badge">${fmtLabel(c.role)}</span></td>
               <td>${esc(c.school_name || '—')}</td>
+              <td>${statusBadge}</td>
               <td>${score != null ? `<span class="badge ${bandClass}">${score} · ${esc(band)}</span>` : '<span class="text-muted">—</span>'}</td>
               <td>${c.eod_submissions_this_week ?? 0}</td>
               <td class="${late > 0 ? 'text-error' : ''}">${late}</td>
               <td>${c.incidents_filed_this_week ?? 0}</td>
-              <td><button class="btn btn-ghost btn-sm" onclick="openCoachScorecardModal(_modalStore.get(${_sid}))">Scorecard</button></td>
+              <td style="white-space:nowrap;">
+                ${isPending
+                  ? `<button class="btn btn-ghost btn-sm" onclick="resendInvite(${c.user_id})" title="Resend invite email">Resend Invite</button>`
+                  : `<button class="btn btn-ghost btn-sm" onclick="openCoachScorecardModal(_modalStore.get(${_sid}))">Scorecard</button>`}
+              </td>
             </tr>`;}).join('')}
           </tbody>
         </table>
@@ -1096,6 +1108,15 @@ async function loadCoachesPage(container) {
   } catch (err) {
     const cc = document.getElementById('coaches-content');
     if (cc) cc.innerHTML = errorCard(err.message);
+  }
+}
+
+async function resendInvite(userId) {
+  try {
+    await api('POST', `/api/admin/users/${userId}/send-invite`);
+    showAlert('Invite email resent.', 'success');
+  } catch (err) {
+    showAlert(err.message || 'Could not resend invite.', 'error');
   }
 }
 
@@ -1243,11 +1264,12 @@ async function openAddCoachModal(onSuccess) {
       </div>
       <div class="form-group"><label class="form-label">Position Title</label>
         <input class="form-input" name="position_title" placeholder="e.g. Head Coach, PE Specialist" maxlength="100" /></div>
-      <div class="form-group"><label class="form-label">Temporary Password *</label>
-        <input class="form-input" type="password" name="password" placeholder="Min 8 characters" minlength="8" required /></div>
+      <div class="form-hint" style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:10px 12px;font-size:0.8125rem;color:#1E40AF;">
+        ✉️ The coach will receive an email invite to set their own password. The link expires in 24 hours.
+      </div>
       <div class="modal-footer">
         <button class="btn btn-ghost" type="button" onclick="closeModal()">Cancel</button>
-        <button class="btn btn-primary" type="submit" id="add-coach-submit">Add Coach</button>
+        <button class="btn btn-primary" type="submit" id="add-coach-submit">Add Coach &amp; Send Invite</button>
       </div>
     </form>`);
 
@@ -1262,17 +1284,17 @@ async function openAddCoachModal(onSuccess) {
         last_name: fd.get('last_name').trim(),
         email: fd.get('email').trim().toLowerCase(),
         role: fd.get('role'),
-        password: fd.get('password'),
+        // No password — backend creates pending account + sends invite email.
         school_id: fd.get('school_id') ? parseInt(fd.get('school_id')) : null,
         position_title: fd.get('position_title').trim() || null,
       });
       closeModal();
-      showAlert('Coach added successfully!', 'success');
+      showAlert('Coach added — invite email sent!', 'success');
       if (onSuccess) onSuccess();
       else loadCoachesPage(document.getElementById('page-main'));
     } catch (err) {
       showAlert(err.message, 'error');
-      btn.disabled = false; btn.innerHTML = 'Add Coach';
+      btn.disabled = false; btn.innerHTML = 'Add Coach &amp; Send Invite';
     }
   });
 }
