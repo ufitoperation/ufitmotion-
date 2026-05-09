@@ -1927,3 +1927,61 @@ table.data-table .td-actions {
     background: white;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Site footer — visible on every page (login + authenticated SPA views).
+   Sits at the bottom of <body>, outside the #app SPA mount.
+   --------------------------------------------------------------------------- */
+
+.site-footer {
+  margin-top: 48px;
+  padding: 20px 16px;
+  background: var(--ufit-blue, #1E40AF);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 13px;
+}
+
+.site-footer-inner {
+  max-width: 1080px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.site-footer-brand {
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: white;
+}
+
+.site-footer-nav {
+  display: flex;
+  gap: 16px;
+}
+
+.site-footer-nav a {
+  color: rgba(255, 255, 255, 0.92);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.site-footer-nav a:hover,
+.site-footer-nav a:focus-visible {
+  text-decoration: underline;
+  color: white;
+}
+
+@media (max-width: 480px) {
+  .site-footer-inner {
+    justify-content: center;
+    text-align: center;
+  }
+}
+
+/* Hide the footer when printing reports — keep printed pages clean. */
+@media print {
+  .site-footer { display: none; }
+}

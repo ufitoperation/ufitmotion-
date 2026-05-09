@@ -32,6 +32,19 @@ def login_page():
     return render_template(_SPA_TEMPLATE)
 
 
+@pages_bp.route("/privacy")
+def privacy_page():
+    """Serve the standalone Privacy Policy. Bypasses the SPA so search
+    engines and link previews see the actual policy text."""
+    return render_template("privacy.html")
+
+
+@pages_bp.route("/terms")
+def terms_page():
+    """Serve the standalone Terms of Service. Same rationale as /privacy."""
+    return render_template("terms.html")
+
+
 @pages_bp.route("/<path:path>")
 def catch_all(path: str):
     """
