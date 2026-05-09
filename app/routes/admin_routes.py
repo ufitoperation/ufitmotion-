@@ -270,10 +270,55 @@ def create_school():
 
         if principal_email and principal_name:
             parts = principal_name.split(" ", 1)
+            principal_first = parts[0]
+            principal_last = parts[1] if len(parts) > 1 else ""
+
+            # Create the principal user account if one doesn't already exist for this email.
+            existing_user = db.execute(
+                "SELECT user_id FROM users WHERE email = ? AND deleted_at IS NULL",
+                (principal_email,),
+            ).fetchone()
+            if not existing_user:
+                invite_token_plain = secrets.token_urlsafe(32)
+                invite_token_hash = hashlib.sha256(invite_token_plain.encode()).hexdigest()
+                invite_expires = (datetime.datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+                u_cur = db.execute(
+                    """INSERT INTO users
+                       (role, first_name, last_name, email, active_status,
+                        password_reset_token, password_reset_expires_at, created_at)
+                       VALUES ('principal', ?, ?, ?, FALSE, ?, ?, ?)""",
+                    (principal_first, principal_last, principal_email,
+                     invite_token_hash, invite_expires, ts),
+                )
+                principal_user_id = u_cur.lastrowid
+                sp_cur = db.execute(
+                    """INSERT INTO staff_profiles
+                       (user_id, position_title, status, created_at)
+                       VALUES (?, 'Principal', 'active', ?)""",
+                    (principal_user_id, ts),
+                )
+                principal_staff_id = sp_cur.lastrowid
+                db.execute(
+                    """INSERT INTO staff_assignments
+                       (staff_id, school_id, assignment_role, start_date, active_status, created_at)
+                       VALUES (?, ?, 'principal', ?, TRUE, ?)""",
+                    (principal_staff_id, school_id, ts[:10], ts),
+                )
+                db.commit()
+
+                # Send invite email — gracefully no-ops without RESEND_API_KEY.
+                try:
+                    from app.email import send_invite_email
+                    send_invite_email(principal_email, principal_first or "there", "principal", invite_token_plain)
+                except Exception as exc:
+                    logging.getLogger(__name__).warning(
+                        "Principal invite send failed for %s: %s", principal_email, exc
+                    )
+
             trigger_principal_sync(
                 email=principal_email,
-                first_name=parts[0],
-                last_name=parts[1] if len(parts) > 1 else "",
+                first_name=principal_first,
+                last_name=principal_last,
                 school_id=school_id,
                 school_name=school_name,
                 org_id=org["organization_id"],
