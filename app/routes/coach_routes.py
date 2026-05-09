@@ -1882,16 +1882,20 @@ def submit_assessment():
                    ORDER BY a_sc.created_at DESC LIMIT 1""",
                 (student_id, item["skill_id"]),
             ).fetchone()
-            growth_flag = 1 if (prev and norm > prev["normalized_score"]) else 0
+            growth_flag = bool(prev and norm > prev["normalized_score"])
 
+            # normalized_score is a GENERATED ALWAYS column on Postgres
+            # (raw_level * 20) — must NOT be in the INSERT column list there.
+            # observed_* and growth_flag are BOOLEAN — use TRUE/FALSE keywords
+            # not integer 1/0 (Postgres rejects implicit int->bool cast).
             db.execute(
                 """INSERT INTO assessment_scores
-                   (assessment_id, student_id, skill_id, raw_level, normalized_score,
+                   (assessment_id, student_id, skill_id, raw_level,
                     benchmark_id, observed_independence, observed_consistency,
                     observed_accuracy, growth_flag, observation_tag, created_at)
-                   VALUES (?, ?, ?, ?, ?, NULL, 1, 0, 0, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, NULL, TRUE, FALSE, FALSE, ?, ?, ?)""",
                 (new_assessment_id, student_id, item["skill_id"],
-                 raw, norm, growth_flag, obs_tag, created_at_val),
+                 raw, growth_flag, obs_tag, created_at_val),
             )
 
         # Recalculate all summary tables in the same transaction

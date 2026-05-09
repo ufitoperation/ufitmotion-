@@ -777,7 +777,7 @@ async function loadAdminDashboard(container) {
     const eodPct = d.eod_compliance_rate != null ? Math.round(d.eod_compliance_rate * 100) : 0;
     container.innerHTML = `
       <div class="welcome-card">
-        <div class="welcome-greeting">Welcome back, ${esc(state.user?.first_name || 'Admin')}! 👋</div>
+        <div class="welcome-greeting">Welcome back, ${esc(state.user?.first_name || 'Admin')}.</div>
         <div class="welcome-subtitle"><span class="badge badge-yellow" style="margin-right:8px;">${fmtLabel(state.user?.role || 'Admin')}</span>${todayFull()}</div>
       </div>
       <div class="stats-grid">
@@ -1893,7 +1893,7 @@ async function loadCoachDashboard(container) {
 
     container.innerHTML = `
       <div class="welcome-card">
-        <div class="welcome-greeting">Hey ${esc(state.user?.first_name || 'Coach')}! 👋</div>
+        <div class="welcome-greeting">Welcome back, ${esc(state.user?.first_name || 'Coach')}.</div>
         <div class="welcome-subtitle"><span class="badge badge-yellow" style="margin-right:8px;">${fmtLabel(state.user?.role || 'Coach')}</span>${todayFull()}</div>
       </div>
       ${activeWindows.length ? `<div class="alert alert-info" style="margin-bottom:16px;"><span class="alert-icon">${iconAssess()}</span><span class="alert-body"><strong>Active Assessment Window${activeWindows.length > 1 ? 's' : ''}:</strong> ${activeWindows.map(w => `${esc(w.window_name)} (${esc(w.school_name || '')} · ends ${fmtDate(w.end_date)})`).join('; ')}</span></div>` : ''}
@@ -2830,7 +2830,7 @@ async function loadPrincipalDashboard(container) {
     container.innerHTML = `
       <div class="welcome-card">
         <div class="welcome-greeting">${esc(school.school_name || 'Your School')}</div>
-        <div class="welcome-subtitle">${school.city ? esc(school.city) + (school.state ? ', ' + esc(school.state) : '') : ''} &mdash; ${todayFull()}</div>
+        <div class="welcome-subtitle">${school.city ? esc(school.city) + (school.state ? ', ' + esc(school.state) : '') : ''} &middot; ${todayFull()}</div>
       </div>
       <div class="stats-grid">
         ${statCard('Total Students',        d.students_total ?? 0,    iconStudents(),  '')}
@@ -3865,7 +3865,7 @@ async function loadParentHome(container) {
         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
           <div>
             <div style="font-size:18px;font-weight:700;color:var(--color-text);">${esc(c.first_name)} ${esc(c.last_name)}</div>
-            <div style="font-size:13px;color:var(--color-text-muted);margin-top:2px;">Grade ${esc(c.grade_level || '—')} &mdash; ${esc(c.school_name || '—')}</div>
+            <div style="font-size:13px;color:var(--color-text-muted);margin-top:2px;">Grade ${esc(c.grade_level || '—')} &middot; ${esc(c.school_name || '—')}</div>
           </div>
           <div style="display:flex;align-items:center;gap:10px;">
             ${score != null ? `

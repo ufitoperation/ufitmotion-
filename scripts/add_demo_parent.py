@@ -13,10 +13,12 @@ if not DATABASE_URL:
 
 from werkzeug.security import generate_password_hash
 
-DEMO_EMAIL    = "parent@ufit.demo"
-DEMO_PASSWORD = "UfitParent2026!"
-DEMO_FIRST    = "Maria"
-DEMO_LAST     = "Johnson"
+DEMO_EMAIL    = os.environ.get("DEMO_PARENT_EMAIL", "parent@ufit.demo")
+DEMO_PASSWORD = os.environ.get("DEMO_PARENT_PASSWORD")
+if not DEMO_PASSWORD:
+    sys.exit("ERROR: DEMO_PARENT_PASSWORD env var required (do not commit passwords).")
+DEMO_FIRST    = os.environ.get("DEMO_PARENT_FIRST", "Maria")
+DEMO_LAST     = os.environ.get("DEMO_PARENT_LAST", "Johnson")
 
 # Students to link as primary parent (school 2 — Lincoln Elementary)
 STUDENT_IDS = [11, 12, 13]   # Emma Johnson, Liam Davis, Sofia Martinez
@@ -86,5 +88,5 @@ conn.close()
 
 print("\nDone.")
 print(f"  Email:    {DEMO_EMAIL}")
-print(f"  Password: {DEMO_PASSWORD}")
-print(f"  Students: Emma Johnson, Liam Davis, Sofia Martinez (school 2 — Lincoln)")
+print(f"  Password: (set via DEMO_PARENT_PASSWORD env)")
+print(f"  Students: linked to STUDENT_IDS")

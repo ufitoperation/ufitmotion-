@@ -124,30 +124,32 @@ def recalculate_student_summaries(db, student_id: int, school_id: int) -> None:
         ).fetchone()
 
         if existing:
-            # Preserve baseline once set; only update if NULL
+            # Preserve baseline once set; only update if NULL.
+            # growth_amount is GENERATED ALWAYS in Postgres — exclude from UPDATE.
             new_baseline = existing["baseline_score"] if existing["baseline_score"] is not None else baseline
             db.execute(
                 """
                 UPDATE student_skill_summary
                 SET baseline_score = ?, current_score = ?, highest_score = ?,
-                    latest_assessment_date = ?, growth_amount = ?,
+                    latest_assessment_date = ?,
                     performance_band = ?, updated_at = ?
                 WHERE student_id = ? AND skill_id = ?
                 """,
                 (new_baseline, current, highest, agg["latest_date"],
-                 current - new_baseline, band, ts, student_id, skill_id),
+                 band, ts, student_id, skill_id),
             )
         else:
+            # growth_amount excluded — GENERATED ALWAYS in Postgres.
             db.execute(
                 """
                 INSERT INTO student_skill_summary
                     (student_id, school_id, skill_id, baseline_score, current_score,
-                     highest_score, latest_assessment_date, growth_amount,
+                     highest_score, latest_assessment_date,
                      performance_band, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (student_id, school_id, skill_id, baseline, current,
-                 highest, agg["latest_date"], growth, band, ts),
+                 highest, agg["latest_date"], band, ts),
             )
 
     # ------------------------------------------------------------------ #
@@ -198,27 +200,27 @@ def recalculate_student_summaries(db, student_id: int, school_id: int) -> None:
         ).fetchone()
 
         if existing_d:
+            # growth_amount is GENERATED ALWAYS in Postgres — exclude from UPDATE.
             saved_baseline = existing_d["baseline_domain_score"] if existing_d["baseline_domain_score"] is not None else baseline_domain
             db.execute(
                 """
                 UPDATE student_domain_summary
                 SET baseline_domain_score = ?, current_domain_score = ?,
-                    growth_amount = ?, latest_update = ?
+                    latest_update = ?
                 WHERE student_id = ? AND domain_id = ?
                 """,
-                (saved_baseline, current_domain,
-                 (current_domain - saved_baseline) if (current_domain is not None and saved_baseline is not None) else 0,
-                 ts, student_id, domain_id),
+                (saved_baseline, current_domain, ts, student_id, domain_id),
             )
         else:
+            # growth_amount excluded — GENERATED ALWAYS in Postgres.
             db.execute(
                 """
                 INSERT INTO student_domain_summary
                     (student_id, domain_id, baseline_domain_score, current_domain_score,
-                     growth_amount, latest_update)
-                VALUES (?, ?, ?, ?, ?, ?)
+                     latest_update)
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                (student_id, domain_id, baseline_domain, current_domain, domain_growth, ts),
+                (student_id, domain_id, baseline_domain, current_domain, ts),
             )
 
     # ------------------------------------------------------------------ #
