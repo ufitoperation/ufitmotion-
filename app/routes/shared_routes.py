@@ -343,6 +343,56 @@ def student_progress(student_id: int):
 
 
 # ---------------------------------------------------------------------------
+# POST /api/feedback
+# ---------------------------------------------------------------------------
+@shared_bp.route("/api/feedback", methods=["POST"])
+@limiter.limit("5 per minute")
+@login_required
+def submit_feedback():
+    """
+    Accept an in-app feedback / help message from any authenticated user
+    and email it to the operations inbox.
+
+    Body: { subject: str, message: str, page_url: str }
+    """
+    user = current_user()  # @login_required guarantees non-None
+    data = request.get_json(silent=True) or {}
+    subject = (data.get("subject") or "").strip()[:200]
+    message = (data.get("message") or "").strip()[:5000]
+    page_url = (data.get("page_url") or "").strip()[:500]
+
+    if not subject or not message:
+        return jsonify({"error": "subject and message are required."}), 400
+
+    from html import escape as _e
+    body_html = (
+        "<h3>In-app feedback</h3>"
+        f"<p><strong>From:</strong> {_e(user['email'])} ({_e(user.get('role',''))})</p>"
+        f"<p><strong>Page:</strong> {_e(page_url) or '(unspecified)'}</p>"
+        f"<p><strong>Subject:</strong> {_e(subject)}</p>"
+        f"<hr/><pre style=\"white-space:pre-wrap;font-family:inherit;\">{_e(message)}</pre>"
+    )
+
+    try:
+        from app.email import _send
+        _send("operations@ufitonline.net", f"[Ufit Feedback] {subject}", body_html)
+    except Exception as exc:
+        # Never surface internal email failures to the user — log and ack.
+        import logging
+        logging.getLogger(__name__).warning("Feedback email failed: %s", exc)
+
+    db = get_db()
+    try:
+        audit(db, user["user_id"], "feedback_submitted", "users", user["user_id"],
+              new_values={"subject": subject, "page_url": page_url})
+        db.commit()
+    finally:
+        db.close()
+
+    return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------------------
 # POST /api/webhooks/hubspot
 # ---------------------------------------------------------------------------
 import hashlib
