@@ -898,6 +898,111 @@ def send_user_invite(user_id: int):
 
 
 # ---------------------------------------------------------------------------
+# PATCH /api/admin/users/<id>/role  (B9 — Edit Coach role + school)
+# ---------------------------------------------------------------------------
+_EDIT_ROLE_ALLOWED = (
+    "coach_overseer", "site_coordinator",
+    "head_coach", "assistant_coach",
+    "principal", "school_staff",
+)
+
+
+@admin_bp.route("/api/admin/users/<int:user_id>/role", methods=["PATCH"])
+@admin_required
+def update_user_role(user_id: int):
+    """
+    Edit a user's role + school assignments. Replaces active assignments
+    atomically (mark all old active=FALSE, INSERT new ones).
+
+    Permission rules:
+      - Actor cannot change their own role (use a separate code path).
+      - Only CEO can grant or demote ceo/admin roles.
+      - Admin can change any non-ceo/non-admin user.
+    """
+    actor = current_user()
+    data = parse_json()
+    new_role = (data.get("role") or "").strip()
+    school_ids = data.get("school_ids") or []
+
+    if actor["user_id"] == user_id:
+        return jsonify({"error": "You cannot change your own role here."}), 409
+
+    if new_role not in _EDIT_ROLE_ALLOWED:
+        # admin / ceo can be granted only by CEO via a dedicated path; not here.
+        if new_role in ("ceo", "admin"):
+            return jsonify({"error": "ceo and admin roles can only be granted by a CEO."}), 403
+        return jsonify({"error": f"role must be one of: {', '.join(_EDIT_ROLE_ALLOWED)}."}), 400
+
+    if not isinstance(school_ids, list) or not all(isinstance(x, int) for x in school_ids):
+        return jsonify({"error": "school_ids must be a list of integers."}), 400
+
+    db = get_db()
+    try:
+        target = db.execute(
+            "SELECT user_id, role FROM users WHERE user_id = ? AND deleted_at IS NULL",
+            (user_id,),
+        ).fetchone()
+        if target is None:
+            return jsonify({"error": "User not found."}), 404
+        if target["role"] in ("ceo", "admin") and actor["role"] != "ceo":
+            return jsonify({"error": "Only CEO can demote ceo/admin accounts."}), 403
+
+        # Validate all school_ids exist + are not deleted.
+        if school_ids:
+            rows = db.execute(
+                f"SELECT school_id FROM schools "
+                f"WHERE school_id IN ({','.join(['?']*len(school_ids))}) "
+                f"AND deleted_at IS NULL",
+                tuple(school_ids),
+            ).fetchall()
+            found = {r["school_id"] for r in rows}
+            missing = set(school_ids) - found
+            if missing:
+                return jsonify({"error": f"Unknown school_ids: {sorted(missing)}"}), 400
+
+        ts = now_utc()
+        old_assignments = [
+            r["school_id"] for r in db.execute(
+                """SELECT sa.school_id FROM staff_assignments sa
+                   JOIN staff_profiles sp ON sp.staff_id = sa.staff_id
+                   WHERE sp.user_id = ? AND sa.active_status = TRUE""",
+                (user_id,),
+            ).fetchall()
+        ]
+
+        db.execute(
+            "UPDATE users SET role = ? WHERE user_id = ?", (new_role, user_id)
+        )
+
+        sp = db.execute(
+            "SELECT staff_id FROM staff_profiles WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()
+        if sp:
+            db.execute(
+                "UPDATE staff_assignments SET active_status = FALSE WHERE staff_id = ?",
+                (sp["staff_id"],),
+            )
+            for sid in school_ids:
+                db.execute(
+                    """INSERT INTO staff_assignments
+                       (staff_id, school_id, assignment_role, start_date, active_status, created_at)
+                       VALUES (?, ?, ?, ?, TRUE, ?)""",
+                    (sp["staff_id"], sid, new_role, ts[:10], ts),
+                )
+
+        audit(
+            db, actor["user_id"], "role_changed", "users", user_id,
+            old_values={"role": target["role"], "school_ids": old_assignments},
+            new_values={"role": new_role, "school_ids": school_ids},
+        )
+        db.commit()
+        return jsonify({"ok": True})
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
 # POST /api/admin/schools/<id>/invite-code/regenerate  (B8)
 # ---------------------------------------------------------------------------
 def _generate_invite_code(school_name: str, school_id: int) -> str:
