@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ufit Motion — Field Dictionary &amp; Data Entry Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--blue:#1E40AF;--yellow:#F59E0B;--ink:#111827;--muted:#6B7280;--rule:#E5E7EB;--bg:#FAFBFC}
+  body{font-family:'Inter',system-ui,sans-serif;color:var(--ink);background:var(--bg);line-height:1.6}
+  .topbar{background:var(--blue);color:#fff;padding:24px 32px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+  .topbar .brand{font-size:20px;font-weight:800;letter-spacing:.5px}
+  .topbar .brand .y{color:var(--yellow)}
+  .topbar .crumb{font-size:12px;opacity:.85;text-transform:uppercase;letter-spacing:.7px}
+  .doc-wrap{max-width:1200px;margin:0 auto;padding:36px 32px 80px;display:grid;grid-template-columns:240px 1fr;gap:36px}
+  .toc{position:sticky;top:24px;align-self:start;background:#fff;border:1px solid var(--rule);border-radius:8px;padding:18px;font-size:12.5px;max-height:calc(100vh - 48px);overflow-y:auto}
+  .toc h3{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:8px;font-weight:700}
+  .toc h3:not(:first-child){margin-top:14px}
+  .toc a{display:block;padding:4px 0;color:#374151;text-decoration:none;border-left:2px solid transparent;padding-left:10px;margin-left:-10px}
+  .toc a:hover{color:var(--blue);border-left-color:var(--blue)}
+  main{min-width:0}
+  h1{font-size:32px;font-weight:800;color:var(--ink);margin-bottom:8px;line-height:1.15}
+  .lead{color:var(--muted);font-size:15px;line-height:1.55;max-width:760px;margin-bottom:24px}
+  h2{font-size:22px;font-weight:800;color:var(--ink);margin:36px 0 6px;padding-top:18px;border-top:1px solid var(--rule)}
+  h2:first-of-type{border-top:0;padding-top:0}
+  h2 small{font-size:13px;font-weight:500;color:var(--muted);margin-left:8px}
+  h3{font-size:15px;font-weight:700;color:var(--ink);margin:14px 0 6px}
+  p{margin-bottom:12px;color:#374151}
+  ul,ol{margin:6px 0 14px 24px;color:#374151}
+  li{margin:3px 0}
+  code{background:#F1F5F9;padding:1px 6px;border-radius:3px;font-size:12.5px;color:#0F172A;font-family:ui-monospace,Menlo,monospace}
+  table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--rule);border-radius:8px;overflow:hidden;margin:10px 0 18px;font-size:13px}
+  th{background:#F8FAFC;text-align:left;padding:9px 11px;font-weight:700;font-size:11.5px;color:#0F172A;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--rule)}
+  td{padding:9px 11px;border-bottom:1px solid #F3F4F6;color:#374151;vertical-align:top}
+  tr:last-child td{border-bottom:0}
+  td.f{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:#0F172A;white-space:nowrap}
+  td.t{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
+  .pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:10.5px;font-weight:600;line-height:1.4;white-space:nowrap}
+  .pill-req{background:#FEE2E2;color:#B91C1C}
+  .pill-opt{background:#F3F4F6;color:#6B7280}
+  .pill-auto{background:#EFF6FF;color:#1E40AF}
+  .pill-comp{background:#F3E8FF;color:#6B21A8}
+  .meth{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:#DBEAFE;color:#1E3A8A;margin-right:4px}
+  .meth.csv{background:#DCFCE7;color:#15803D}
+  .meth.api{background:#FEF3C7;color:#92400E}
+  .meth.modal{background:#DBEAFE;color:#1E3A8A}
+  .callout{display:flex;gap:14px;background:#FEF9E7;border-left:4px solid var(--yellow);padding:14px 16px;border-radius:0 8px 8px 0;margin:14px 0;font-size:13.5px;line-height:1.55}
+  .callout strong{color:#92400E}
+  .callout-blue{background:#EFF6FF;border-color:var(--blue)}
+  .callout-blue strong{color:var(--blue)}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;background:#fff;border:1px solid var(--rule);border-radius:8px;padding:14px 18px;margin:18px 0;font-size:12.5px}
+  .legend-item{display:flex;align-items:center;gap:8px}
+  .footer{margin-top:60px;padding-top:24px;border-top:1px solid var(--rule);font-size:12px;color:var(--muted);text-align:center;line-height:1.6}
+  @media (max-width:880px){
+    .doc-wrap{grid-template-columns:1fr;padding:20px}
+    .toc{position:static;max-height:none}
+  }
+  @media print{
+    .topbar{padding:16px 24px}
+    .toc{display:none}
+    .doc-wrap{grid-template-columns:1fr;padding:0 24px}
+    h2{break-before:page}
+    h2:first-of-type{break-before:auto}
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">UFIT <span class="y">MOTION</span></div>
+  <div class="crumb">Field Dictionary &amp; Data Entry Guide</div>
+</div>
+<div class="doc-wrap">
+  <nav class="toc" aria-label="Table of contents">
+    <h3>Identity</h3>
+    <a href="#orgs">Organizations</a>
+    <a href="#schools">Schools</a>
+    <a href="#users">Users</a>
+    <a href="#staff-profiles">Staff Profiles</a>
+    <a href="#staff-assignments">Staff Assignments</a>
+    <a href="#parents">Parents</a>
+    <h3>Programs</h3>
+    <a href="#students">Students</a>
+    <a href="#programs">Programs</a>
+    <a href="#sessions">Sessions</a>
+    <a href="#attendance">Attendance</a>
+    <h3>Skills &amp; Assessment</h3>
+    <a href="#skills">Skills &amp; Domains</a>
+    <a href="#windows">Assessment Windows</a>
+    <a href="#assessments">Assessments</a>
+    <a href="#scores">Assessment Scores</a>
+    <a href="#behavior">Behavior Observations</a>
+    <h3>Reporting</h3>
+    <a href="#eod">EOD Reports</a>
+    <a href="#incidents">Incident Reports</a>
+    <a href="#coach-obs">Coach Observations</a>
+    <a href="#coach-evals">Coach Evaluations</a>
+    <a href="#surveys">Principal Surveys</a>
+    <h3>Reference</h3>
+    <a href="#methods">How to Add Data</a>
+    <a href="#imports">CSV Import Templates</a>
+  </nav>
+  <main>
+    <h1>Field Dictionary &amp; Data Entry Guide</h1>
+    <p class="lead">Every field on every entity in Ufit Motion: what it is, whether it's required, how it's entered, and validation rules. Use this as a reference when adding data, importing rosters, or training new admins. The legend below explains the badges used throughout.</p>
+
+    <div class="legend">
+      <div class="legend-item"><span class="pill pill-req">Required</span><span style="color:var(--muted);">Server rejects on missing</span></div>
+      <div class="legend-item"><span class="pill pill-opt">Optional</span><span style="color:var(--muted);">May be left blank</span></div>
+      <div class="legend-item"><span class="pill pill-auto">Auto</span><span style="color:var(--muted);">System fills it in</span></div>
+      <div class="legend-item"><span class="pill pill-comp">Computed</span><span style="color:var(--muted);">Derived from other rows</span></div>
+      <div class="legend-item"><span class="meth modal">Modal</span><span class="meth csv">CSV</span><span class="meth api">API</span></div>
+    </div>
+
+    <!-- =================== Organizations =================== -->
+    <h2 id="orgs">Organizations <small>top-level tenant boundary</small></h2>
+    <p>The top of the hierarchy. Every other row in the system is scoped to one of these. Typically created once per district when Ufit signs a new client.</p>
+    <p><strong>Add via:</strong> <span class="meth modal">Admin → Settings → Organizations</span> <span class="meth api">POST /api/organizations</span></p>
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Required?</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="f">organization_id</td><td class="t">int</td><td><span class="pill pill-auto">Auto</span></td><td>Primary key, auto-incremented.</td></tr>
+        <tr><td class="f">organization_name</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>Full district name. Max 200 chars. Example: "Lincoln Unified School District".</td></tr>
+        <tr><td class="f">organization_type</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>One of: <code>school_district</code>, <code>charter_network</code>, <code>private_school</code>, <code>independent_school</code>.</td></tr>
+        <tr><td class="f">billing_contact</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>Name + email of the district CFO or AP for contracts. Free text.</td></tr>
+        <tr><td class="f">contract_status</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>One of: <code>active</code>, <code>pending</code>, <code>paused</code>, <code>terminated</code>. Default <code>active</code>.</td></tr>
+        <tr><td class="f">created_at</td><td class="t">timestamp</td><td><span class="pill pill-auto">Auto</span></td><td>Set on insert.</td></tr>
+      </tbody>
+    </table>
+
+    <!-- =================== Schools =================== -->
+    <h2 id="schools">Schools <small>physical school sites under an organization</small></h2>
+    <p><strong>Add via:</strong> <span class="meth modal">Admin → Schools → + Add School</span></p>
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Required?</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="f">school_name</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>Display name. Example: "Lincoln Elementary".</td></tr>
+        <tr><td class="f">organization_id</td><td class="t">FK</td><td><span class="pill pill-req">Required</span></td><td>Pick the parent organization in the modal.</td></tr>
+        <tr><td class="f">school_type</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>One of: <code>elementary</code>, <code>middle</code>, <code>high</code>, <code>k_8</code>, <code>k_12</code>, <code>preschool</code>.</td></tr>
+        <tr><td class="f">region_id</td><td class="t">FK</td><td><span class="pill pill-opt">Optional</span></td><td>Geographic region. Useful for site coordinators.</td></tr>
+        <tr><td class="f">grade_levels_served</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>Free text, e.g. "K–5".</td></tr>
+        <tr><td class="f">enrollment</td><td class="t">int</td><td><span class="pill pill-opt">Optional</span></td><td>Total student enrollment for context.</td></tr>
+        <tr><td class="f">address, city, state, zip_code</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>Mailing address.</td></tr>
+        <tr><td class="f">principal_name</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>Display name on the schools table.</td></tr>
+        <tr><td class="f">principal_email</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>If set, an invite email is sent on save. Principal user is auto-created with active_status=FALSE until they set their password.</td></tr>
+        <tr><td class="f">assistant_principal_name / _email</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>Same pattern as principal.</td></tr>
+        <tr><td class="f">start_date_with_ufit</td><td class="t">date</td><td><span class="pill pill-opt">Optional</span></td><td>When Ufit started serving this school.</td></tr>
+        <tr><td class="f">end_date_with_ufit</td><td class="t">date</td><td><span class="pill pill-opt">Optional</span></td><td>Set on contract termination.</td></tr>
+        <tr><td class="f">contract_id</td><td class="t">FK</td><td><span class="pill pill-opt">Optional</span></td><td>Link to a specific contract row.</td></tr>
+        <tr><td class="f">bell_schedule_notes</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>Free-text. Example: "Recess block: 10:30-10:45".</td></tr>
+        <tr><td class="f">yard_notes</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>Site-specific surface info (e.g. "Asphalt yard, no shade").</td></tr>
+        <tr><td class="f">site_specific_rules</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>Free-text. Example: "No outside food in gym".</td></tr>
+        <tr><td class="f">coach_invite_code</td><td class="t">text</td><td><span class="pill pill-auto">Auto</span></td><td>Generated server-side. Format: <code>LCN-X7M9-2026</code>. Used in coach self-registration.</td></tr>
+        <tr><td class="f">coach_invite_code_expires_at</td><td class="t">timestamp</td><td><span class="pill pill-auto">Auto</span></td><td>180 days after generation. Regen-able from admin UI.</td></tr>
+        <tr><td class="f">active_status</td><td class="t">bool</td><td><span class="pill pill-auto">Auto</span></td><td>Defaults to TRUE. Soft-delete sets it to FALSE.</td></tr>
+      </tbody>
+    </table>
+
+    <!-- =================== Users =================== -->
+    <h2 id="users">Users <small>identity row for every human in the system</small></h2>
+    <p>One <code>users</code> row per person. Joined to <code>staff_profiles</code> (Ufit employees) or <code>parents</code> (parent users) depending on role.</p>
+    <p><strong>Add via:</strong> <span class="meth modal">Admin → Coaches → + Add Coach</span> <span class="meth modal">Admin → Coaches → Bulk Invite</span> <span class="meth modal">Coach Portal → Sign up with school code</span> <span class="meth modal">Parent Portal → Create Account</span></p>
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Required?</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="f">first_name</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>Display name. Used in welcome line + emails.</td></tr>
+        <tr><td class="f">last_name</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>Display name.</td></tr>
+        <tr><td class="f">email</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>Unique across the platform regardless of soft-delete. Lowercased server-side.</td></tr>
+        <tr><td class="f">phone</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>Not validated. Used for parent contact.</td></tr>
+        <tr><td class="f">role</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>One of: <code>ceo</code>, <code>admin</code>, <code>coach_overseer</code>, <code>site_coordinator</code>, <code>head_coach</code>, <code>assistant_coach</code>, <code>principal</code>, <code>school_staff</code>, <code>parent</code>.</td></tr>
+        <tr><td class="f">password_hash</td><td class="t">text</td><td><span class="pill pill-auto">Auto</span></td><td>PBKDF2-SHA-256. NULL until the user sets their own password.</td></tr>
+        <tr><td class="f">active_status</td><td class="t">bool</td><td><span class="pill pill-auto">Auto</span></td><td>FALSE while pending invite. TRUE after password set.</td></tr>
+        <tr><td class="f">password_reset_token</td><td class="t">text</td><td><span class="pill pill-auto">Auto</span></td><td>SHA-256 of a 32-byte random token. NULL when no pending reset.</td></tr>
+        <tr><td class="f">password_reset_expires_at</td><td class="t">timestamp</td><td><span class="pill pill-auto">Auto</span></td><td>1 hour after issue (forgot-password) or 24 hours (invite).</td></tr>
+        <tr><td class="f">last_login</td><td class="t">timestamp</td><td><span class="pill pill-auto">Auto</span></td><td>Updated on every successful login.</td></tr>
+        <tr><td class="f">linked_staff_id</td><td class="t">FK</td><td><span class="pill pill-auto">Auto</span></td><td>FK to staff_profiles. Null for parent users.</td></tr>
+        <tr><td class="f">linked_parent_id</td><td class="t">FK</td><td><span class="pill pill-auto">Auto</span></td><td>FK to parents. Null for staff users.</td></tr>
+        <tr><td class="f">deleted_at</td><td class="t">timestamp</td><td><span class="pill pill-auto">Auto</span></td><td>Soft-delete timestamp. NULL means active.</td></tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <div><strong>Email is forever-unique.</strong> Even soft-deleted user rows hold their email. To re-create a user with the same address, the original row must be hard-deleted (admin only) or the email must change.</div>
+    </div>
+
+    <!-- =================== Staff Profiles =================== -->
+    <h2 id="staff-profiles">Staff Profiles <small>HR data for Ufit-employee users</small></h2>
+    <p>One row per Ufit-employee user. Holds employment-related fields the company tracks but the schools don't see.</p>
+    <p><strong>Add via:</strong> <span class="meth auto">Auto-created when an admin adds a coach</span></p>
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Required?</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="f">user_id</td><td class="t">FK</td><td><span class="pill pill-req">Required</span></td><td>Link to users table.</td></tr>
+        <tr><td class="f">employee_type</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>One of: <code>full_time</code>, <code>part_time</code>, <code>contractor</code>, <code>seasonal</code>.</td></tr>
+        <tr><td class="f">date_hired</td><td class="t">date</td><td><span class="pill pill-opt">Optional</span></td><td>HR date of hire.</td></tr>
+        <tr><td class="f">pay_rate</td><td class="t">numeric</td><td><span class="pill pill-opt">Optional</span></td><td>Hourly or per-session rate. Visible to admin only.</td></tr>
+        <tr><td class="f">position_title</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>e.g. "Lead PE Coach".</td></tr>
+        <tr><td class="f">assigned_region_id</td><td class="t">FK</td><td><span class="pill pill-opt">Optional</span></td><td>For site coordinators / overseers — their primary region.</td></tr>
+        <tr><td class="f">livescan</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>Background check status / date. Free text.</td></tr>
+        <tr><td class="f">tb_status</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>TB clearance status / date. Free text.</td></tr>
+        <tr><td class="f">training_level</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>Internal training tier. Free text.</td></tr>
+        <tr><td class="f">rolling_score, rolling_band</td><td class="t">numeric/text</td><td><span class="pill pill-comp">Computed</span></td><td>Nightly cron updates from coach_observations + coach_performance_snapshots.</td></tr>
+      </tbody>
+    </table>
+
+    <!-- =================== Staff Assignments =================== -->
+    <h2 id="staff-assignments">Staff Assignments <small>which coach works at which school</small></h2>
+    <p>One row per (staff, school) pair. Multi-school capable — a coach can have multiple active rows.</p>
+    <p><strong>Add via:</strong> <span class="meth modal">Admin → Coaches → + Add Coach (school dropdown)</span> <span class="meth modal">Admin → Coaches → Edit (multi-school multi-select)</span></p>
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Required?</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="f">staff_id</td><td class="t">FK</td><td><span class="pill pill-req">Required</span></td><td>Link to staff_profiles.</td></tr>
+        <tr><td class="f">school_id</td><td class="t">FK</td><td><span class="pill pill-req">Required</span></td><td>Link to schools.</td></tr>
+        <tr><td class="f">program_id</td><td class="t">FK</td><td><span class="pill pill-opt">Optional</span></td><td>Pin to a specific program (e.g. After-School Sports vs PE Support).</td></tr>
+        <tr><td class="f">assignment_role</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>The coach's role at this school. Mirrors users.role but per-assignment.</td></tr>
+        <tr><td class="f">start_date</td><td class="t">date</td><td><span class="pill pill-req">Required</span></td><td>When this assignment starts.</td></tr>
+        <tr><td class="f">end_date</td><td class="t">date</td><td><span class="pill pill-opt">Optional</span></td><td>When the assignment ends (NULL = open-ended).</td></tr>
+        <tr><td class="f">supervisor_staff_id</td><td class="t">FK</td><td><span class="pill pill-opt">Optional</span></td><td>Direct supervisor for this assignment.</td></tr>
+        <tr><td class="f">default_schedule</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>Free text — e.g. "MWF 9-11".</td></tr>
+        <tr><td class="f">active_status</td><td class="t">bool</td><td><span class="pill pill-auto">Auto</span></td><td>FALSE = historical row (kept for audit).</td></tr>
+      </tbody>
+    </table>
+
+    <!-- =================== Parents =================== -->
+    <h2 id="parents">Parents <small>parent contact + portal access</small></h2>
+    <p><strong>Add via:</strong> <span class="meth modal">Parent Portal → Create Account (self-register)</span></p>
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Required?</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="f">user_id</td><td class="t">FK</td><td><span class="pill pill-req">Required</span></td><td>Link to users (role=parent).</td></tr>
+        <tr><td class="f">first_name, last_name</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>Display name on student progress views.</td></tr>
+        <tr><td class="f">email, phone</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>Email is also on users.email; duplicated here for fast lookup.</td></tr>
+        <tr><td class="f">preferred_contact</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>One of: <code>email</code>, <code>phone</code>, <code>text</code>.</td></tr>
+        <tr><td class="f">relationship</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>One of: <code>mother</code>, <code>father</code>, <code>guardian</code>, <code>grandparent</code>, <code>other</code>.</td></tr>
+        <tr><td class="f">portal_access_status</td><td class="t">bool</td><td><span class="pill pill-auto">Auto</span></td><td>FALSE if admin disables parent access.</td></tr>
+      </tbody>
+    </table>
+
+    <!-- =================== Students =================== -->
+    <h2 id="students">Students <small>the roster</small></h2>
+    <p><strong>Add via:</strong> <span class="meth modal">Admin → Students → + Add Student</span> <span class="meth csv">Admin → Students → Import CSV</span></p>
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Required?</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="f">school_id</td><td class="t">FK</td><td><span class="pill pill-req">Required</span></td><td>Which school the student attends.</td></tr>
+        <tr><td class="f">student_first_name</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>For display + parent-verification matching.</td></tr>
+        <tr><td class="f">student_last_name</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>Same as above.</td></tr>
+        <tr><td class="f">grade_level</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>One of: <code>K</code>, <code>1</code>...<code>12</code>. Drives skill-catalog filtering on assessments.</td></tr>
+        <tr><td class="f">local_student_identifier</td><td class="t">text</td><td><span class="pill pill-opt">Optional <em>but recommended</em></span></td><td>The school's own student ID (e.g. <code>LAUSD-2026-0001</code>). <strong>This is the parent-verification key</strong> — without it, parent self-registration falls back to integer student_id which is harder for parents to know.</td></tr>
+        <tr><td class="f">homeroom_teacher</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>For roster display.</td></tr>
+        <tr><td class="f">gender</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>Free text. Optional under FERPA + COPPA.</td></tr>
+        <tr><td class="f">enrollment_start, enrollment_end</td><td class="t">date</td><td><span class="pill pill-opt">Optional</span></td><td>For tracking transfers.</td></tr>
+        <tr><td class="f">parent_primary_id, parent_secondary_id</td><td class="t">FK</td><td><span class="pill pill-auto">Auto</span></td><td>Linked when a parent self-registers and verifies the student.</td></tr>
+        <tr><td class="f">notes</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>Coach-private notes (e.g. "asthma — sees school nurse before activity").</td></tr>
+        <tr><td class="f">active_status</td><td class="t">bool</td><td><span class="pill pill-auto">Auto</span></td><td>FALSE if student transfers / withdraws.</td></tr>
+      </tbody>
+    </table>
+    <div class="callout callout-blue">
+      <div><strong>Why local_student_identifier matters.</strong> Parents self-register by entering their child's name + this identifier. We verify both match. Without the identifier, parents have to know an internal integer ID — most won't. Always populate this field if your school provides it on the roster.</div>
+    </div>
+
+    <!-- =================== Programs =================== -->
+    <h2 id="programs">Programs <small>contracted services at a school</small></h2>
+    <p><strong>Add via:</strong> <span class="meth modal">Admin → Programs → + Add Program</span></p>
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Required?</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="f">school_id</td><td class="t">FK</td><td><span class="pill pill-req">Required</span></td><td>Which school the program runs at.</td></tr>
+        <tr><td class="f">program_name</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>e.g. "Spring 2026 PE Support".</td></tr>
+        <tr><td class="f">program_type</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>One of: <code>pe_support</code>, <code>lunch_sports</code>, <code>after_school_sports</code>, <code>psychomotor</code>, <code>middle_school_skill_development</code>, <code>tournament_program</code>, <code>wellness_enrichment</code>.</td></tr>
+        <tr><td class="f">service_model</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>e.g. "1 lead + 1 assistant per session, 3x/week".</td></tr>
+        <tr><td class="f">grade_band</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>One of: <code>K-2</code>, <code>3-5</code>, <code>6-8</code>, <code>9-12</code>. Drives skill-catalog filtering.</td></tr>
+        <tr><td class="f">start_date, end_date</td><td class="t">date</td><td><span class="pill pill-req">Required</span></td><td>Program window.</td></tr>
+        <tr><td class="f">frequency</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>Free text — e.g. "3x/week, MWF".</td></tr>
+        <tr><td class="f">program_status</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>One of: <code>active</code>, <code>upcoming</code>, <code>completed</code>, <code>cancelled</code>.</td></tr>
+        <tr><td class="f">reporting_cycle</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>e.g. "monthly", "quarterly".</td></tr>
+      </tbody>
+    </table>
+
+    <!-- =================== Sessions =================== -->
+    <h2 id="sessions">Sessions <small>a single coaching session</small></h2>
+    <p><strong>Add via:</strong> <span class="meth modal">Coach Portal → Sessions → + Log Session</span></p>
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Required?</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="f">school_id, program_id</td><td class="t">FK</td><td><span class="pill pill-req">Required</span></td><td>Auto-filled from coach's current assignment.</td></tr>
+        <tr><td class="f">session_date</td><td class="t">date</td><td><span class="pill pill-req">Required</span></td><td>Defaults to today.</td></tr>
+        <tr><td class="f">start_time, end_time</td><td class="t">time</td><td><span class="pill pill-opt">Optional</span></td><td>Used for compliance + duration_minutes.</td></tr>
+        <tr><td class="f">duration_minutes</td><td class="t">int</td><td><span class="pill pill-comp">Computed</span></td><td>Derived from start/end times.</td></tr>
+        <tr><td class="f">session_type</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>One of: <code>regular</code>, <code>makeup</code>, <code>tournament</code>, <code>assessment</code>.</td></tr>
+        <tr><td class="f">location</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>e.g. "Yard A", "Gym".</td></tr>
+        <tr><td class="f">planned_activity, actual_activity</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>What was scheduled vs what actually happened.</td></tr>
+        <tr><td class="f">student_group_name</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>e.g. "3rd Grade Period 3".</td></tr>
+        <tr><td class="f">session_status</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>One of: <code>scheduled</code>, <code>in_progress</code>, <code>completed</code>, <code>cancelled</code>, <code>missed</code>.</td></tr>
+        <tr><td class="f">total_students_present</td><td class="t">int</td><td><span class="pill pill-comp">Computed</span></td><td>From student_session_attendance.</td></tr>
+      </tbody>
+    </table>
+
+    <!-- =================== Attendance =================== -->
+    <h2 id="attendance">Student Session Attendance <small>per-student per-session participation</small></h2>
+    <p><strong>Add via:</strong> <span class="meth modal">Coach Portal → Sessions → take attendance</span></p>
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Required?</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="f">session_id, student_id</td><td class="t">FK</td><td><span class="pill pill-req">Required</span></td><td>The (session, student) pair.</td></tr>
+        <tr><td class="f">status</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>One of: <code>present</code>, <code>absent</code>, <code>excused</code>, <code>partial</code>.</td></tr>
+        <tr><td class="f">participation_level</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>One of: <code>full</code>, <code>moderate</code>, <code>limited</code>, <code>refused</code>. Required if status=partial.</td></tr>
+      </tbody>
+    </table>
+
+    <!-- =================== Skills & Domains =================== -->
+    <h2 id="skills">Skill Domains, Skills, Benchmarks <small>the assessment catalog</small></h2>
+    <p>Static reference data — seeded once when Ufit launches and updated centrally. Coaches do not author new skills; they pick from this catalog.</p>
+    <table>
+      <thead><tr><th>Table</th><th>What it stores</th><th>Example</th></tr></thead>
+      <tbody>
+        <tr><td><code>skill_domains</code></td><td>Top-level categories</td><td>Physical / Psychomotor · Sport Fundamentals · SEL / Behavioral</td></tr>
+        <tr><td><code>skills</code></td><td>Individual skills</td><td>Dribbling · Chest pass · Listening · Galloping</td></tr>
+        <tr><td><code>benchmarks</code></td><td>Rubric definitions</td><td>"Level 3 Dribbling — independently controls ball at walking pace, low-pressure"</td></tr>
+      </tbody>
+    </table>
+
+    <!-- =================== Assessment Windows =================== -->
+    <h2 id="windows">Assessment Windows <small>time periods for scoring</small></h2>
+    <p><strong>Add via:</strong> <span class="meth modal">Admin → Programs → + Assessment Window</span></p>
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Required?</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="f">school_id, program_id</td><td class="t">FK</td><td><span class="pill pill-req">Required</span></td><td>The (school, program) the window applies to.</td></tr>
+        <tr><td class="f">window_name</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>e.g. "Fall 2026 Baseline".</td></tr>
+        <tr><td class="f">start_date, end_date</td><td class="t">date</td><td><span class="pill pill-req">Required</span></td><td>The window range.</td></tr>
+        <tr><td class="f">assessment_focus</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>Free text — e.g. "Locomotor skills".</td></tr>
+        <tr><td class="f">status</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>One of: <code>upcoming</code>, <code>active</code>, <code>completed</code>.</td></tr>
+      </tbody>
+    </table>
+
+    <!-- =================== Assessments =================== -->
+    <h2 id="assessments">Assessments <small>one assessment event for a student</small></h2>
+    <p><strong>Add via:</strong> <span class="meth modal">Coach Portal → Assessments → + Score Student</span></p>
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Required?</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="f">student_id, school_id</td><td class="t">FK</td><td><span class="pill pill-req">Required</span></td><td>Who's being assessed and at which school.</td></tr>
+        <tr><td class="f">window_id</td><td class="t">FK</td><td><span class="pill pill-opt">Optional</span></td><td>If part of a formal assessment window.</td></tr>
+        <tr><td class="f">session_id</td><td class="t">FK</td><td><span class="pill pill-opt">Optional</span></td><td>If scored during a specific session.</td></tr>
+        <tr><td class="f">assessed_by_staff_id</td><td class="t">FK</td><td><span class="pill pill-req">Required</span></td><td>The coach scoring.</td></tr>
+        <tr><td class="f">assessment_date</td><td class="t">date</td><td><span class="pill pill-req">Required</span></td><td>Defaults to today.</td></tr>
+        <tr><td class="f">assessment_method</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>One of: <code>observational</code>, <code>drill</code>, <code>gameplay</code>.</td></tr>
+        <tr><td class="f">notes</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>Free-text context.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="scores">Assessment Scores <small>individual skill scores within an assessment</small></h2>
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Required?</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="f">assessment_id</td><td class="t">FK</td><td><span class="pill pill-req">Required</span></td><td>Parent assessment.</td></tr>
+        <tr><td class="f">skill_id, benchmark_id</td><td class="t">FK</td><td><span class="pill pill-req">Required</span></td><td>The skill being scored + the rubric level applied.</td></tr>
+        <tr><td class="f">raw_level</td><td class="t">int (1-5)</td><td><span class="pill pill-req">Required</span></td><td>The 1-5 rubric level.</td></tr>
+        <tr><td class="f">normalized_score</td><td class="t">int (20-100)</td><td><span class="pill pill-comp">Computed</span></td><td>20 / 40 / 60 / 80 / 100. Stored as a generated column in Postgres.</td></tr>
+        <tr><td class="f">confidence_rating, observed_independence, observed_consistency, observed_accuracy</td><td class="t">int</td><td><span class="pill pill-opt">Optional</span></td><td>Sub-dimensions for richer reporting.</td></tr>
+        <tr><td class="f">observation_tag</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>One of: <code>independent</code>, <code>needs_prompt</code>, <code>inconsistent</code>, <code>strong_control</code>, <code>low_confidence</code>, <code>gameplay_transfer_observed</code>.</td></tr>
+        <tr><td class="f">growth_flag</td><td class="t">text</td><td><span class="pill pill-comp">Computed</span></td><td>Set to <code>improvement</code> / <code>regression</code> / <code>stable</code> based on prior assessment.</td></tr>
+        <tr><td class="f">notes</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>Free-text context.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="behavior">Behavior Observations <small>lightweight per-session SEL ratings</small></h2>
+    <p>Distinct from assessments — these are quick coach impressions captured on every session, not formal scoring.</p>
+    <p><strong>Add via:</strong> <span class="meth modal">Coach Portal → Behavior → + Observation</span></p>
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Required?</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="f">student_id, school_id, session_id</td><td class="t">FK</td><td><span class="pill pill-req">Required</span></td><td>Linkage.</td></tr>
+        <tr><td class="f">observed_by_staff_id</td><td class="t">FK</td><td><span class="pill pill-req">Required</span></td><td>The coach observing.</td></tr>
+        <tr><td class="f">date</td><td class="t">date</td><td><span class="pill pill-req">Required</span></td><td>Defaults to today.</td></tr>
+        <tr><td class="f">teamwork_score, effort_score, self_control_score, listening_score, sportsmanship_score, confidence_score</td><td class="t">int (1-5)</td><td><span class="pill pill-req">Required</span></td><td>The six SEL dimensions.</td></tr>
+        <tr><td class="f">notes</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>Free-text context.</td></tr>
+      </tbody>
+    </table>
+
+    <!-- =================== EOD Reports =================== -->
+    <h2 id="eod">EOD Reports <small>end-of-day reports</small></h2>
+    <p><strong>Add via:</strong> <span class="meth modal">Coach Portal → EOD Reports → + File EOD</span></p>
+    <p>The EOD form has 25+ fields total. Required fields capture the day's narrative; optional fields capture site-level details that feed compliance dashboards.</p>
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Required?</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="f">school_id, staff_id, program_id, session_id, report_date</td><td class="t">FK / date</td><td><span class="pill pill-req">Required</span></td><td>Linkage + when it happened.</td></tr>
+        <tr><td class="f">activities_completed</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>Free text — what the coach actually ran.</td></tr>
+        <tr><td class="f">student_engagement_summary</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>e.g. "High — 28 of 30 students active most of session."</td></tr>
+        <tr><td class="f">attendance_summary</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>If not auto-filled from student_session_attendance.</td></tr>
+        <tr><td class="f">behavior_summary</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>Notable behavior moments.</td></tr>
+        <tr><td class="f">success_story</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>Highlight of the day.</td></tr>
+        <tr><td class="f">challenge_summary</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>What didn't work.</td></tr>
+        <tr><td class="f">injury_incident_flag</td><td class="t">bool</td><td><span class="pill pill-opt">Optional</span></td><td>Pre-fills an incident report if checked.</td></tr>
+        <tr><td class="f">incident_report_filed</td><td class="t">bool</td><td><span class="pill pill-auto">Auto</span></td><td>TRUE if a linked incident_reports row exists.</td></tr>
+        <tr><td class="f">school_concerns, school_concerns_resolved, school_concerns_notes</td><td class="t">text/bool</td><td><span class="pill pill-opt">Optional</span></td><td>School-side issues that came up.</td></tr>
+        <tr><td class="f">schedule_changes, equipment_requests</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>Site-level operational notes.</td></tr>
+        <tr><td class="f">coaches_clocked_in, coaches_in_uniform, coaches_setup_ready</td><td class="t">int / bool</td><td><span class="pill pill-opt">Optional</span></td><td>Compliance metrics.</td></tr>
+        <tr><td class="f">late_arrivals, verbal_warnings, hr_app_issues</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>HR-style notes.</td></tr>
+        <tr><td class="f">equipment_accounted, transitions_orderly, yard_supervised, curriculum_followed</td><td class="t">bool</td><td><span class="pill pill-opt">Optional</span></td><td>Yes/no compliance flags.</td></tr>
+        <tr><td class="f">safety_hazards</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>Free text — surface conditions, weather, etc.</td></tr>
+        <tr><td class="f">followup_needed, principal_communication_needed, principal_communication_notes</td><td class="t">bool/text</td><td><span class="pill pill-opt">Optional</span></td><td>Flags for downstream follow-up.</td></tr>
+        <tr><td class="f">submitted_on_time</td><td class="t">bool</td><td><span class="pill pill-auto">Auto</span></td><td>TRUE if submitted same day. Feeds EOD compliance %.</td></tr>
+      </tbody>
+    </table>
+
+    <!-- =================== Incidents =================== -->
+    <h2 id="incidents">Incident Reports</h2>
+    <p><strong>Add via:</strong> <span class="meth modal">Coach Portal → Incidents → + File Incident</span></p>
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Required?</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="f">school_id, session_id, reported_by_staff_id, report_date</td><td class="t">FK / date</td><td><span class="pill pill-req">Required</span></td><td>Linkage + when it happened.</td></tr>
+        <tr><td class="f">student_id</td><td class="t">FK</td><td><span class="pill pill-opt">Optional</span></td><td>If incident involves a specific student.</td></tr>
+        <tr><td class="f">incident_type</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>One of: <code>injury</code>, <code>behavior</code>, <code>equipment</code>, <code>facility</code>, <code>safety</code>, <code>other</code>.</td></tr>
+        <tr><td class="f">severity_level</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>One of: <code>low</code>, <code>medium</code>, <code>high</code>, <code>critical</code>. Critical triggers admin notifications.</td></tr>
+        <tr><td class="f">description</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>What happened.</td></tr>
+        <tr><td class="f">immediate_action_taken</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>What the coach did about it.</td></tr>
+        <tr><td class="f">school_notified, family_notified</td><td class="t">bool</td><td><span class="pill pill-req">Required</span></td><td>Compliance booleans (FERPA / duty-of-care).</td></tr>
+        <tr><td class="f">escalated</td><td class="t">bool</td><td><span class="pill pill-opt">Optional</span></td><td>TRUE if forwarded to admin / overseer.</td></tr>
+        <tr><td class="f">status</td><td class="t">text</td><td><span class="pill pill-req">Required</span></td><td>One of: <code>open</code>, <code>investigating</code>, <code>resolved</code>, <code>closed</code>.</td></tr>
+        <tr><td class="f">resolution_notes</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>How the incident was resolved.</td></tr>
+      </tbody>
+    </table>
+
+    <!-- =================== Coach Observations =================== -->
+    <h2 id="coach-obs">Coach Observations <small>supervisor scoring of coaches</small></h2>
+    <p><strong>Add via:</strong> <span class="meth modal">Admin → Evaluations → + Observe Coach</span></p>
+    <p>Six dimensions, each 1-5. Rolled up into a coach's rolling performance score.</p>
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Required?</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="f">observed_staff_id, evaluator_staff_id, school_id, date</td><td class="t">FK / date</td><td><span class="pill pill-req">Required</span></td><td>Who's being observed, by whom, where, when.</td></tr>
+        <tr><td class="f">transitions_score</td><td class="t">int (1-5)</td><td><span class="pill pill-req">Required</span></td><td>How smoothly the coach moves students between activities.</td></tr>
+        <tr><td class="f">engagement_score</td><td class="t">int (1-5)</td><td><span class="pill pill-req">Required</span></td><td>Student engagement during the session.</td></tr>
+        <tr><td class="f">lesson_fidelity_score</td><td class="t">int (1-5)</td><td><span class="pill pill-req">Required</span></td><td>How closely the coach followed the planned lesson.</td></tr>
+        <tr><td class="f">sel_language_score</td><td class="t">int (1-5)</td><td><span class="pill pill-req">Required</span></td><td>Coach's use of SEL language and positive behavior reinforcement.</td></tr>
+        <tr><td class="f">safety_score</td><td class="t">int (1-5)</td><td><span class="pill pill-req">Required</span></td><td>Safety management and environment.</td></tr>
+        <tr><td class="f">organization_score</td><td class="t">int (1-5)</td><td><span class="pill pill-req">Required</span></td><td>Setup, materials, time management.</td></tr>
+        <tr><td class="f">notes, action_plan</td><td class="t">text</td><td><span class="pill pill-opt">Optional</span></td><td>Free-text feedback.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="coach-evals">Coach Evaluations <small>formal periodic reviews</small></h2>
+    <p><strong>Add via:</strong> <span class="meth modal">Admin → Evaluations → + Formal Evaluation</span></p>
+    <p>Long-form evaluation of a coach over a period (typically quarterly). Includes the rolling score, narrative feedback, action plan, and goals for the next period.</p>
+
+    <h2 id="surveys">Principal Satisfaction Surveys</h2>
+    <p><strong>Add via:</strong> <span class="meth modal">Organization Portal → Surveys → + New Survey</span></p>
+    <p>Quarterly principal feedback — overall satisfaction, perceived program impact, communication quality, suggestions. Read-only for admins; principals own the entry.</p>
+
+    <!-- =================== Reference =================== -->
+    <h2 id="methods">How to Add Data — Quick Reference</h2>
+    <p>Three primary methods, each suited to different use cases:</p>
+    <table>
+      <thead><tr><th>Method</th><th>When to use</th><th>Example</th></tr></thead>
+      <tbody>
+        <tr><td><span class="meth modal">Modal</span></td><td>One row at a time, ad-hoc data entry, manual input.</td><td>Adding a new school. Filing an EOD. Editing a coach's role.</td></tr>
+        <tr><td><span class="meth csv">CSV Import</span></td><td>Bulk data, especially when handed off from another system.</td><td>Importing a school's full student roster. Bulk-inviting 30 coaches.</td></tr>
+        <tr><td><span class="meth api">API</span></td><td>Programmatic integration, automation, third-party tools.</td><td>HubSpot webhook firing into our /api/webhooks/hubspot endpoint.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="imports">CSV Import Templates</h2>
+    <p>The two main CSV-importable entities and their column formats:</p>
+
+    <h3>Students CSV (Admin → Students → Import CSV)</h3>
+    <p><strong>Required columns:</strong> <code>first</code>, <code>last</code>, <code>grade</code>, <code>local_student_identifier</code></p>
+    <p><strong>Optional columns:</strong> <code>homeroom_teacher</code>, <code>gender</code>, <code>enrollment_start</code>, <code>notes</code></p>
+    <table>
+      <thead><tr><th>first</th><th>last</th><th>grade</th><th>local_student_identifier</th><th>homeroom_teacher</th></tr></thead>
+      <tbody>
+        <tr><td>Sam</td><td>Quinn</td><td>3</td><td>LAUSD-2026-0001</td><td>Ms. Garcia</td></tr>
+        <tr><td>Riley</td><td>Tan</td><td>3</td><td>LAUSD-2026-0002</td><td>Ms. Garcia</td></tr>
+        <tr><td>Marcus</td><td>Hill</td><td>4</td><td>LAUSD-2026-0003</td><td>Mr. Chen</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Bulk Coach Invite (Admin → Coaches → Bulk Invite)</h3>
+    <p><strong>Format per row:</strong> <code>first_name,last_name,email,role</code></p>
+    <p><strong>Defaults:</strong> If <code>role</code> is omitted on a row, the modal's "Default Role" dropdown applies. If <code>school_ids</code> not provided per row, the "Default Schools" multi-select applies.</p>
+    <p><strong>Allowed roles:</strong> <code>head_coach</code>, <code>assistant_coach</code>, <code>site_coordinator</code>, <code>coach_overseer</code>, <code>principal</code>, <code>school_staff</code>. Admin / CEO are NOT allowed via bulk invite (privilege-escalation guard).</p>
+
+    <div class="callout">
+      <div><strong>Cap: 200 rows per batch.</strong> If you need to invite more than 200 coaches at once, split into multiple batches. The server returns per-row results so you can see exactly which row failed (if any).</div>
+    </div>
+
+    <div class="footer">
+      Ufit Motion · Field Dictionary &amp; Data Entry Guide · Last updated 2026-05-10 · operations@ufitonline.net
+    </div>
+  </main>
+</div>
+</body>
+</html>

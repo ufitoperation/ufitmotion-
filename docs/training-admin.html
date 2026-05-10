@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ufit Motion — Admin Training</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#E5E7EB;height:100vh;overflow:hidden;display:flex;flex-direction:column}
+  header{padding:14px 20px;background:#060E1D;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;gap:14px}
+  .brand{font-weight:800;font-size:18px;letter-spacing:.5px}
+  .brand .b{color:#3B82F6} .brand .y{color:#F59E0B}
+  .crumb{color:rgba(255,255,255,.5);font-size:13px}
+  .role-pill{padding:3px 10px;background:#1E40AF;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase}
+  main{flex:1;display:flex;overflow:hidden}
+  aside{width:260px;background:#060E1D;border-right:1px solid rgba(255,255,255,.08);overflow-y:auto;padding:16px 0;flex-shrink:0}
+  aside h3{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:rgba(255,255,255,.4);padding:0 18px;margin-bottom:8px}
+  .bk{display:block;width:100%;text-align:left;background:transparent;color:rgba(255,255,255,.7);border:0;padding:9px 18px;font-size:13px;cursor:pointer;font-family:inherit;border-left:3px solid transparent;line-height:1.4}
+  .bk:hover{background:rgba(255,255,255,.04);color:#fff}
+  .bk.active{background:rgba(59,130,246,.12);color:#fff;border-left-color:#3B82F6}
+  .bk .num{display:inline-block;width:30px;color:rgba(255,255,255,.4);font-weight:600}
+  #stage{flex:1;position:relative;overflow:hidden;background:#0F1F33}
+  .scene{position:absolute;inset:0;opacity:0;transition:opacity .5s ease;pointer-events:none;padding:36px 56px;overflow-y:auto}
+  .scene.active{opacity:1;pointer-events:auto}
+  .scene-num{font-size:11px;letter-spacing:.7px;text-transform:uppercase;color:rgba(255,255,255,.45);margin-bottom:6px}
+  .scene h1{font-size:28px;line-height:1.2;color:#fff;margin-bottom:6px;font-weight:800}
+  .subtitle{color:rgba(255,255,255,.65);font-size:14px;margin-bottom:18px;max-width:780px;line-height:1.55}
+  .steps{margin:6px 0 16px;padding-left:0;list-style:none;color:rgba(255,255,255,.85);max-width:780px}
+  .steps li{margin:6px 0;display:flex;gap:10px;font-size:13px;line-height:1.6}
+  .steps li::before{content:counter(stp);counter-increment:stp;width:22px;height:22px;background:#1E40AF;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0;margin-top:1px}
+  .steps{counter-reset:stp}
+  .steps code{background:rgba(255,255,255,.08);padding:1px 6px;border-radius:3px;font-size:12px}
+  .caption{display:flex;gap:12px;background:rgba(245,158,11,.12);border-left:3px solid #F59E0B;border-radius:0 8px 8px 0;padding:12px 16px;margin-top:14px;max-width:880px;font-size:13.5px;line-height:1.5}
+  .caption strong{color:#FCD34D}
+  .mock{background:#fff;color:#111827;border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.45);overflow:hidden;border:1px solid rgba(0,0,0,.08);max-width:780px;margin-bottom:14px;padding:20px}
+  .mock-h{background:#1E40AF;color:#fff;font-weight:700;padding:12px 18px;font-size:13px;margin:-20px -20px 14px;border-radius:10px 10px 0 0}
+  .row{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+  .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600}
+  .pill-ok{background:#DCFCE7;color:#15803D} .pill-warn{background:#FEF3C7;color:#92400E}
+  .form{background:#F9FAFB;padding:8px 10px;border-radius:6px;font-size:12.5px;color:#111827;border:1px solid #E5E7EB;margin-bottom:6px}
+  .lbl{font-size:10.5px;color:#6B7280;text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px}
+  table{width:100%;border-collapse:collapse;font-size:12px;background:#fff;border-radius:6px;overflow:hidden}
+  th,td{padding:7px 10px;text-align:left;border-bottom:1px solid #F3F4F6}
+  th{background:#F3F4F6;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;color:#374151}
+  td{color:#374151}
+  footer{background:#060E1D;border-top:1px solid rgba(255,255,255,.08);padding:12px 20px;display:flex;align-items:center;gap:12px}
+  .btn{background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.14);border-radius:6px;padding:8px 14px;font-size:13px;font-family:inherit;cursor:pointer;font-weight:600}
+  .btn:hover{background:rgba(255,255,255,.16)}
+  .btn.primary{background:#1E40AF;border-color:#1E40AF}
+  #progress{flex:1;height:6px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;margin:0 14px}
+  #fill{height:100%;background:#F59E0B;width:0;transition:width .3s linear}
+  #count{font-size:12px;color:rgba(255,255,255,.5);min-width:55px;text-align:right}
+  @media (max-width:760px){aside{display:none}.scene{padding:20px}.scene h1{font-size:22px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">UFIT <span class="y">MOTION</span></div>
+  <div class="role-pill">Admin Training</div>
+  <div class="crumb">Press-play tutorial · ~6 minutes</div>
+</header>
+<main>
+  <aside><h3>Scenes</h3><div id="bk"></div></aside>
+  <div id="stage"></div>
+</main>
+<footer>
+  <button class="btn" id="prev">◀ Prev</button>
+  <button class="btn primary" id="play">▶ Play</button>
+  <button class="btn" id="next">Next ▶</button>
+  <div id="progress"><div id="fill"></div></div>
+  <span id="count"></span>
+</footer>
+<script>
+const SCENES = [
+  {
+    title: "Welcome, Admin",
+    sub: "You're the operator behind every school's onboarding. This 6-minute walkthrough shows you the 9 things you need to do day-to-day on Ufit Motion.",
+    steps: [
+      "Watch this through once at the start of your first week.",
+      "Bookmark the URL on your laptop and phone.",
+      "When you forget how to do something, jump straight to the relevant scene via the sidebar — the bookmarks let you skip around.",
+    ],
+    mock: `<div class="mock"><div class="mock-h">Today's agenda</div>
+      <ul style="margin-left:18px;font-size:13px;line-height:1.7;">
+        <li>1. Logging in + dashboard</li><li>2. Adding a school</li><li>3. Inviting coaches (3 paths)</li>
+        <li>4. Importing students</li><li>5. Reviewing EODs</li><li>6. Handling incidents</li>
+        <li>7. Editing a coach's role</li><li>8. Exporting CSV</li><li>9. Help &amp; support</li>
+      </ul></div>`,
+    cap: "<strong>Goal:</strong> by the end of this video you should be able to onboard a school from zero — add it, invite coaches, import students, and watch the data flow."
+  },
+  {
+    title: "Logging in",
+    sub: "Two screens: portal selector + sign-in form. The first time you log in, you arrived via an email link — set your password.",
+    steps: [
+      "Open <code>ufitmotion.onrender.com/login</code>",
+      "Click <strong>Admin Portal</strong> (building icon)",
+      "Enter email + password → <strong>Sign In</strong>",
+      "First-time? You'll set your password from the email link Ufit sent you.",
+    ],
+    mock: `<div class="mock"><div class="mock-h">Sign in to Admin Portal</div>
+      <div class="lbl">Email address</div><div class="form">admin@ufit.com</div>
+      <div class="lbl">Password</div><div class="form">••••••••••••</div>
+      <div style="background:#1E40AF;color:#fff;padding:11px;border-radius:6px;text-align:center;font-weight:600;margin-top:8px;">Sign In</div>
+      <div style="text-align:center;margin-top:8px;color:#6B7280;font-size:11px;">Forgot password?</div></div>`,
+    cap: "<strong>Forgot your password?</strong> Click 'Forgot password' below Sign In. Reset link arrives in ~30 seconds."
+  },
+  {
+    title: "Dashboard tour",
+    sub: "Your daily cockpit. Welcome card up top, five stat cards, onboarding checklist (until your first school is live), Quick Actions, This Week at a Glance.",
+    steps: [
+      "<strong>Welcome card</strong> — greets by your first name + role badge.",
+      "<strong>Stat cards</strong> — Schools · Coaches · Sessions/wk · EOD compliance · Open incidents.",
+      "<strong>Onboarding checklist</strong> — appears until you have a school + coaches + sessions.",
+      "<strong>Quick Actions</strong> — 1-click shortcuts to add a school, add a coach, review incidents.",
+      "<strong>🔔 Bell icon</strong> top-right shows unread notifications.",
+    ],
+    mock: `<div class="mock"><div class="mock-h">Dashboard · Welcome back, Admin</div>
+      <div class="row">
+        <div style="flex:1;padding:8px;background:#F9FAFB;border-radius:6px;text-align:center;"><div style="font-size:18px;font-weight:800;">3</div><div style="font-size:10px;color:#6B7280;">SCHOOLS</div></div>
+        <div style="flex:1;padding:8px;background:#F9FAFB;border-radius:6px;text-align:center;"><div style="font-size:18px;font-weight:800;">9</div><div style="font-size:10px;color:#6B7280;">COACHES</div></div>
+        <div style="flex:1;padding:8px;background:#F9FAFB;border-radius:6px;text-align:center;"><div style="font-size:18px;font-weight:800;color:#10B981;">12</div><div style="font-size:10px;color:#6B7280;">SESSIONS/WK</div></div>
+        <div style="flex:1;padding:8px;background:#F9FAFB;border-radius:6px;text-align:center;"><div style="font-size:18px;font-weight:800;color:#10B981;">96%</div><div style="font-size:10px;color:#6B7280;">EOD ON TIME</div></div>
+        <div style="flex:1;padding:8px;background:#F9FAFB;border-radius:6px;text-align:center;"><div style="font-size:18px;font-weight:800;color:#B91C1C;">1</div><div style="font-size:10px;color:#6B7280;">OPEN INC.</div></div>
+      </div></div>`,
+    cap: "<strong>Empty state isn't blank.</strong> If you log in and see zeros everywhere, the onboarding checklist tells you exactly what to click first."
+  },
+  {
+    title: "Adding a school",
+    sub: "First task on a new client. One modal, ~30 seconds. Auto-emails the principal an invite if you fill in the email.",
+    steps: [
+      "Sidebar → <strong>Schools</strong>",
+      "Click <strong>+ Add School</strong> top-right",
+      "Pick organization · enter school name · type · city / state",
+      "Optional but recommended: principal name + email — auto-sends invite",
+      "Click <strong>Add School</strong>. School appears in the list immediately.",
+    ],
+    mock: `<div class="mock"><div class="mock-h">Add School</div>
+      <div class="lbl">Organization</div><div class="form">Lincoln Unified School District</div>
+      <div class="lbl">School Name</div><div class="form">Lincoln Elementary</div>
+      <div class="lbl">Type</div><div class="form">Elementary</div>
+      <div class="lbl">Principal Name</div><div class="form">Sarah Smith</div>
+      <div class="lbl">Principal Email</div><div class="form">sarah@lincoln.edu</div>
+      <div style="background:#10B981;color:#fff;padding:8px;border-radius:6px;font-size:12px;margin-top:10px;text-align:center;">✓ Invite emailed to sarah@lincoln.edu</div></div>`,
+    cap: "<strong>Two emails on save:</strong> the principal gets a Set Password invite; HubSpot gets a new-school sync ping."
+  },
+  {
+    title: "Inviting coaches — 3 paths",
+    sub: "Pick the path that matches your situation. All three end in the same email → set-password flow.",
+    steps: [
+      "<strong>Path 1 (single):</strong> Coaches → + Add Coach → modal with one row.",
+      "<strong>Path 2 (bulk):</strong> Coaches → Bulk Invite → paste 200 rows max.",
+      "<strong>Path 3 (school code):</strong> Hand the school's invite code (e.g. <code>LCN-X7M9-2026</code>) to HR; coach self-registers.",
+      "All paths: pending coaches show ⏱ Pending until they click their email link.",
+    ],
+    mock: `<div class="mock"><div class="mock-h">Bulk Invite Coaches</div>
+      <div style="font-size:11.5px;color:#6B7280;margin-bottom:8px;">Paste rows in <code>first,last,email,role</code> format.</div>
+      <pre style="background:#F3F4F6;padding:10px;border-radius:6px;font-size:11px;font-family:ui-monospace,Menlo,monospace;">Ada,Lovelace,ada@x.com,head_coach
+Bo,Knight,bo@y.com,
+Cam,Reyes,cam@z.com,assistant_coach</pre>
+      <div style="background:#ECFDF5;color:#15803D;padding:8px;border-radius:6px;font-size:12px;margin-top:8px;"><strong>3 created</strong> · 0 duplicates · 0 errors</div></div>`,
+    cap: "<strong>Per-row error reporting.</strong> One typo doesn't kill the whole batch — server returns row-by-row results."
+  },
+  {
+    title: "Importing students CSV",
+    sub: "Schools provide rosters. Drop the CSV, preview, commit. <strong>Always include local_student_identifier</strong> — it's the parent verification key.",
+    steps: [
+      "Sidebar → <strong>Students</strong>",
+      "Click <strong>Import CSV</strong>",
+      "Drop the CSV. Required columns: <code>first</code> · <code>last</code> · <code>grade</code> · <code>local_student_identifier</code>",
+      "Preview shows the first 5 rows + duplicate / invalid count.",
+      "Click <strong>Confirm Import</strong>. Done.",
+    ],
+    mock: `<div class="mock"><div class="mock-h">Import Students</div>
+      <div style="border:2px dashed #D1D5DB;border-radius:6px;padding:14px;text-align:center;font-size:12px;color:#6B7280;background:#F9FAFB;">📄 lincoln-roster-2026.csv (30 rows, 4.2 KB)</div>
+      <pre style="background:#F3F4F6;padding:10px;border-radius:6px;font-size:11px;margin-top:10px;font-family:ui-monospace,Menlo,monospace;">first,last,grade,local_student_identifier
+Sam,Quinn,3,LAUSD-2026-0001
+Riley,Tan,3,LAUSD-2026-0002
+...</pre></div>`,
+    cap: "<strong>local_student_identifier is the parent's verification key.</strong> Without it, parents can't self-register easily."
+  },
+  {
+    title: "Reviewing EODs",
+    sub: "Check this daily. Compliance % feeds your weekly ops review.",
+    steps: [
+      "Sidebar → <strong>EOD Reports</strong>",
+      "Default view: this week's reports, newest first.",
+      "Click any row to expand the full EOD: activities, engagement, behavior, success story, challenges.",
+      "Reports flagged \"principal_communication_needed\" highlight at the top.",
+      "Compliance % badge updates as coaches submit on-time.",
+    ],
+    mock: `<div class="mock"><div class="mock-h">EOD Reports · This Week</div>
+      <table><thead><tr><th>Date</th><th>School</th><th>Coach</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>05-09</td><td>Lincoln</td><td>Williams</td><td><span class="pill pill-ok">✓ On time</span></td></tr>
+        <tr><td>05-08</td><td>Lincoln</td><td>Davis</td><td><span class="pill pill-ok">✓ On time</span></td></tr>
+        <tr><td>05-07</td><td>Roosevelt</td><td>Knight</td><td><span class="pill pill-warn">Late</span></td></tr>
+      </tbody></table></div>`,
+    cap: "<strong>EOD on-time %</strong> is your single best signal for coach compliance. Anything below 80% is worth a 1:1."
+  },
+  {
+    title: "Handling incidents",
+    sub: "Critical incidents notify you immediately. Lower-severity rolls up in the incidents tab.",
+    steps: [
+      "Bell icon → click the incident notification (instant).",
+      "Or sidebar → <strong>Incidents</strong> → filter by Open status.",
+      "Click any row → see type / severity / description / action taken / school+family notification flags.",
+      "Add resolution notes → update status to Resolved or Closed.",
+      "Audit log records every state change — visible at <code>/api/admin/audit-log</code>.",
+    ],
+    mock: `<div class="mock"><div class="mock-h">⚠ Incident · Lincoln · Sam Quinn · 2026-05-09</div>
+      <div class="row"><span class="pill" style="background:#1E40AF;color:#fff;">Injury</span><span class="pill pill-warn">Medium</span><span class="pill pill-ok">School notified</span><span class="pill pill-ok">Family notified</span></div>
+      <p style="font-size:13px;line-height:1.5;color:#374151;">Student turned ankle during 4-on-4 game; ice + RICE protocol applied; parent picked up at front office.</p></div>`,
+    cap: "<strong>Compliance + duty-of-care logged in one form.</strong> Audit log keeps the full chain of custody."
+  },
+  {
+    title: "Editing a coach's role",
+    sub: "Promotions, transfers, role changes — all from one modal. Audit log captures every change.",
+    steps: [
+      "Sidebar → <strong>Coaches</strong>",
+      "Click the <strong>Edit</strong> icon on a coach's row.",
+      "Change role (Head Coach ↔ Assistant) and / or schools (multi-select).",
+      "Save. Old assignments deactivate; new ones activate. Audit row written.",
+      "<strong>Permission rules:</strong> only CEO can grant admin / CEO. You can't edit your own role.",
+    ],
+    mock: `<div class="mock"><div class="mock-h">Edit Coach · Coach Williams</div>
+      <div class="lbl">Role</div><div class="form">Head Coach ▾</div>
+      <div class="lbl">Schools</div><div class="form">Lincoln Elementary, Roosevelt Elementary ▾</div>
+      <div style="background:#EFF6FF;color:#1E40AF;padding:8px;border-radius:6px;font-size:12px;margin-top:10px;">Will deactivate 1 old assignment + create 2 new active assignments. Audit log row will be written.</div></div>`,
+    cap: "<strong>Atomic.</strong> Either both old and new assignment changes apply, or neither does."
+  },
+  {
+    title: "Exporting CSV reports",
+    sub: "Three downloads available. Open in Excel, share, attach to district reports.",
+    steps: [
+      "Sidebar → Schools → <strong>Export CSV</strong> button (top-right).",
+      "Sidebar → Coaches → <strong>Export CSV</strong> button.",
+      "Sidebar → Students → <strong>Export CSV</strong> button.",
+      "Each downloads a properly-named .csv file. No proprietary format.",
+      "Audit log is also exportable via <code>/api/admin/audit-log?date_from=...</code> for compliance reviews.",
+    ],
+    mock: `<pre style="background:#F3F4F6;padding:14px;border-radius:6px;font-size:11px;font-family:ui-monospace,Menlo,monospace;color:#111827;">User ID,First Name,Last Name,Email,Role,Status
+14,Coach,Williams,coach@lincoln.edu,head_coach,active
+15,Coach,Davis,coach@lincoln.edu,assistant_coach,active
+16,Z.,Knight,z.knight@lincoln.edu,head_coach,pending_invite</pre>`,
+    cap: "<strong>The boss owns her data.</strong> No vendor lock-in. CSV is the universal interchange format."
+  },
+  {
+    title: "Getting help",
+    sub: "Stuck on something? Found a bug? Click the ? icon top-right of any page.",
+    steps: [
+      "Click the <strong>?</strong> icon top-right (next to the bell).",
+      "Modal opens: subject + message form.",
+      "Submit. Email lands at <code>operations@ufitonline.net</code> within 30 seconds.",
+      "Auto-captures the page URL you were on so ops can triage faster.",
+    ],
+    mock: `<div class="mock"><div class="mock-h">Help &amp; Feedback</div>
+      <div class="lbl">Subject</div><div class="form">Bulk invite stuck on row 14</div>
+      <div class="lbl">Message</div><div class="form" style="height:auto;padding:8px;">Trying to upload our 50-coach roster, server returned "duplicate email" but I don't see the email in our coach list. Need help.</div>
+      <div style="background:#10B981;color:#fff;padding:8px;border-radius:6px;text-align:center;font-size:12px;margin-top:10px;">✓ Sent to operations@ufitonline.net</div></div>`,
+    cap: "<strong>30-second response loop.</strong> The right human gets the right context, no Jira ticket triage."
+  },
+  {
+    title: "You're ready.",
+    sub: "Start with one school: add it, invite coaches, import students, watch the dashboard light up. Once one school works, the playbook scales.",
+    steps: [
+      "Go to <code>ufitmotion.onrender.com/login</code>",
+      "Add your first school.",
+      "Bulk-invite the first 5 coaches.",
+      "Import the student roster.",
+      "Watch coaches start filing EODs the next day.",
+    ],
+    mock: `<div class="mock" style="background:linear-gradient(135deg,#1E40AF,#1E3A8A);color:#fff;text-align:center;padding:32px;">
+      <div style="font-weight:900;font-size:24px;letter-spacing:.5px;">UFIT <span style="color:#F59E0B;">MOTION</span></div>
+      <div style="opacity:.85;margin-top:6px;font-size:13px;">First-school onboarding starts here.</div></div>`,
+    cap: "<strong>Onboard one school. Then five. Then fifty.</strong> The product scales — your weeks shouldn't get harder."
+  }
+];
+
+const stage=document.getElementById('stage'),bk=document.getElementById('bk'),fill=document.getElementById('fill'),count=document.getElementById('count');
+let cur=0,playing=false,timer=null;const MS=27000;
+SCENES.forEach((s,i)=>{const d=document.createElement('div');d.className='scene';d.id='s'+i;
+const stp=(s.steps||[]).map(x=>`<li>${x}</li>`).join('');
+d.innerHTML=`<div class="scene-num">Scene ${String(i+1).padStart(2,'0')} of ${SCENES.length}</div><h1>${s.title}</h1><div class="subtitle">${s.sub}</div><ul class="steps">${stp}</ul>${s.mock||''}<div class="caption">${s.cap}</div>`;
+stage.appendChild(d);
+const b=document.createElement('button');b.className='bk';b.dataset.idx=i;b.innerHTML=`<span class="num">${String(i+1).padStart(2,'0')}</span> ${s.title}`;b.onclick=()=>go(i);bk.appendChild(b);});
+function go(i){if(i<0||i>=SCENES.length)return;document.querySelectorAll('.scene').forEach(e=>e.classList.remove('active'));document.querySelectorAll('.bk').forEach(e=>e.classList.remove('active'));document.getElementById('s'+i).classList.add('active');document.querySelector(`.bk[data-idx="${i}"]`).classList.add('active');cur=i;count.textContent=`${i+1} / ${SCENES.length}`;fill.style.width=`${((i+1)/SCENES.length)*100}%`;document.querySelector(`.bk[data-idx="${i}"]`).scrollIntoView({block:'nearest',behavior:'smooth'});}
+document.getElementById('next').onclick=()=>{stop();go(Math.min(SCENES.length-1,cur+1));};
+document.getElementById('prev').onclick=()=>{stop();go(Math.max(0,cur-1));};
+document.getElementById('play').onclick=()=>playing?stop():play();
+addEventListener('keydown',e=>{if(e.key==='ArrowRight')go(Math.min(SCENES.length-1,cur+1));else if(e.key==='ArrowLeft')go(Math.max(0,cur-1));else if(e.key===' '){e.preventDefault();playing?stop():play();}});
+function play(){playing=true;document.getElementById('play').textContent='⏸ Pause';timer=setInterval(()=>{if(cur>=SCENES.length-1)return stop();go(cur+1);},MS);}
+function stop(){playing=false;document.getElementById('play').textContent='▶ Play';clearInterval(timer);}
+go(0);
+</script>
+</body>
+</html>

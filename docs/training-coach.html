@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ufit Motion — Coach Training</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#E5E7EB;height:100vh;overflow:hidden;display:flex;flex-direction:column}
+  header{padding:14px 20px;background:#060E1D;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;gap:14px}
+  .brand{font-weight:800;font-size:18px;letter-spacing:.5px}
+  .brand .y{color:#F59E0B}
+  .crumb{color:rgba(255,255,255,.5);font-size:13px}
+  .role-pill{padding:3px 10px;background:#10B981;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase}
+  main{flex:1;display:flex;overflow:hidden}
+  aside{width:260px;background:#060E1D;border-right:1px solid rgba(255,255,255,.08);overflow-y:auto;padding:16px 0;flex-shrink:0}
+  aside h3{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:rgba(255,255,255,.4);padding:0 18px;margin-bottom:8px}
+  .bk{display:block;width:100%;text-align:left;background:transparent;color:rgba(255,255,255,.7);border:0;padding:9px 18px;font-size:13px;cursor:pointer;font-family:inherit;border-left:3px solid transparent;line-height:1.4}
+  .bk:hover{background:rgba(255,255,255,.04);color:#fff}
+  .bk.active{background:rgba(16,185,129,.15);color:#fff;border-left-color:#10B981}
+  .bk .num{display:inline-block;width:30px;color:rgba(255,255,255,.4);font-weight:600}
+  #stage{flex:1;position:relative;overflow:hidden;background:#0F1F33}
+  .scene{position:absolute;inset:0;opacity:0;transition:opacity .5s ease;pointer-events:none;padding:36px 56px;overflow-y:auto}
+  .scene.active{opacity:1;pointer-events:auto}
+  .scene-num{font-size:11px;letter-spacing:.7px;text-transform:uppercase;color:rgba(255,255,255,.45);margin-bottom:6px}
+  .scene h1{font-size:28px;line-height:1.2;color:#fff;margin-bottom:6px;font-weight:800}
+  .subtitle{color:rgba(255,255,255,.65);font-size:14px;margin-bottom:18px;max-width:780px;line-height:1.55}
+  .steps{margin:6px 0 16px;padding-left:0;list-style:none;color:rgba(255,255,255,.85);max-width:780px;counter-reset:stp}
+  .steps li{margin:6px 0;display:flex;gap:10px;font-size:13px;line-height:1.6}
+  .steps li::before{content:counter(stp);counter-increment:stp;width:22px;height:22px;background:#10B981;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0;margin-top:1px}
+  .steps code{background:rgba(255,255,255,.08);padding:1px 6px;border-radius:3px;font-size:12px}
+  .caption{display:flex;gap:12px;background:rgba(245,158,11,.12);border-left:3px solid #F59E0B;border-radius:0 8px 8px 0;padding:12px 16px;margin-top:14px;max-width:880px;font-size:13.5px;line-height:1.5}
+  .caption strong{color:#FCD34D}
+  .mock{background:#fff;color:#111827;border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.45);overflow:hidden;border:1px solid rgba(0,0,0,.08);max-width:780px;margin-bottom:14px;padding:20px}
+  .mock-h{background:#10B981;color:#fff;font-weight:700;padding:12px 18px;font-size:13px;margin:-20px -20px 14px;border-radius:10px 10px 0 0}
+  .row{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+  .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600}
+  .pill-ok{background:#DCFCE7;color:#15803D} .pill-warn{background:#FEF3C7;color:#92400E}
+  .form{background:#F9FAFB;padding:8px 10px;border-radius:6px;font-size:12.5px;color:#111827;border:1px solid #E5E7EB;margin-bottom:6px}
+  .lbl{font-size:10.5px;color:#6B7280;text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px}
+  .lvl{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin:8px 0}
+  .lvl div{padding:8px 4px;text-align:center;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:6px;font-size:10.5px;color:#9CA3AF}
+  .lvl div.sel{background:#10B981;border-color:#10B981;color:#fff;font-weight:700}
+  footer{background:#060E1D;border-top:1px solid rgba(255,255,255,.08);padding:12px 20px;display:flex;align-items:center;gap:12px}
+  .btn{background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.14);border-radius:6px;padding:8px 14px;font-size:13px;font-family:inherit;cursor:pointer;font-weight:600}
+  .btn:hover{background:rgba(255,255,255,.16)}
+  .btn.primary{background:#10B981;border-color:#10B981}
+  #progress{flex:1;height:6px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;margin:0 14px}
+  #fill{height:100%;background:#F59E0B;width:0;transition:width .3s linear}
+  #count{font-size:12px;color:rgba(255,255,255,.5);min-width:55px;text-align:right}
+  @media (max-width:760px){aside{display:none}.scene{padding:20px}.scene h1{font-size:22px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">UFIT <span class="y">MOTION</span></div>
+  <div class="role-pill">Coach Training</div>
+  <div class="crumb">Press-play tutorial · ~5 minutes</div>
+</header>
+<main>
+  <aside><h3>Scenes</h3><div id="bk"></div></aside>
+  <div id="stage"></div>
+</main>
+<footer>
+  <button class="btn" id="prev">◀ Prev</button>
+  <button class="btn primary" id="play">▶ Play</button>
+  <button class="btn" id="next">Next ▶</button>
+  <div id="progress"><div id="fill"></div></div>
+  <span id="count"></span>
+</footer>
+<script>
+const SCENES = [
+  {
+    title: "Welcome, Coach",
+    sub: "You're using this on your phone, outside, between activities. The whole platform is built so the things you do every day take under 2 minutes.",
+    steps: [
+      "Add the URL to your home screen (Safari → Share → Add to Home Screen) so it acts like a native app.",
+      "Watch this once before your first session week.",
+      "Use the sidebar to skip back to any scene when you forget how something works.",
+    ],
+    mock: `<div class="mock"><div class="mock-h">Today on Ufit Motion</div>
+      <ul style="margin-left:18px;font-size:13px;line-height:1.7;">
+        <li>1. Log in (multi-school picker if you cover 2+)</li>
+        <li>2. Log a session</li><li>3. Take attendance</li>
+        <li>4. Score assessments (when applicable)</li>
+        <li>5. File EOD at end of day</li>
+        <li>6. File incident if anything goes sideways</li>
+      </ul></div>`,
+    cap: "<strong>Goal:</strong> by the end of this video you'll be able to log a full day's session, attendance, EOD, and any incident — all in &lt; 5 minutes total."
+  },
+  {
+    title: "Logging in",
+    sub: "Two screens. Once you've set your password from the email Ufit sent you, this is muscle memory.",
+    steps: [
+      "Open <code>ufitmotion.onrender.com/login</code>",
+      "Tap <strong>Coach Portal</strong> (runner icon)",
+      "Email + password → <strong>Sign In</strong>",
+      "First time? Check your email for the Set Password link.",
+    ],
+    mock: `<div class="mock"><div class="mock-h">Sign in to Coach Portal</div>
+      <div class="lbl">Email address</div><div class="form">coach@lincoln.edu</div>
+      <div class="lbl">Password</div><div class="form">••••••••••••</div>
+      <div style="background:#10B981;color:#fff;padding:11px;border-radius:6px;text-align:center;font-weight:600;margin-top:8px;">Sign In</div>
+      <div style="text-align:center;margin-top:8px;font-size:11px;"><span style="color:#10B981;font-weight:600;">Sign up with a school code</span></div>
+      <div style="text-align:center;margin-top:4px;font-size:11px;color:#6B7280;">Forgot password?</div></div>`,
+    cap: "<strong>No school code?</strong> Ask your school's HR — they'll have the invite code if Ufit hasn't already created your account."
+  },
+  {
+    title: "Multi-school picker",
+    sub: "Assigned to two or more schools? After login, pick where you're working today. Switch any time via the top-nav chip.",
+    steps: [
+      'Login → "Where are you working today?" appears',
+      "Tap the school card → dashboard renders for THAT school",
+      "Need to switch later? Top-nav chip (e.g. <code>● Lincoln Elementary ▾</code>) → tap → pick another",
+      "No logout required. Session updates instantly.",
+    ],
+    mock: `<div class="mock"><div class="mock-h">Where are you working today?</div>
+      <div style="padding:14px;border:2px solid #10B981;border-radius:8px;background:#ECFDF5;margin-bottom:6px;"><strong>Lincoln Elementary</strong><div style="font-size:11px;color:#6B7280;">head coach</div></div>
+      <div style="padding:14px;border:1px solid #E5E7EB;border-radius:8px;"><strong>Roosevelt Elementary</strong><div style="font-size:11px;color:#6B7280;">head coach</div></div></div>`,
+    cap: "<strong>Mid-day moves don't require a logout.</strong> The chip is one tap, the dashboard updates in &lt; 1 sec."
+  },
+  {
+    title: "Logging a session",
+    sub: "Beginning OR end of session — either works. Most coaches do it at the end, when activities are confirmed.",
+    steps: [
+      "Sidebar → <strong>Sessions</strong>",
+      "Tap <strong>+ Log Session</strong>",
+      "Pick program (auto-filled), session date (today), start + end times",
+      "Type: Regular / Makeup / Tournament / Assessment",
+      "Briefly describe activities → Save",
+    ],
+    mock: `<div class="mock"><div class="mock-h">Log Session · Lincoln · 2026-05-09</div>
+      <div class="lbl">Program</div><div class="form">PE Support — Spring 2026 ▾</div>
+      <div class="row"><div style="flex:1;"><div class="lbl">Start</div><div class="form">2:30 PM</div></div><div style="flex:1;"><div class="lbl">End</div><div class="form">3:00 PM</div></div></div>
+      <div class="lbl">Type</div><div class="form">Regular ▾</div>
+      <div class="lbl">Planned activities</div><div class="form" style="font-size:12px;">Dribbling drills · Chest pass · 4-on-4 game</div></div>`,
+    cap: "<strong>30-second log.</strong> Once you've done one, the next is muscle memory."
+  },
+  {
+    title: "Taking attendance",
+    sub: "Open the session → tap Take Attendance → tap each student's status. Default is Present.",
+    steps: [
+      "Open the session you just logged",
+      "Tap <strong>Take Attendance</strong>",
+      "For each student: <strong>Present / Absent / Excused / Partial</strong>",
+      "If Partial, set participation: Full / Moderate / Limited / Refused",
+      "Save. Total students present updates automatically.",
+    ],
+    mock: `<div class="mock"><div class="mock-h">Attendance · 30 students</div>
+      <table style="width:100%;font-size:12px;"><thead><tr><th style="text-align:left;padding:6px;border-bottom:1px solid #F3F4F6;">Student</th><th style="padding:6px;">Status</th></tr></thead>
+      <tbody>
+        <tr><td style="padding:6px;">Sam Quinn</td><td style="padding:6px;text-align:center;"><span class="pill pill-ok">Present</span></td></tr>
+        <tr><td style="padding:6px;">Riley Tan</td><td style="padding:6px;text-align:center;"><span class="pill pill-ok">Present</span></td></tr>
+        <tr><td style="padding:6px;">Marcus Hill</td><td style="padding:6px;text-align:center;"><span class="pill" style="background:#FEE2E2;color:#B91C1C;">Absent</span></td></tr>
+        <tr><td style="padding:6px;">Aria Mitchell</td><td style="padding:6px;text-align:center;"><span class="pill pill-warn">Partial · Limited</span></td></tr>
+      </tbody></table></div>`,
+    cap: "<strong>One tap per student.</strong> Default Present means a 30-student class takes 30 seconds for absences only."
+  },
+  {
+    title: "Filing the EOD",
+    sub: "End of every session. Required. Target: under 2 minutes. Every required field exists for a reason.",
+    steps: [
+      "Sidebar → <strong>EOD Reports</strong> → <strong>+ File EOD</strong>",
+      "Required: <strong>Activities · Engagement · Behavior · Success story · Challenge</strong>",
+      "Optional: school concerns, schedule changes, coaches in uniform, etc.",
+      "If anything went wrong: tap <strong>Injury / Incident occurred</strong>",
+      "Submit before midnight Pacific = ✓ On time badge",
+    ],
+    mock: `<div class="mock"><div class="mock-h">EOD · Lincoln · Period 3 · 2026-05-09</div>
+      <div class="lbl">Activities completed</div><div class="form">Dribbling drills · Chest pass · 4-on-4 game</div>
+      <div class="lbl">Student engagement</div><div class="form" style="font-size:12px;">High — 28 of 30 students active most of session</div>
+      <div class="lbl">Success story</div><div class="form" style="font-size:12px;">Marcus made his first 3-pointer; whole class cheered.</div>
+      <div class="lbl">Challenge</div><div class="form" style="font-size:12px;">Yard temp 92°F — early end at 25 min</div>
+      <span class="pill pill-ok" style="margin-top:8px;display:inline-block;">✓ On time · 3:42 PM</span></div>`,
+    cap: "<strong>EOD on-time % is your single biggest signal to admin.</strong> Submit same-day and you're golden."
+  },
+  {
+    title: "Scoring assessments",
+    sub: "1-5 rubric (Emerging → Advanced). Required: pick a level + observation tag. Optional: a one-line note. The system computes the rest.",
+    steps: [
+      "Sidebar → <strong>Assessments</strong> → <strong>+ Score Student</strong>",
+      "Pick the student. Skill catalog auto-filters to their grade band.",
+      "Pick the skill (Dribbling, Chest pass, etc.)",
+      "Pick the level: tap the card",
+      "<strong>Required</strong>: pick a tag — independent / needs prompt / inconsistent / strong control / low confidence / gameplay transfer",
+      "Optional one-line note → Save",
+    ],
+    mock: `<div class="mock"><div class="mock-h">Assess · Sam Quinn · Dribbling</div>
+      <div class="lvl"><div>1<br/>Emerging</div><div>2<br/>Developing</div><div>3<br/>Functional</div><div class="sel">4<br/>Proficient</div><div>5<br/>Advanced</div></div>
+      <div class="lbl">Observation Tag (required)</div><div class="form">strong_control ▾</div>
+      <div class="lbl">Note (optional)</div><div class="form" style="font-size:12px;">Confident under defender pressure today.</div>
+      <div style="background:#EFF6FF;color:#1E40AF;padding:8px;border-radius:6px;font-size:12px;margin-top:8px;"><strong>Normalized score:</strong> 80 / 100 · On Track</div></div>`,
+    cap: "<strong>Tag is required.</strong> It forces a defensible reason for the level. The number is computed (20 / 40 / 60 / 80 / 100)."
+  },
+  {
+    title: "Filing an incident",
+    sub: "Injuries, behavior issues, equipment problems, facility issues. Critical incidents notify all admins immediately.",
+    steps: [
+      "Sidebar → <strong>Incidents</strong> → <strong>+ File Incident</strong>",
+      "Type: Injury / Behavior / Equipment / Facility / Safety / Other",
+      "Severity: Low / Medium / High / Critical",
+      "If a student is involved, pick from dropdown",
+      "Description + immediate action taken",
+      "Toggle School notified + Family notified",
+      "Submit",
+    ],
+    mock: `<div class="mock"><div class="mock-h">⚠ Incident · Lincoln · 2026-05-09</div>
+      <div class="row"><div style="flex:1;"><div class="lbl">Type</div><div class="form">Injury ▾</div></div><div style="flex:1;"><div class="lbl">Severity</div><div class="form"><span class="pill pill-warn">Medium</span></div></div></div>
+      <div class="lbl">Student</div><div class="form">Sam Quinn (LAUSD-2026-0001)</div>
+      <div class="lbl">Description</div><div class="form" style="font-size:12px;">Student turned ankle during 4-on-4 game; ice + RICE protocol applied.</div>
+      <div class="row"><span class="pill pill-ok">School notified</span><span class="pill pill-ok">Family notified</span></div></div>`,
+    cap: "<strong>Compliance + duty-of-care logged in one form.</strong> Audit log keeps the trail."
+  },
+  {
+    title: "You're ready.",
+    sub: "Log in. Log a session. Take attendance. File EOD. That's the daily rhythm. Everything else (assessments, incidents) is occasional.",
+    steps: [
+      "Add the URL to your phone's home screen.",
+      "Log your first session this week.",
+      "File EOD same-day every time. Compliance % is your single biggest signal.",
+      "Stuck? Top-nav <strong>?</strong> icon → Help &amp; Feedback → ops responds within hours.",
+    ],
+    mock: `<div class="mock" style="background:linear-gradient(135deg,#10B981,#047857);color:#fff;text-align:center;padding:32px;">
+      <div style="font-weight:900;font-size:24px;letter-spacing:.5px;">UFIT <span style="color:#F59E0B;">MOTION</span></div>
+      <div style="opacity:.9;margin-top:6px;font-size:13px;">Built for the field. By the field.</div></div>`,
+    cap: "<strong>2-minute target.</strong> Every screen exists to get you in and out fast. If something feels slow, file feedback — we'll fix it."
+  }
+];
+
+const stage=document.getElementById('stage'),bk=document.getElementById('bk'),fill=document.getElementById('fill'),count=document.getElementById('count');
+let cur=0,playing=false,timer=null;const MS=27000;
+SCENES.forEach((s,i)=>{const d=document.createElement('div');d.className='scene';d.id='s'+i;
+const stp=(s.steps||[]).map(x=>`<li>${x}</li>`).join('');
+d.innerHTML=`<div class="scene-num">Scene ${String(i+1).padStart(2,'0')} of ${SCENES.length}</div><h1>${s.title}</h1><div class="subtitle">${s.sub}</div><ul class="steps">${stp}</ul>${s.mock||''}<div class="caption">${s.cap}</div>`;
+stage.appendChild(d);
+const b=document.createElement('button');b.className='bk';b.dataset.idx=i;b.innerHTML=`<span class="num">${String(i+1).padStart(2,'0')}</span> ${s.title}`;b.onclick=()=>go(i);bk.appendChild(b);});
+function go(i){if(i<0||i>=SCENES.length)return;document.querySelectorAll('.scene').forEach(e=>e.classList.remove('active'));document.querySelectorAll('.bk').forEach(e=>e.classList.remove('active'));document.getElementById('s'+i).classList.add('active');document.querySelector(`.bk[data-idx="${i}"]`).classList.add('active');cur=i;count.textContent=`${i+1} / ${SCENES.length}`;fill.style.width=`${((i+1)/SCENES.length)*100}%`;document.querySelector(`.bk[data-idx="${i}"]`).scrollIntoView({block:'nearest',behavior:'smooth'});}
+document.getElementById('next').onclick=()=>{stop();go(Math.min(SCENES.length-1,cur+1));};
+document.getElementById('prev').onclick=()=>{stop();go(Math.max(0,cur-1));};
+document.getElementById('play').onclick=()=>playing?stop():play();
+addEventListener('keydown',e=>{if(e.key==='ArrowRight')go(Math.min(SCENES.length-1,cur+1));else if(e.key==='ArrowLeft')go(Math.max(0,cur-1));else if(e.key===' '){e.preventDefault();playing?stop():play();}});
+function play(){playing=true;document.getElementById('play').textContent='⏸ Pause';timer=setInterval(()=>{if(cur>=SCENES.length-1)return stop();go(cur+1);},MS);}
+function stop(){playing=false;document.getElementById('play').textContent='▶ Play';clearInterval(timer);}
+go(0);
+</script>
+</body>
+</html>
