@@ -67,12 +67,17 @@ def _send(to: str, subject: str, html: str) -> bool:
         msg.attach(MIMEText(_html_to_text(html), "plain", "utf-8"))
         msg.attach(MIMEText(html, "html", "utf-8"))
 
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+        # 15s connection+auth timeout — without this, a blocked Gmail
+        # auth (wrong app password, Render network throttle, etc.) hangs
+        # the entire Flask request thread until gunicorn's worker timeout
+        # (120s) kills it, blocking the user's UI for 2+ minutes.
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=15) as smtp:
             smtp.login(GMAIL_USER, GMAIL_APP_PASSWORD)
             smtp.sendmail(FROM_ADDRESS, [to], msg.as_string())
         return True
     except Exception as exc:
-        print(f"[email] Send failed: {exc}", file=sys.stderr, flush=True)
+        print(f"[email] Send failed ({type(exc).__name__}): {exc}",
+              file=sys.stderr, flush=True)
         return False
 
 
