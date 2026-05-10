@@ -937,6 +937,77 @@ def send_user_invite(user_id: int):
 
 
 # ---------------------------------------------------------------------------
+# GET /api/admin/audit-log  (C11)
+# ---------------------------------------------------------------------------
+@admin_bp.route("/api/admin/audit-log", methods=["GET"])
+@admin_required
+def list_audit_log():
+    """
+    Return audit_log rows with optional filters.
+
+    Query params:
+      user_id     — actor user_id
+      action      — exact action verb (e.g. 'LOGIN', 'role_changed')
+      table_name  — exact table name
+      record_id   — exact record_id
+      date_from   — ISO date (YYYY-MM-DD), inclusive
+      date_to     — ISO date (YYYY-MM-DD), inclusive
+      limit       — default 50, max 500
+      offset      — default 0
+    """
+    where_parts = []
+    params: list = []
+    for arg, col in (("user_id", "user_id"), ("action", "action"),
+                     ("table_name", "table_name"), ("record_id", "record_id")):
+        v = request.args.get(arg)
+        if v:
+            where_parts.append(f"al.{col} = ?")
+            try:
+                params.append(int(v) if col in ("user_id", "record_id") else v)
+            except ValueError:
+                return jsonify({"error": f"{arg} must be an integer."}), 400
+
+    date_from = request.args.get("date_from")
+    if date_from:
+        where_parts.append("al.created_at >= ?")
+        params.append(date_from)
+    date_to = request.args.get("date_to")
+    if date_to:
+        # Inclusive: end of that day. ISO comparison works for both
+        # SQLite TEXT and Postgres TIMESTAMPTZ via lexicographic ordering.
+        where_parts.append("al.created_at <= ?")
+        params.append(date_to + "T23:59:59Z")
+
+    try:
+        limit = min(int(request.args.get("limit", 50)), 500)
+        offset = max(int(request.args.get("offset", 0)), 0)
+    except ValueError:
+        return jsonify({"error": "limit/offset must be integers."}), 400
+
+    where_sql = ("WHERE " + " AND ".join(where_parts)) if where_parts else ""
+
+    db = get_db()
+    try:
+        rows = db.execute(
+            f"""SELECT al.log_id, al.user_id, al.action, al.table_name,
+                       al.record_id, al.old_values, al.new_values,
+                       al.ip_address, al.created_at,
+                       u.email AS actor_email,
+                       u.first_name AS actor_first_name,
+                       u.last_name AS actor_last_name
+                FROM audit_log al
+                LEFT JOIN users u ON u.user_id = al.user_id
+                {where_sql}
+                ORDER BY al.log_id DESC
+                LIMIT ? OFFSET ?""",
+            params + [limit, offset],
+        ).fetchall()
+    finally:
+        db.close()
+    return jsonify({"entries": [dict(r) for r in rows], "limit": limit, "offset": offset})
+
+
+# ---------------------------------------------------------------------------
 # CSV exports (C10) — schools / coaches / students
 # ---------------------------------------------------------------------------
 def _csv_response(filename: str, headers: list, rows: list) -> Response:
