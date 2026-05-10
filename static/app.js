@@ -969,6 +969,37 @@ function statCard(label, value, iconSvg, colorClass = '') {
 /* ============================================================
    13. SCHOOLS PAGE
    ============================================================ */
+/**
+ * C15 — Schools table principal status badge.
+ * Mirror of the coach pending-invite pattern. Shows active / pending / none.
+ */
+function renderPrincipalStatus(school) {
+  const status = school.principal_status || 'none';
+  const fullName = [school.principal_first_name, school.principal_last_name]
+    .filter(Boolean).join(' ').trim() || school.principal_name || '';
+  if (status === 'active') {
+    return `<div class="text-caption"><span style="color:#10B981;">●</span> Principal: ${esc(fullName || school.principal_email || '—')}</div>`;
+  }
+  if (status === 'pending_invite' && school.principal_user_id) {
+    return `<div class="text-caption">
+      <span style="color:#F59E0B;">●</span> Principal: ${esc(fullName || school.principal_email || '—')}
+      <span style="color:#F59E0B;font-weight:600;margin-left:4px;">⏱ Pending</span>
+      <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px;margin-left:4px;"
+              onclick="resendPrincipalInvite(${school.principal_user_id})">Resend</button>
+    </div>`;
+  }
+  return `<div class="text-caption" style="color:var(--color-text-secondary,#6B7280);">No principal assigned</div>`;
+}
+
+async function resendPrincipalInvite(userId) {
+  try {
+    await api('POST', `/api/admin/users/${userId}/send-invite`);
+    showAlert('Invite resent.', 'success');
+  } catch (err) {
+    showAlert(err?.message || 'Could not resend invite.', 'error');
+  }
+}
+
 async function loadSchoolsPage(container) {
   container.innerHTML = `
     <div class="page-header">
@@ -1001,7 +1032,7 @@ async function loadSchoolsPage(container) {
           </tr></thead>
           <tbody>${schools.map(s => `
             <tr>
-              <td><strong>${esc(s.school_name)}</strong>${s.principal_name ? `<div class="text-caption">${esc(s.principal_name)}</div>` : ''}</td>
+              <td><strong>${esc(s.school_name)}</strong>${renderPrincipalStatus(s)}</td>
               <td><span class="badge">${fmtLabel(s.school_type)}</span></td>
               <td>${s.city ? esc(s.city) + (s.state ? ', ' + esc(s.state) : '') : '—'}</td>
               <td>${s.coach_count ?? 0}</td>

@@ -187,6 +187,7 @@ def list_schools():
             params.append(int(org_id_raw))
         rows = db.execute(
             f"""SELECT s.school_id, s.school_name, s.school_type, s.city, s.state,
+                       s.principal_name, s.principal_email,
                        o.organization_name,
                        COUNT(DISTINCT sa.staff_id) AS coach_count,
                        COUNT(DISTINCT st.student_id) AS student_count
@@ -200,7 +201,42 @@ def list_schools():
                 ORDER BY s.school_name ASC""",
             params,
         ).fetchall()
-        return jsonify({"ok": True, "schools": [dict(r) for r in rows], "total": len(rows)})
+
+        # C15 — annotate each row with principal_status ∈ {active, pending_invite, none}.
+        # The principal user (if any) is linked via staff_assignments with
+        # assignment_role='principal'. Pending = exists but no password_hash.
+        result = []
+        for r in rows:
+            row_dict = dict(r)
+            principal = db.execute(
+                """SELECT u.user_id, u.first_name, u.last_name, u.email,
+                          u.active_status, u.password_hash
+                   FROM users u
+                   JOIN staff_profiles sp ON sp.user_id = u.user_id
+                   JOIN staff_assignments sa ON sa.staff_id = sp.staff_id
+                       AND sa.school_id = ?
+                       AND sa.active_status = TRUE
+                       AND (sa.deleted_at IS NULL)
+                   WHERE u.role = 'principal' AND u.deleted_at IS NULL
+                   ORDER BY u.created_at DESC LIMIT 1""",
+                (r["school_id"],),
+            ).fetchone()
+            if principal is None:
+                row_dict["principal_status"] = "none"
+                row_dict["principal_user_id"] = None
+            elif not principal["password_hash"]:
+                row_dict["principal_status"] = "pending_invite"
+                row_dict["principal_user_id"] = principal["user_id"]
+                row_dict["principal_first_name"] = principal["first_name"]
+                row_dict["principal_last_name"] = principal["last_name"]
+            else:
+                row_dict["principal_status"] = "active"
+                row_dict["principal_user_id"] = principal["user_id"]
+                row_dict["principal_first_name"] = principal["first_name"]
+                row_dict["principal_last_name"] = principal["last_name"]
+            result.append(row_dict)
+
+        return jsonify({"ok": True, "schools": result, "total": len(result)})
     finally:
         db.close()
 
