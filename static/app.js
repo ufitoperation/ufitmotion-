@@ -1041,7 +1041,10 @@ async function loadSchoolsPage(container) {
   container.innerHTML = `
     <div class="page-header">
       <div><div class="text-h2">Schools</div><div class="text-caption">Manage all schools in the program</div></div>
-      <button class="btn btn-primary" id="add-school-btn" type="button">${iconPlus()} Add School</button>
+      <div style="display:flex;gap:8px;">
+        <a class="btn btn-ghost" href="/api/admin/schools/export.csv" download>Export CSV</a>
+        <button class="btn btn-primary" id="add-school-btn" type="button">${iconPlus()} Add School</button>
+      </div>
     </div>
     <div id="schools-content">${renderSkeleton(5)}</div>`;
   document.getElementById('add-school-btn')?.addEventListener('click', () => openAddSchoolModal(() => loadSchoolsPage(container)));
@@ -1435,6 +1438,7 @@ async function loadCoachesPage(container) {
     <div class="page-header">
       <div><div class="text-h2">Coaches</div><div class="text-caption">All active coaches and their weekly activity</div></div>
       <div style="display:flex;gap:8px;">
+        <a class="btn btn-ghost" href="/api/admin/coaches/export.csv" download>Export CSV</a>
         <button class="btn btn-ghost" id="send-invites-btn" type="button">Send Invites</button>
         <button class="btn btn-ghost" id="bulk-invite-btn" type="button">Bulk Invite</button>
         <button class="btn btn-primary" id="add-coach-btn" type="button">${iconPlus()} Add Coach</button>
@@ -1862,6 +1866,7 @@ async function loadStudentsGrowth(container) {
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
       <div class="text-h2">Student Growth</div>
       <div style="display:flex;gap:8px;">
+        <a class="btn btn-ghost" href="/api/admin/students/export.csv" download>Export CSV</a>
         <button class="btn btn-ghost" onclick="openImportStudentsModal()">Import CSV</button>
         <button class="btn btn-primary" onclick="openAddStudentModal()">${iconPlus()} Add Student</button>
       </div>

@@ -37,7 +37,10 @@ _date = date
 
 from typing import Optional
 
-from flask import Blueprint, jsonify, request
+import csv
+import io
+
+from flask import Blueprint, Response, jsonify, request
 from werkzeug.security import generate_password_hash
 
 from app.auth import admin_required, current_user, roles_required
@@ -931,6 +934,128 @@ def send_user_invite(user_id: int):
         return jsonify({"ok": True})
     finally:
         db.close()
+
+
+# ---------------------------------------------------------------------------
+# CSV exports (C10) — schools / coaches / students
+# ---------------------------------------------------------------------------
+def _csv_response(filename: str, headers: list, rows: list) -> Response:
+    """Build a streaming CSV response with the right headers."""
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(headers)
+    for row in rows:
+        writer.writerow(row)
+    csv_bytes = buf.getvalue()
+    return Response(
+        csv_bytes,
+        mimetype="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            # Force the browser to treat this as a download even on inline-prone
+            # mime types (some legacy browsers).
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@admin_bp.route("/api/admin/schools/export.csv", methods=["GET"])
+@admin_required
+def export_schools_csv():
+    db = get_db()
+    try:
+        rows = db.execute(
+            """SELECT s.school_id, s.school_name, s.school_type, s.city, s.state,
+                      s.principal_name, s.principal_email,
+                      o.organization_name,
+                      COUNT(DISTINCT sa.staff_id) AS coach_count,
+                      COUNT(DISTINCT st.student_id) AS student_count
+               FROM schools s
+               LEFT JOIN organizations o ON o.organization_id = s.organization_id
+               LEFT JOIN staff_assignments sa ON sa.school_id = s.school_id
+                    AND sa.active_status = TRUE AND sa.deleted_at IS NULL
+               LEFT JOIN students st ON st.school_id = s.school_id
+                    AND st.active_status = TRUE AND st.deleted_at IS NULL
+               WHERE s.deleted_at IS NULL AND s.active_status = TRUE
+               GROUP BY s.school_id
+               ORDER BY s.school_name ASC"""
+        ).fetchall()
+    finally:
+        db.close()
+    return _csv_response(
+        "schools.csv",
+        ["School ID", "Name", "Type", "City", "State", "Principal",
+         "Principal Email", "Organization", "Coaches", "Students"],
+        [[r["school_id"], r["school_name"], r["school_type"] or "",
+          r["city"] or "", r["state"] or "",
+          r["principal_name"] or "", r["principal_email"] or "",
+          r["organization_name"] or "",
+          r["coach_count"] or 0, r["student_count"] or 0] for r in rows],
+    )
+
+
+@admin_bp.route("/api/admin/coaches/export.csv", methods=["GET"])
+@admin_required
+def export_coaches_csv():
+    db = get_db()
+    try:
+        rows = db.execute(
+            """SELECT u.user_id, u.first_name, u.last_name, u.email, u.role,
+                      u.active_status, u.password_hash,
+                      sp.position_title,
+                      GROUP_CONCAT(DISTINCT s.school_name) AS schools
+               FROM users u
+               LEFT JOIN staff_profiles sp ON sp.user_id = u.user_id AND sp.deleted_at IS NULL
+               LEFT JOIN staff_assignments sa ON sa.staff_id = sp.staff_id
+                    AND sa.active_status = TRUE AND sa.deleted_at IS NULL
+               LEFT JOIN schools s ON s.school_id = sa.school_id AND s.deleted_at IS NULL
+               WHERE u.deleted_at IS NULL
+                     AND u.role IN ('head_coach','assistant_coach','coach_overseer','site_coordinator')
+               GROUP BY u.user_id
+               ORDER BY u.last_name, u.first_name"""
+        ).fetchall()
+    finally:
+        db.close()
+    return _csv_response(
+        "coaches.csv",
+        ["User ID", "First Name", "Last Name", "Email", "Role",
+         "Status", "Position Title", "Schools"],
+        [[r["user_id"], r["first_name"] or "", r["last_name"] or "",
+          r["email"] or "", r["role"] or "",
+          ("active" if r["active_status"] and r["password_hash"]
+           else "pending_invite" if not r["password_hash"]
+           else "inactive"),
+          r["position_title"] or "",
+          r["schools"] or ""] for r in rows],
+    )
+
+
+@admin_bp.route("/api/admin/students/export.csv", methods=["GET"])
+@admin_required
+def export_students_csv():
+    db = get_db()
+    try:
+        rows = db.execute(
+            """SELECT st.student_id, st.student_first_name, st.student_last_name,
+                      st.local_student_identifier, st.grade_level,
+                      sc.school_name
+               FROM students st
+               LEFT JOIN schools sc ON sc.school_id = st.school_id
+               WHERE st.deleted_at IS NULL AND st.active_status = TRUE
+               ORDER BY sc.school_name, st.student_last_name, st.student_first_name"""
+        ).fetchall()
+    finally:
+        db.close()
+    return _csv_response(
+        "students.csv",
+        ["Student ID", "First Name", "Last Name", "Local Identifier",
+         "Grade", "School"],
+        [[r["student_id"], r["student_first_name"] or "",
+          r["student_last_name"] or "",
+          r["local_student_identifier"] or "",
+          r["grade_level"] or "",
+          r["school_name"] or ""] for r in rows],
+    )
 
 
 # ---------------------------------------------------------------------------
