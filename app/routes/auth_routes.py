@@ -305,6 +305,34 @@ def coach_register():
         audit(db, new_user_id, "coach_self_register", "users", new_user_id,
               new_values={"role": role, "school_id": school["school_id"],
                           "ip": request.remote_addr})
+
+        # C14 — notify org admins that a coach self-registered with the
+        # school's invite code, so they can verify the person actually
+        # belongs there.
+        try:
+            db.execute(
+                """INSERT INTO notifications
+                   (recipient_user_id, type, message, reference_table, reference_id, created_at)
+                   SELECT DISTINCT u.user_id,
+                          'coach_self_registered',
+                          ?, 'users', ?, ?
+                   FROM users u
+                   JOIN staff_profiles sp ON sp.user_id = u.user_id
+                   JOIN staff_assignments sa ON sa.staff_id = sp.staff_id
+                        AND sa.active_status = TRUE AND sa.deleted_at IS NULL
+                   JOIN schools sa_sc ON sa_sc.school_id = sa.school_id
+                   JOIN schools sc ON sc.school_id = ?
+                   WHERE u.role IN ('ceo','admin','coach_overseer')
+                     AND sa_sc.organization_id = sc.organization_id
+                     AND u.deleted_at IS NULL""",
+                (
+                    f"Coach {first_name} {last_name} ({email}) self-registered at {school['school_name']} via invite code",
+                    new_user_id, now_utc(), school["school_id"],
+                ),
+            )
+        except Exception:
+            pass
+
         db.commit()
 
         # Best-effort invite email — graceful no-op without GMAIL_APP_PASSWORD.
@@ -849,6 +877,37 @@ def parent_register_create():
         audit(db, user_id, "parent_self_register", "users", user_id,
               new_values={"student_id": student_id, "school_id": student["school_id"],
                           "linked": linked})
+
+        # C14 — notify org admins so they know a new parent registered
+        # (especially relevant when "linked: false" because both parent
+        # slots were full and an admin needs to manually resolve it).
+        try:
+            db.execute(
+                """INSERT INTO notifications
+                   (recipient_user_id, type, message, reference_table, reference_id, created_at)
+                   SELECT DISTINCT u.user_id,
+                          'parent_registered',
+                          ? ,
+                          'users', ?, ?
+                   FROM users u
+                   JOIN staff_profiles sp ON sp.user_id = u.user_id
+                   JOIN staff_assignments sa ON sa.staff_id = sp.staff_id
+                        AND sa.active_status = TRUE AND sa.deleted_at IS NULL
+                   JOIN schools sa_sc ON sa_sc.school_id = sa.school_id
+                   JOIN schools sc ON sc.school_id = ?
+                   WHERE u.role IN ('ceo','admin','coach_overseer')
+                     AND sa_sc.organization_id = sc.organization_id
+                     AND u.deleted_at IS NULL""",
+                (
+                    f"Parent {first_name} {last_name} registered for student at {student['school_name']}"
+                    + ("" if linked else " — both parent slots were full; manual resolution needed."),
+                    user_id, now_utc(), student["school_id"],
+                ),
+            )
+        except Exception:
+            # Notifications are best-effort; don't block registration.
+            pass
+
         db.commit()
 
         # Auto-login: rotate session ID to prevent session-fixation (SEC-006).
