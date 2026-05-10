@@ -897,6 +897,168 @@ def send_user_invite(user_id: int):
         db.close()
 
 
+# ---------------------------------------------------------------------------
+# POST /api/admin/coaches/bulk-invite
+# ---------------------------------------------------------------------------
+_BULK_INVITE_VALID_ROLES = (
+    "head_coach", "assistant_coach", "site_coordinator",
+    "coach_overseer", "principal", "school_staff",
+)
+
+
+def _bulk_invite_one(db, actor_user_id: int, row: dict, ts: str) -> dict:
+    """Create one pending user + assignments + send invite. Raises on validation
+    error. Returns {"status":"created"} or raises ValueError."""
+    first_name = (row.get("first_name") or "").strip()[:100]
+    last_name = (row.get("last_name") or "").strip()[:100]
+    email = (row.get("email") or "").strip().lower()[:254]
+    role = (row.get("role") or "").strip()
+    school_ids = row.get("school_ids") or []
+
+    if not first_name or not last_name:
+        raise ValueError("first_name and last_name are required")
+    if "@" not in email or "." not in email.split("@")[-1]:
+        raise ValueError("invalid email format")
+    if role not in _BULK_INVITE_VALID_ROLES:
+        raise ValueError(
+            f"role must be one of: {', '.join(_BULK_INVITE_VALID_ROLES)}"
+        )
+    if not isinstance(school_ids, list) or not all(isinstance(x, int) for x in school_ids):
+        raise ValueError("school_ids must be a list of integers")
+
+    # Duplicate check (against both live and soft-deleted rows — UNIQUE
+    # constraint on email applies regardless of deleted_at).
+    dup = db.execute(
+        "SELECT user_id, deleted_at FROM users WHERE email = ?",
+        (email,),
+    ).fetchone()
+    if dup is not None:
+        # Signal duplicate via a typed exception so the caller can count it.
+        raise _DuplicateEmail()
+
+    # Verify all schools exist and aren't deleted.
+    if school_ids:
+        rows = db.execute(
+            f"SELECT school_id FROM schools "
+            f"WHERE school_id IN ({','.join(['?']*len(school_ids))}) "
+            f"AND deleted_at IS NULL",
+            tuple(school_ids),
+        ).fetchall()
+        found = {r["school_id"] for r in rows}
+        missing = set(school_ids) - found
+        if missing:
+            raise ValueError(f"unknown school_ids: {sorted(missing)}")
+
+    invite_token_plain = secrets.token_urlsafe(32)
+    invite_token_hash = hashlib.sha256(invite_token_plain.encode()).hexdigest()
+    invite_expires = (
+        datetime.datetime.now(timezone.utc) + timedelta(hours=24)
+    ).isoformat()
+
+    cur = db.execute(
+        """INSERT INTO users
+           (role, first_name, last_name, email, active_status,
+            password_reset_token, password_reset_expires_at, created_at)
+           VALUES (?, ?, ?, ?, FALSE, ?, ?, ?)""",
+        (role, first_name, last_name, email,
+         invite_token_hash, invite_expires, ts),
+    )
+    new_user_id = cur.lastrowid
+
+    sp_cur = db.execute(
+        """INSERT INTO staff_profiles
+           (user_id, status, created_at) VALUES (?, 'active', ?)""",
+        (new_user_id, ts),
+    )
+    staff_id = sp_cur.lastrowid
+
+    for sid in school_ids:
+        db.execute(
+            """INSERT INTO staff_assignments
+               (staff_id, school_id, assignment_role, start_date, active_status, created_at)
+               VALUES (?, ?, ?, ?, TRUE, ?)""",
+            (staff_id, sid, role, ts[:10], ts),
+        )
+
+    audit(db, actor_user_id, "bulk_invite_created", "users", new_user_id,
+          new_values={"role": role, "email": email, "school_ids": school_ids})
+
+    # Best-effort email — Gmail SMTP no-ops gracefully without the password env.
+    try:
+        from app.email import send_invite_email
+        send_invite_email(email, first_name or "there", role, invite_token_plain)
+    except Exception as exc:
+        logging.getLogger(__name__).warning(
+            "Bulk-invite email send failed for %s: %s", email, exc
+        )
+
+    return {"user_id": new_user_id, "email": email}
+
+
+class _DuplicateEmail(Exception):
+    pass
+
+
+@admin_bp.route("/api/admin/coaches/bulk-invite", methods=["POST"])
+@limiter.limit("10 per minute")
+@admin_required
+def bulk_invite_coaches():
+    """
+    Bulk-create pending coach users with invite emails.
+
+    Body: { rows: [{first_name, last_name, email, role, school_ids[]}, ...] }
+    Per-row try/except so one bad row doesn't kill the whole batch.
+    """
+    actor = current_user()
+    data = parse_json()
+    rows = data.get("rows")
+    if not isinstance(rows, list) or not rows:
+        return jsonify({"error": "rows[] is required and must be non-empty."}), 400
+    if len(rows) > 200:
+        return jsonify({"error": "max 200 rows per batch."}), 400
+
+    db = get_db()
+    summary = {"created": 0, "duplicates": 0, "errors": 0}
+    results = []
+    ts = now_utc()
+    try:
+        for i, row in enumerate(rows):
+            try:
+                outcome = _bulk_invite_one(db, actor["user_id"], row, ts)
+                summary["created"] += 1
+                results.append({
+                    "row_index": i,
+                    "status": "created",
+                    "user_id": outcome["user_id"],
+                    "email": outcome["email"],
+                })
+            except _DuplicateEmail:
+                summary["duplicates"] += 1
+                results.append({
+                    "row_index": i,
+                    "status": "skipped_duplicate",
+                    "email": (row.get("email") or "").strip().lower(),
+                })
+            except ValueError as exc:
+                summary["errors"] += 1
+                results.append({
+                    "row_index": i,
+                    "status": "error",
+                    "message": str(exc),
+                })
+            except Exception as exc:
+                summary["errors"] += 1
+                results.append({
+                    "row_index": i,
+                    "status": "error",
+                    "message": f"unexpected: {exc}",
+                })
+        db.commit()
+    finally:
+        db.close()
+
+    return jsonify({"summary": summary, "results": results})
+
 
 @admin_bp.route("/api/students", methods=["GET"])
 @admin_required

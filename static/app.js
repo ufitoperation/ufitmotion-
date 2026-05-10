@@ -1209,18 +1209,104 @@ async function openEditSchoolModal(schoolId) {
 /* ============================================================
    14. COACHES PAGE
    ============================================================ */
+/**
+ * B7 — Bulk Invite modal: paste/CSV of coach rows, optional default role +
+ * default schools, server returns per-row results.
+ */
+async function openBulkInviteModal() {
+  let schools = [];
+  try { const d = await api('GET', '/api/schools'); schools = d.schools || []; } catch (_) {}
+  const schoolOpts = schools.map(s => `<option value="${s.school_id}">${esc(s.school_name)}</option>`).join('');
+  openModal(`
+    <div class="modal-header">
+      <h2 class="modal-title">Bulk Invite Coaches</h2>
+      <button class="modal-close btn btn-ghost btn-sm" aria-label="Close" onclick="closeModal()">${iconClose()}</button>
+    </div>
+    <form id="bulk-invite-form" class="modal-body">
+      <p style="margin:0 0 12px;color:var(--color-text-secondary);font-size:0.875rem;">
+        Paste rows in <code>first_name,last_name,email,role</code> format — one per line.
+        Empty role uses the default below.
+      </p>
+      <div class="form-group">
+        <label class="form-label">Default Role (used when row omits role)</label>
+        <select class="form-input" id="bulk-default-role">
+          <option value="head_coach">Head Coach</option>
+          <option value="assistant_coach">Assistant Coach</option>
+          <option value="site_coordinator">Site Coordinator</option>
+          <option value="coach_overseer">Coach Overseer</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Default Schools (assigns every new coach to these)</label>
+        <select class="form-input" id="bulk-default-schools" multiple size="4">${schoolOpts}</select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Rows</label>
+        <textarea class="form-input" id="bulk-rows" rows="10" placeholder="Ada,Lovelace,ada@x.com,head_coach
+Bo,Knight,bo@y.com,
+Cam,Reyes,cam@z.com,assistant_coach"></textarea>
+      </div>
+      <div id="bulk-results" style="margin-top:12px;font-size:0.875rem;"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+        <button type="button" class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="bulk-submit">Send Invites</button>
+      </div>
+    </form>
+  `);
+
+  document.getElementById('bulk-invite-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const defaultRole = document.getElementById('bulk-default-role').value;
+    const defaultSchools = Array.from(document.getElementById('bulk-default-schools').selectedOptions)
+      .map(o => parseInt(o.value, 10));
+    const raw = document.getElementById('bulk-rows').value.trim();
+    if (!raw) { showAlert('Paste at least one row.', 'warning'); return; }
+    const rows = raw.split('\n').map(line => line.split(',').map(s => s.trim())).filter(p => p.length >= 3 && p[2]);
+    const payload = rows.map(p => ({
+      first_name: p[0], last_name: p[1], email: p[2],
+      role: p[3] || defaultRole,
+      school_ids: defaultSchools,
+    }));
+    const btn = document.getElementById('bulk-submit');
+    btn.disabled = true; btn.textContent = 'Sending…';
+    try {
+      const data = await api('POST', '/api/admin/coaches/bulk-invite', { rows: payload });
+      const resEl = document.getElementById('bulk-results');
+      resEl.innerHTML = `
+        <div style="padding:10px 12px;background:#F3F4F6;border-radius:6px;margin-bottom:8px;">
+          <strong>${data.summary.created}</strong> created •
+          <strong>${data.summary.duplicates}</strong> duplicates •
+          <strong style="color:${data.summary.errors ? 'var(--color-error,#dc2626)' : 'inherit'};">${data.summary.errors}</strong> errors
+        </div>
+        ${data.results.filter(r => r.status !== 'created').map(r => `
+          <div style="padding:6px 0;color:var(--color-text-secondary,#6B7280);">
+            Row ${r.row_index + 1}: ${esc(r.status)}${r.message ? ' — ' + esc(r.message) : ''}${r.email ? ' (' + esc(r.email) + ')' : ''}
+          </div>`).join('')}
+      `;
+      btn.disabled = false; btn.textContent = 'Send More';
+      // Refresh coaches table in the background.
+      loadCoachesPage(document.getElementById('page-main'));
+    } catch (err) {
+      btn.disabled = false; btn.textContent = 'Send Invites';
+      showAlert(err?.message || 'Bulk invite failed.', 'error');
+    }
+  });
+}
+
 async function loadCoachesPage(container) {
   container.innerHTML = `
     <div class="page-header">
       <div><div class="text-h2">Coaches</div><div class="text-caption">All active coaches and their weekly activity</div></div>
       <div style="display:flex;gap:8px;">
         <button class="btn btn-ghost" id="send-invites-btn" type="button">Send Invites</button>
+        <button class="btn btn-ghost" id="bulk-invite-btn" type="button">Bulk Invite</button>
         <button class="btn btn-primary" id="add-coach-btn" type="button">${iconPlus()} Add Coach</button>
       </div>
     </div>
     <div id="coaches-content">${renderSkeleton(5)}</div>`;
   document.getElementById('add-coach-btn')?.addEventListener('click', openAddCoachModal);
   document.getElementById('send-invites-btn')?.addEventListener('click', openSendInvitesModal);
+  document.getElementById('bulk-invite-btn')?.addEventListener('click', openBulkInviteModal);
 
   try {
     const d = await api('GET', '/api/admin/coaches');
