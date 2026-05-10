@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ufit Motion — Walkthrough</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#E5E7EB;height:100vh;overflow:hidden;display:flex;flex-direction:column}
+  header{padding:14px 20px;background:#060E1D;border-bottom:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;gap:14px}
+  .brand{font-weight:800;font-size:18px;letter-spacing:.5px}
+  .brand .blue{color:#3B82F6} .brand .yellow{color:#F59E0B}
+  .crumb{color:rgba(255,255,255,.5);font-size:13px}
+  main{flex:1;display:flex;overflow:hidden}
+  aside{width:260px;background:#060E1D;border-right:1px solid rgba(255,255,255,0.08);overflow-y:auto;padding:16px 0}
+  aside h3{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:rgba(255,255,255,.4);padding:0 18px;margin-bottom:8px}
+  .bookmark{display:block;width:100%;text-align:left;background:transparent;color:rgba(255,255,255,.7);border:0;padding:9px 18px;font-size:13px;cursor:pointer;font-family:inherit;border-left:3px solid transparent}
+  .bookmark:hover{background:rgba(255,255,255,.04);color:#fff}
+  .bookmark.active{background:rgba(59,130,246,.12);color:#fff;border-left-color:#3B82F6}
+  .bookmark .num{display:inline-block;width:24px;color:rgba(255,255,255,.4);font-weight:600}
+  #stage{flex:1;position:relative;overflow:hidden;background:#0F1F33}
+  .scene{position:absolute;inset:0;opacity:0;transition:opacity .5s ease;pointer-events:none;padding:36px 56px;overflow-y:auto}
+  .scene.active{opacity:1;pointer-events:auto}
+  .scene-num{font-size:11px;letter-spacing:.7px;text-transform:uppercase;color:rgba(255,255,255,.45);margin-bottom:6px}
+  .scene h1{font-size:30px;line-height:1.2;color:#fff;margin-bottom:6px;font-weight:800}
+  .scene .subtitle{color:rgba(255,255,255,.65);font-size:15px;margin-bottom:24px;max-width:680px;line-height:1.55}
+  .mock{background:#fff;color:#111827;border-radius:12px;padding:24px;box-shadow:0 12px 40px rgba(0,0,0,.4);max-width:760px;margin:0 0 20px;border:1px solid rgba(0,0,0,.08)}
+  .mock-topbar{background:#1E40AF;color:#fff;font-weight:700;padding:14px 20px;border-radius:8px 8px 0 0;margin:-24px -24px 16px}
+  .mock-section{padding:8px 0;border-bottom:1px dashed #E5E7EB;font-size:14px}
+  .mock-section:last-child{border-bottom:0}
+  .mock-row{display:flex;justify-content:space-between;align-items:center;gap:14px}
+  .mock-pill{display:inline-block;padding:3px 10px;border-radius:999px;background:#F59E0B;color:#fff;font-size:11px;font-weight:600;letter-spacing:.3px}
+  .mock-pill.ok{background:#10B981}
+  .mock-pill.warn{background:#F59E0B}
+  .mock-pill.muted{background:#6B7280}
+  .scene .caption{display:flex;gap:12px;align-items:flex-start;background:rgba(245,158,11,.12);border-left:3px solid #F59E0B;border-radius:0 8px 8px 0;padding:14px 16px;margin-top:auto;max-width:760px;font-size:14px;line-height:1.5}
+  .scene .caption strong{color:#FCD34D}
+  .scene .bullets{margin:8px 0 14px;padding-left:22px;color:rgba(255,255,255,.78);max-width:680px;font-size:14px;line-height:1.7}
+  .scene .bullets li{margin:4px 0}
+  footer{background:#060E1D;border-top:1px solid rgba(255,255,255,0.08);padding:12px 20px;display:flex;align-items:center;gap:12px}
+  .btn{background:rgba(255,255,255,0.08);color:#fff;border:1px solid rgba(255,255,255,0.14);border-radius:6px;padding:8px 14px;font-size:13px;font-family:inherit;cursor:pointer;font-weight:600}
+  .btn:hover{background:rgba(255,255,255,.16)}
+  .btn.primary{background:#1E40AF;border-color:#1E40AF}
+  .btn.primary:hover{background:#1d3a98}
+  #progress{flex:1;height:6px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;margin:0 14px}
+  #progress-fill{height:100%;background:#F59E0B;width:0;transition:width .3s linear}
+  #count{font-size:12px;color:rgba(255,255,255,.5);min-width:55px;text-align:right}
+  @media (max-width:760px){
+    aside{display:none}
+    .scene{padding:20px}
+    .scene h1{font-size:22px}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="blue">UFIT</span> <span class="yellow">MOTION</span></div>
+  <div class="crumb">First-school onboarding walkthrough · ~10 minutes</div>
+</header>
+<main>
+  <aside>
+    <h3>Scenes</h3>
+    <div id="bookmarks"></div>
+  </aside>
+  <div id="stage"></div>
+</main>
+<footer>
+  <button class="btn" id="prev">◀ Prev</button>
+  <button class="btn primary" id="play">▶ Play</button>
+  <button class="btn" id="next">Next ▶</button>
+  <div id="progress"><div id="progress-fill"></div></div>
+  <span id="count"></span>
+</footer>
+
+<script>
+/* ============================================================
+   Scene definitions — 16 scenes per the design doc, ~37s avg
+   for a ~10-minute auto-play. Each scene supplies title,
+   subtitle, content (bullets + an HTML mock), and a caption.
+   ============================================================ */
+const SCENES = [
+  {
+    id: "01-cold-load",
+    title: "Cold load: portal selector",
+    subtitle: "Anyone landing at ufitmotion.onrender.com sees a single screen with four portals. One click each.",
+    bullets: ["Admin · Coach · Organization · Parent — explicit role separation","Email + password sign-in for all roles","Forgot Password and Sign Up With School Code links live on the Coach Portal"],
+    mock: `
+      <div class="mock">
+        <div class="mock-topbar">UFIT MOTION — Sign In</div>
+        <div class="mock-row" style="gap:18px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:140px;text-align:center;padding:18px;border:1px solid #E5E7EB;border-radius:8px;">🏢<div style="font-weight:600;margin-top:6px;">Admin Portal</div><div style="font-size:11px;color:#6B7280;">Ufit operations</div></div>
+          <div style="flex:1;min-width:140px;text-align:center;padding:18px;border:1px solid #E5E7EB;border-radius:8px;">🏃<div style="font-weight:600;margin-top:6px;">Coach Portal</div><div style="font-size:11px;color:#6B7280;">Coaches in the field</div></div>
+          <div style="flex:1;min-width:140px;text-align:center;padding:18px;border:1px solid #E5E7EB;border-radius:8px;">🏫<div style="font-weight:600;margin-top:6px;">Organization</div><div style="font-size:11px;color:#6B7280;">Principals / staff</div></div>
+          <div style="flex:1;min-width:140px;text-align:center;padding:18px;border:1px solid #E5E7EB;border-radius:8px;">👨‍👩‍👧<div style="font-weight:600;margin-top:6px;">Parent Portal</div><div style="font-size:11px;color:#6B7280;">View child's progress</div></div>
+        </div>
+      </div>`,
+    caption: "<strong>What the boss sees.</strong> No corporate cruft, no marketing, no mystery. Pick the role, sign in, get to work."
+  },
+  {
+    id: "02-admin-login",
+    title: "Admin signs in → Dashboard",
+    subtitle: "After login, the admin lands on the dashboard with weekly compliance, open incidents, and a getting-started checklist.",
+    bullets: ["Welcome card greets by first name + role","Stats grid: schools, coaches, sessions this week, EOD compliance, open incidents","Onboarding checklist appears until the first school + coaches + session exist"],
+    mock: `
+      <div class="mock">
+        <div class="mock-topbar">Welcome back, Boss.</div>
+        <div class="mock-row" style="flex-wrap:wrap;gap:8px;">
+          <div style="flex:1;min-width:120px;background:#F9FAFB;border-radius:6px;padding:10px;"><div style="font-size:10px;color:#6B7280;">Schools</div><div style="font-size:22px;font-weight:700;">0</div></div>
+          <div style="flex:1;min-width:120px;background:#F9FAFB;border-radius:6px;padding:10px;"><div style="font-size:10px;color:#6B7280;">Active Coaches</div><div style="font-size:22px;font-weight:700;">0</div></div>
+          <div style="flex:1;min-width:120px;background:#F9FAFB;border-radius:6px;padding:10px;"><div style="font-size:10px;color:#6B7280;">Sessions / wk</div><div style="font-size:22px;font-weight:700;">0</div></div>
+          <div style="flex:1;min-width:120px;background:#F9FAFB;border-radius:6px;padding:10px;"><div style="font-size:10px;color:#6B7280;">EOD compliance</div><div style="font-size:22px;font-weight:700;">—</div></div>
+        </div>
+        <div style="margin-top:14px;padding:12px;background:#FFFBEB;border:1px solid #FCD34D;border-radius:6px;font-size:13px;">
+          <strong>Getting started</strong>
+          <div style="margin-top:6px;">☐ Add your first school <span style="float:right;color:#1E40AF;font-weight:600;">Add School →</span></div>
+          <div style="margin-top:4px;">☐ Add your coaches</div>
+          <div style="margin-top:4px;">☐ Schedule the first session</div>
+        </div>
+      </div>`,
+    caption: "<strong>Empty state isn't blank.</strong> The dashboard tells you exactly what to do next."
+  },
+  {
+    id: "03-settings",
+    title: "Settings tour",
+    subtitle: "Account profile, password change, organization details, and the brand-locked design tokens.",
+    bullets: ["My Profile: name, email, phone","Change password (must be 8+ chars)","Org settings (CEO only)","Region map (assigns coaches to geographic regions)"],
+    mock: `
+      <div class="mock">
+        <div class="mock-section"><strong>My Profile</strong><div style="color:#6B7280;font-size:12px;">Name · Email · Phone · Position title</div></div>
+        <div class="mock-section"><strong>Change Password</strong><div style="color:#6B7280;font-size:12px;">Current → New (8+ chars)</div></div>
+        <div class="mock-section"><strong>Organization Details</strong><div style="color:#6B7280;font-size:12px;">Name · Type · Billing contact (CEO only)</div></div>
+        <div class="mock-section"><strong>Sign Out</strong><div style="color:#6B7280;font-size:12px;">All sessions end · 8-hour idle timeout</div></div>
+      </div>`,
+    caption: "<strong>Boring on purpose.</strong> No customization knobs to tempt the boss into breaking something."
+  },
+  {
+    id: "04-add-school",
+    title: "Add a school",
+    subtitle: "One modal. Org / name / address / principal name + email. Submitting this auto-emails the principal an invite link if their email is set.",
+    bullets: ["Pick or create the parent organization","School name, type (elementary / middle / K-8), city, state","Optional principal name + email — invite is auto-sent on save","School appears in the list within 200ms"],
+    mock: `
+      <div class="mock">
+        <div class="mock-topbar">Add School</div>
+        <div class="mock-section"><strong>Organization</strong> Lincoln Unified School District</div>
+        <div class="mock-section"><strong>Name</strong> Lincoln Elementary</div>
+        <div class="mock-section"><strong>Type</strong> Elementary</div>
+        <div class="mock-section"><strong>Principal</strong> Sarah Smith · sarah@lincoln.edu</div>
+        <div style="margin-top:12px;text-align:right;"><span class="mock-pill ok">✓ Invite emailed</span></div>
+      </div>`,
+    caption: "<strong>Two emails sent on save:</strong> the principal gets a set-password invite; HubSpot gets a new-school sync ping."
+  },
+  {
+    id: "04a-multi-school-picker",
+    title: "Coach with multiple schools picks where they're working today",
+    subtitle: "If a coach is assigned to two or more schools, login takes them to the picker before the dashboard. They can switch any time via the top-nav chip.",
+    bullets: ["Login response includes assignments[] — server auto-selects when N=1","Picker is a press-and-go card layout","Top-nav chip: \"● Lincoln Elementary ▾\" — one click, switch","Schema unchanged — staff_assignments already supported it"],
+    mock: `
+      <div class="mock">
+        <div class="mock-topbar">Where are you working today?</div>
+        <div class="mock-row" style="flex-direction:column;gap:8px;">
+          <div style="padding:14px;border:1px solid #1E40AF;border-radius:6px;background:#EFF6FF;"><strong>Lincoln Elementary</strong><div style="font-size:11px;color:#6B7280;">head coach</div></div>
+          <div style="padding:14px;border:1px solid #E5E7EB;border-radius:6px;"><strong>Roosevelt Elementary</strong><div style="font-size:11px;color:#6B7280;">head coach</div></div>
+        </div>
+      </div>`,
+    caption: "<strong>One picker · one chip.</strong> Mid-day school changes don't require a logout."
+  },
+  {
+    id: "05-bulk-coaches",
+    title: "Bulk-add coaches with role mix",
+    subtitle: "Paste the school's coach roster. Default role + default schools fill in for any row that omits them. Per-row error reporting means one bad row doesn't kill the batch.",
+    bullets: ["Paste up to 200 rows in <code>first,last,email,role</code> format","Defaults apply to any blank role / school","Each row gets a 24h invite token + auto-emailed set-password link","Server returns summary: created · duplicates · errors with row numbers"],
+    mock: `
+      <div class="mock">
+        <div class="mock-topbar">Bulk Invite Coaches</div>
+        <div style="background:#F3F4F6;border-radius:6px;padding:10px;font-family:ui-monospace,monospace;font-size:12px;color:#111827;">Ada,Lovelace,ada@x.com,head_coach<br/>Bo,Knight,bo@y.com,<br/>Cam,Reyes,cam@z.com,assistant_coach</div>
+        <div style="margin-top:12px;padding:8px;background:#ECFDF5;border-radius:6px;font-size:13px;"><strong>3 created</strong> · 0 duplicates · 0 errors</div>
+      </div>`,
+    caption: "<strong>The 30-coach onboarding takes one minute.</strong> No spreadsheet imports, no admin clicking 30 modals."
+  },
+  {
+    id: "06-import-students",
+    title: "Import students CSV",
+    subtitle: "Schools provide rosters. We accept CSV with student first / last / grade / local identifier (LAUSD-style IDs). Duplicate identifiers are flagged, not silently overwritten.",
+    bullets: ["Drop a CSV — preview shows the first 5 rows","Maps columns automatically; can override","Duplicates surface row numbers + reason","Local identifier (e.g. LAUSD-2026-0001) becomes a parent verification key"],
+    mock: `
+      <div class="mock">
+        <div class="mock-topbar">Import Students</div>
+        <div style="background:#F3F4F6;border-radius:6px;padding:10px;font-family:ui-monospace,monospace;font-size:12px;color:#111827;">first,last,grade,local_student_identifier<br/>Sam,Quinn,3,LAUSD-2026-0001<br/>Riley,Tan,3,LAUSD-2026-0002</div>
+        <div style="margin-top:10px;color:#10B981;font-size:13px;">✓ 30 students staged for import</div>
+      </div>`,
+    caption: "<strong>Local identifier is the key.</strong> It's how parents will later verify a student is actually theirs."
+  },
+  {
+    id: "07-coach-self-register",
+    title: "Coach self-registers via school code",
+    subtitle: "When the admin doesn't yet know about a new coach, the school can hand them a 12-character code. Coach clicks Sign Up With School Code, enters code + name + email, gets the same invite-email flow.",
+    bullets: ["School invite code: e.g. LCN-X7M9-2026","Code expires in 180 days; can be regenerated","Role is restricted to head_coach / assistant_coach (no admin escalation)","Admin gets a notification: \"Coach Z self-registered at Lincoln via code\""],
+    mock: `
+      <div class="mock">
+        <div class="mock-topbar">Sign up with a school code</div>
+        <div class="mock-section"><strong>Code:</strong> LCN-X7M9-2026</div>
+        <div class="mock-section"><strong>Name:</strong> Z. Knight</div>
+        <div class="mock-section"><strong>Email:</strong> z.knight@x.com</div>
+        <div class="mock-section"><strong>Role:</strong> Head Coach</div>
+        <div style="margin-top:10px;color:#10B981;">✓ Invite emailed — check your inbox</div>
+      </div>`,
+    caption: "<strong>Path of least resistance.</strong> If the boss didn't know about a new hire, the school can still onboard them."
+  },
+  {
+    id: "08-eod",
+    title: "Coach files an EOD report",
+    subtitle: "From the field, after a session. The form has a fixed structure so reports are comparable across coaches and schools.",
+    bullets: ["Activities completed · student engagement · behavior summary","Success story · challenge · injury / incident flag","Submit-on-time tracking feeds compliance metrics","Save & log next session in one tap"],
+    mock: `
+      <div class="mock">
+        <div class="mock-topbar">EOD — Lincoln · Period 3 · 2026-05-09</div>
+        <div class="mock-section"><strong>Activities</strong> Dribbling drills · Chest pass · 4-on-4 game</div>
+        <div class="mock-section"><strong>Engagement</strong> High — 28 of 30 students active most of session</div>
+        <div class="mock-section"><strong>Success story</strong> Marcus made his first 3-pointer; whole class cheered</div>
+        <div class="mock-section"><strong>Incident filed?</strong> No</div>
+        <div class="mock-row" style="margin-top:8px;"><span class="mock-pill ok">Submitted on time</span></div>
+      </div>`,
+    caption: "<strong>2-minute target.</strong> Every field exists for a reason; nothing optional that the boss can't justify."
+  },
+  {
+    id: "08a-assessment",
+    title: "Coach scores an assessment",
+    subtitle: "Skill assessment uses the 1–5 rubric (Emerging · Developing · Functional · Proficient · Advanced) plus a short observation tag. No free-text required.",
+    bullets: ["Skill catalog filtered to the student's grade band","Required dropdown: independent / needs prompt / inconsistent / strong control / low confidence / gameplay transfer","Optional note for nuance","Normalized scores (20-40-60-80-100) computed automatically"],
+    mock: `
+      <div class="mock">
+        <div class="mock-topbar">Score: Sam Quinn — Dribbling</div>
+        <div class="mock-section"><strong>Level</strong> 4 — Proficient</div>
+        <div class="mock-section"><strong>Tag</strong> strong_control</div>
+        <div class="mock-section"><strong>Note (optional)</strong> Confident under defender pressure today.</div>
+        <div style="margin-top:8px;color:#1E40AF;font-weight:600;">Normalized score: 80 / 100</div>
+      </div>`,
+    caption: "<strong>No raw scores without context.</strong> Tags force the coach to pick a defensible reason for the level."
+  },
+  {
+    id: "09-incident",
+    title: "Coach files an incident",
+    subtitle: "Type · severity · description · action taken · school + family notification flags. Critical incidents trigger admin notifications immediately.",
+    bullets: ["Type: injury / behavior / equipment / facility","Severity: low / medium / high / critical","Critical → notification fires to all org admins / overseers","School & family notification booleans tracked separately for compliance"],
+    mock: `
+      <div class="mock">
+        <div class="mock-topbar">Incident · Lincoln · 2026-05-09</div>
+        <div class="mock-section"><strong>Type</strong> Injury</div>
+        <div class="mock-section"><strong>Severity</strong> <span class="mock-pill warn">Medium</span></div>
+        <div class="mock-section"><strong>Description</strong> Student turned ankle during 4-on-4 game; ice + RICE protocol applied.</div>
+        <div class="mock-section"><strong>School notified</strong> Yes · <strong>Family</strong> Yes</div>
+      </div>`,
+    caption: "<strong>Compliance + duty-of-care logged in one form.</strong> Audit log keeps the trail."
+  },
+  {
+    id: "09a-principal",
+    title: "Principal sees the EOD on her dashboard",
+    subtitle: "She sees only her school. EODs · incidents · attendance. Read-only, designed for a 30-second scan.",
+    bullets: ["Most recent EOD across all coaches at her school","Open incidents pinned to top","Compliance summary at a glance","Click to drill into any session"],
+    mock: `
+      <div class="mock">
+        <div class="mock-topbar">Principal Dashboard — Lincoln Elementary</div>
+        <div class="mock-section"><strong>Latest EOD</strong> Period 3, 2026-05-09 · Coach Williams · ✓ on-time</div>
+        <div class="mock-section"><strong>Open incidents</strong> 1 · injury, medium</div>
+        <div class="mock-section"><strong>This week</strong> 12 sessions · 96% on-time EODs</div>
+      </div>`,
+    caption: "<strong>30-second scan.</strong> Designed for a principal between bell rings."
+  },
+  {
+    id: "10-parent-register",
+    title: "Parent self-registers",
+    subtitle: "Parent enters their child's name + LAUSD-style local identifier. We verify it's a real student, then create the parent account and link it.",
+    bullets: ["Step 1: child first / last / local identifier","Step 2: parent name / email / phone / relationship","Auto-login + admin notification","If both parent slots are full, parent record stays unlinked + admin gets a manual-resolution alert"],
+    mock: `
+      <div class="mock">
+        <div class="mock-topbar">Verify Student</div>
+        <div class="mock-section"><strong>Student first</strong> Sam</div>
+        <div class="mock-section"><strong>Student last</strong> Quinn</div>
+        <div class="mock-section"><strong>Student ID</strong> LAUSD-2026-0001</div>
+        <div style="margin-top:8px;color:#10B981;">✓ Verified — Sam Quinn (Grade 3, Lincoln Elementary)</div>
+      </div>`,
+    caption: "<strong>Self-service onboarding.</strong> School staff aren't a bottleneck for parent enrollment."
+  },
+  {
+    id: "10a-parent-progress",
+    title: "Parent views child's progress",
+    subtitle: "Baseline → current → growth bands. Behavior readiness. Attendance / participation. Read-only, plain-English.",
+    bullets: ["Skill summary: baseline 60 → current 80 (+20 growth, On Track → Proficient)","Top strengths and top growth areas","Behavior readiness: teamwork, effort, self-control, listening, sportsmanship, confidence","Attendance: 96% · participation: full"],
+    mock: `
+      <div class="mock">
+        <div class="mock-topbar">Sam Quinn — Spring 2026 Progress</div>
+        <div class="mock-section"><strong>Overall</strong> 78 / 100 · <span class="mock-pill ok">On Track</span></div>
+        <div class="mock-section"><strong>Top strength</strong> Dribbling (80, Proficient)</div>
+        <div class="mock-section"><strong>Top growth</strong> Receiving passes (60 → 75, +15)</div>
+        <div class="mock-section"><strong>Behavior</strong> Teamwork 4 · Effort 5 · Self-control 4</div>
+      </div>`,
+    caption: "<strong>No grades, no rankings.</strong> Just baseline, current, and the gap between."
+  },
+  {
+    id: "11-csv-export",
+    title: "Admin exports CSV reports",
+    subtitle: "Schools / Coaches / Students each export to CSV with one click. Open in Excel, share via email, attach to a board update.",
+    bullets: ["GET /api/admin/schools/export.csv","GET /api/admin/coaches/export.csv","GET /api/admin/students/export.csv","All admin / CEO only · downloads as attachment"],
+    mock: `
+      <div class="mock">
+        <div class="mock-topbar">Coaches → Export CSV</div>
+        <div style="background:#F3F4F6;border-radius:6px;padding:10px;font-family:ui-monospace,monospace;font-size:11px;color:#111827;">User ID,First Name,Last Name,Email,Role,Status,Schools<br/>14,Coach,Williams,coach@lincoln.edu,head_coach,active,Lincoln Elementary<br/>15,Coach,Davis,coach@lincoln.edu,assistant_coach,active,Lincoln Elementary</div>
+      </div>`,
+    caption: "<strong>Boring CSV.</strong> No proprietary format. The boss owns her data."
+  },
+  {
+    id: "12-help",
+    title: "Help & feedback",
+    subtitle: "Question-mark icon in the top-nav opens a modal. Subject + message → email lands at operations@ufitonline.net within 30 seconds.",
+    bullets: ["Anyone authenticated can submit","Auto-captures the page URL the user was on","Rate-limited 5/min to deflect abuse","Audit log row written for every submission"],
+    mock: `
+      <div class="mock">
+        <div class="mock-topbar">Help & Feedback</div>
+        <div class="mock-section"><strong>Subject</strong> Login screen on iPad won't accept my password</div>
+        <div class="mock-section"><strong>Message</strong> The keyboard covers the password field on portrait orientation. Working in landscape for now.</div>
+        <div style="margin-top:10px;color:#10B981;">✓ Sent to operations@ufitonline.net</div>
+      </div>`,
+    caption: "<strong>Right answer, right inbox.</strong> No \"file a Jira ticket\" friction. Email lands directly with the right human."
+  }
+];
+
+const stage = document.getElementById('stage');
+const bookmarks = document.getElementById('bookmarks');
+const progFill = document.getElementById('progress-fill');
+const countEl = document.getElementById('count');
+
+let current = 0;
+let playing = false;
+let timer = null;
+const SCENE_MS = 37000;  // ~10 min total for 16 scenes
+
+SCENES.forEach((s, i) => {
+  const div = document.createElement('div');
+  div.className = 'scene';
+  div.id = `scene-${i}`;
+  const bulletsHtml = (s.bullets || []).map(b => `<li>${b}</li>`).join('');
+  div.innerHTML = `
+    <div class="scene-num">Scene ${String(i + 1).padStart(2, '0')} of ${SCENES.length}</div>
+    <h1>${s.title}</h1>
+    <div class="subtitle">${s.subtitle}</div>
+    <ul class="bullets">${bulletsHtml}</ul>
+    ${s.mock || ''}
+    <div class="caption">${s.caption}</div>
+  `;
+  stage.appendChild(div);
+
+  const b = document.createElement('button');
+  b.className = 'bookmark';
+  b.dataset.idx = i;
+  b.innerHTML = `<span class="num">${String(i + 1).padStart(2, '0')}</span> ${s.title}`;
+  b.addEventListener('click', () => goTo(i));
+  bookmarks.appendChild(b);
+});
+
+function goTo(i) {
+  if (i < 0 || i >= SCENES.length) return;
+  document.querySelectorAll('.scene').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.bookmark').forEach(el => el.classList.remove('active'));
+  document.getElementById(`scene-${i}`).classList.add('active');
+  document.querySelector(`.bookmark[data-idx="${i}"]`).classList.add('active');
+  current = i;
+  countEl.textContent = `${i + 1} / ${SCENES.length}`;
+  // progress bar reflects scene boundaries.
+  progFill.style.width = `${((i + 1) / SCENES.length) * 100}%`;
+}
+
+function next() { goTo(Math.min(SCENES.length - 1, current + 1)); }
+function prev() { goTo(Math.max(0, current - 1)); }
+
+document.getElementById('next').addEventListener('click', () => { stop(); next(); });
+document.getElementById('prev').addEventListener('click', () => { stop(); prev(); });
+document.getElementById('play').addEventListener('click', () => playing ? stop() : play());
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight') next();
+  else if (e.key === 'ArrowLeft') prev();
+  else if (e.key === ' ') { e.preventDefault(); playing ? stop() : play(); }
+});
+
+function play() {
+  playing = true;
+  document.getElementById('play').textContent = '⏸ Pause';
+  timer = setInterval(() => {
+    if (current >= SCENES.length - 1) return stop();
+    next();
+  }, SCENE_MS);
+}
+function stop() {
+  playing = false;
+  document.getElementById('play').textContent = '▶ Play';
+  clearInterval(timer);
+}
+
+goTo(0);
+</script>
+</body>
+</html>
