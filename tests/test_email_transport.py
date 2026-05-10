@@ -1,15 +1,12 @@
-"""
-tests/test_email_transport.py — coverage for the Gmail SMTP transport in
-`app/email.py`. Replaces the old Resend/httpx code path.
+"""tests/test_email_transport.py — coverage for the dual transport.
 
 Strategy:
-  - The two public callers (`send_invite_email`, `send_password_reset_email`)
-    keep their signatures. We test through them so any future internal
-    refactor doesn't bypass coverage.
-  - `_send` is the single network point — we monkeypatch `smtplib.SMTP_SSL`
-    so no real network calls are made.
-  - The graceful no-op when GMAIL_APP_PASSWORD is unset is preserved from
-    the prior Resend implementation; tests guard it.
+  - Tries Resend (HTTP) first if RESEND_API_KEY is set.
+  - Falls back to Gmail SMTP if RESEND_API_KEY is unset and GMAIL_APP_PASSWORD is set.
+  - Otherwise no-ops to stdout (dev mode).
+
+We patch `app.email` module attributes (RESEND_API_KEY, GMAIL_APP_PASSWORD,
+FROM_ADDRESS) directly because they are read at module-import time.
 """
 
 from __future__ import annotations
@@ -20,8 +17,7 @@ import pytest
 
 def _decoded_html(raw_msg_str: str) -> str:
     """Parse a wire-format multipart MIME message and return the decoded
-    text of the text/html part. Necessary because Python's email library
-    base64-encodes utf-8 bodies that contain non-ASCII chars (em-dash, etc.)."""
+    text of the text/html part."""
     msg = stdlib_email.message_from_string(raw_msg_str)
     for part in msg.walk():
         if part.get_content_type() == "text/html":
@@ -29,12 +25,16 @@ def _decoded_html(raw_msg_str: str) -> str:
     return ""
 
 
-def test_no_op_without_gmail_password(monkeypatch, capsys):
-    """Without credentials, _send must log to stdout and return True (dev mode)."""
+# ---------------------------------------------------------------------------
+# DEV MODE — no creds at all
+# ---------------------------------------------------------------------------
+
+def test_no_op_when_no_creds_configured(monkeypatch, capsys):
     from app import email as email_mod
+    monkeypatch.setattr(email_mod, "RESEND_API_KEY", "")
     monkeypatch.setattr(email_mod, "GMAIL_APP_PASSWORD", "")
     ok = email_mod.send_invite_email(
-        "ada@example.com", "Ada", "head_coach", "tok-abc123"
+        "ada@example.com", "Ada", "head_coach", "tok-abc"
     )
     assert ok is True
     out = capsys.readouterr().out
@@ -42,116 +42,173 @@ def test_no_op_without_gmail_password(monkeypatch, capsys):
     assert "ada@example.com" in out
 
 
-def test_send_invite_uses_smtplib_when_configured(monkeypatch):
-    """With GMAIL_APP_PASSWORD set, _send must call smtplib.SMTP_SSL with
-    the right host/port, login, and sendmail args."""
+# ---------------------------------------------------------------------------
+# RESEND PATH (preferred when RESEND_API_KEY is set)
+# ---------------------------------------------------------------------------
+
+def test_send_via_resend_when_api_key_set(monkeypatch):
     from app import email as email_mod
 
-    sent = {}
+    captured = {}
 
-    class FakeSMTP:
-        def __init__(self, host, port):
-            sent["host"] = host
-            sent["port"] = port
+    class FakeResp:
+        status_code = 200
+        text = "{}"
 
-        def __enter__(self):
-            return self
+    def fake_post(url, headers=None, json=None, timeout=None):
+        captured["url"] = url
+        captured["headers"] = headers
+        captured["json"] = json
+        captured["timeout"] = timeout
+        return FakeResp()
 
-        def __exit__(self, *a):
-            pass
+    class FakeHttpx:
+        post = staticmethod(fake_post)
 
-        def login(self, user, password):
-            sent["login"] = (user, password)
-
-        def sendmail(self, frm, to, msg_str):
-            sent["sendmail_from"] = frm
-            sent["sendmail_to"] = to
-            sent["sendmail_msg"] = msg_str
-
-    monkeypatch.setattr(email_mod, "GMAIL_USER", "ops@ufitonline.net")
-    monkeypatch.setattr(email_mod, "GMAIL_APP_PASSWORD", "abcd efgh ijkl mnop")
+    monkeypatch.setattr(email_mod, "RESEND_API_KEY", "re_test_key_123")
     monkeypatch.setattr(email_mod, "FROM_ADDRESS",
-                        "Ufit Motion <ops@ufitonline.net>")
-    monkeypatch.setattr("smtplib.SMTP_SSL", FakeSMTP)
+                        "Ufit Motion <noreply@x.com>")
+    monkeypatch.setitem(__import__("sys").modules, "httpx", FakeHttpx)
 
     ok = email_mod.send_invite_email(
         "dst@example.com", "Bo", "head_coach", "tok-x9"
     )
     assert ok is True
-    assert sent["host"] == "smtp.gmail.com"
-    assert sent["port"] == 465
-    assert sent["login"] == ("ops@ufitonline.net", "abcd efgh ijkl mnop")
-    assert sent["sendmail_from"] == "Ufit Motion <ops@ufitonline.net>"
-    assert sent["sendmail_to"] == ["dst@example.com"]
-    # Decode the multipart payload and assert against the actual HTML body.
-    html = _decoded_html(sent["sendmail_msg"])
-    assert "UFIT MOTION" in html
-    assert "Set My Password" in html
-    assert "tok-x9" in html
+    assert captured["url"] == "https://api.resend.com/emails"
+    assert captured["headers"]["Authorization"] == "Bearer re_test_key_123"
+    assert captured["json"]["from"] == "Ufit Motion <noreply@x.com>"
+    assert captured["json"]["to"] == ["dst@example.com"]
+    assert "Set My Password" in captured["json"]["html"]
+    assert "tok-x9" in captured["json"]["html"]
+    # Plaintext alternative is sent so spam scores stay low.
+    assert "Set My Password" in captured["json"]["text"]
 
 
-def test_send_password_reset_uses_smtplib(monkeypatch):
-    """Same path for password reset — different subject/body, same transport."""
+def test_resend_returns_false_on_4xx(monkeypatch):
+    from app import email as email_mod
+
+    class FakeResp:
+        status_code = 401
+        text = "Unauthorized"
+
+    class FakeHttpx:
+        @staticmethod
+        def post(url, headers=None, json=None, timeout=None):
+            return FakeResp()
+
+    monkeypatch.setattr(email_mod, "RESEND_API_KEY", "bad_key")
+    monkeypatch.setitem(__import__("sys").modules, "httpx", FakeHttpx)
+
+    ok = email_mod.send_password_reset_email("a@b.com", "A", "tok-1")
+    assert ok is False
+
+
+def test_resend_returns_false_on_network_error(monkeypatch):
+    from app import email as email_mod
+
+    class FakeHttpx:
+        @staticmethod
+        def post(url, headers=None, json=None, timeout=None):
+            raise RuntimeError("network unreachable")
+
+    monkeypatch.setattr(email_mod, "RESEND_API_KEY", "test_key")
+    monkeypatch.setitem(__import__("sys").modules, "httpx", FakeHttpx)
+
+    ok = email_mod.send_invite_email("a@b.com", "A", "head_coach", "t")
+    assert ok is False
+
+
+# ---------------------------------------------------------------------------
+# GMAIL FALLBACK (only when RESEND_API_KEY is empty)
+# ---------------------------------------------------------------------------
+
+def test_falls_back_to_gmail_when_no_resend_key(monkeypatch):
     from app import email as email_mod
 
     sent = {}
 
     class FakeSMTP:
-        def __init__(self, host, port): pass
+        def __init__(self, host, port, timeout=None):
+            sent["host"] = host
+            sent["port"] = port
+            sent["timeout"] = timeout
+
         def __enter__(self): return self
         def __exit__(self, *a): pass
-        def login(self, *a): pass
+        def login(self, user, pw): sent["login"] = (user, pw)
         def sendmail(self, frm, to, msg_str):
             sent["msg"] = msg_str
+            sent["frm"] = frm
+            sent["to"] = to
 
-    monkeypatch.setattr(email_mod, "GMAIL_USER", "ops@ufitonline.net")
-    monkeypatch.setattr(email_mod, "GMAIL_APP_PASSWORD", "x" * 16)
+    monkeypatch.setattr(email_mod, "RESEND_API_KEY", "")
+    monkeypatch.setattr(email_mod, "GMAIL_USER", "ops@x.com")
+    monkeypatch.setattr(email_mod, "GMAIL_APP_PASSWORD", "abcd efgh ijkl mnop")
     monkeypatch.setattr(email_mod, "FROM_ADDRESS",
-                        "Ufit Motion <ops@ufitonline.net>")
+                        "Ufit Motion <ops@x.com>")
     monkeypatch.setattr("smtplib.SMTP_SSL", FakeSMTP)
 
-    ok = email_mod.send_password_reset_email("ada@x.com", "Ada", "tok-rst")
+    ok = email_mod.send_invite_email("dst@x.com", "Bo", "head_coach", "tok-y")
     assert ok is True
+    assert sent["host"] == "smtp.gmail.com"
+    assert sent["port"] == 465
+    assert sent["timeout"] == 15
+    assert sent["login"] == ("ops@x.com", "abcd efgh ijkl mnop")
+    assert sent["frm"] == "ops@x.com"  # SMTP envelope sender is GMAIL_USER
+    assert sent["to"] == ["dst@x.com"]
     html = _decoded_html(sent["msg"])
-    assert "Reset Password" in html
-    assert "tok-rst" in html
+    assert "Set My Password" in html
+    assert "tok-y" in html
 
 
-def test_send_returns_false_on_smtp_exception(monkeypatch):
-    """Network or auth failures must not crash callers — they get False."""
+def test_gmail_returns_false_on_smtp_exception(monkeypatch):
     from app import email as email_mod
 
     class BoomSMTP:
-        def __init__(self, host, port): pass
+        def __init__(self, *a, **kw): pass
         def __enter__(self): raise RuntimeError("boom")
         def __exit__(self, *a): pass
 
+    monkeypatch.setattr(email_mod, "RESEND_API_KEY", "")
     monkeypatch.setattr(email_mod, "GMAIL_APP_PASSWORD", "x" * 16)
     monkeypatch.setattr("smtplib.SMTP_SSL", BoomSMTP)
-    ok = email_mod.send_invite_email("a@b.com", "A", "head_coach", "t1")
+
+    ok = email_mod.send_invite_email("a@b.com", "A", "head_coach", "t")
     assert ok is False
 
 
-def test_message_includes_plaintext_alternative(monkeypatch):
-    """MIMEMultipart('alternative') with both text/plain and text/html so
-    spam scores stay low and screen readers have a fallback."""
+# ---------------------------------------------------------------------------
+# PRECEDENCE — Resend wins when both are configured
+# ---------------------------------------------------------------------------
+
+def test_resend_takes_precedence_over_gmail(monkeypatch):
     from app import email as email_mod
 
-    captured = {}
+    smtp_called = {"hit": False}
+    resend_called = {"hit": False}
 
-    class CaptureSMTP:
-        def __init__(self, *a, **kw): pass
+    class FakeSMTP:
+        def __init__(self, *a, **kw): smtp_called["hit"] = True
         def __enter__(self): return self
         def __exit__(self, *a): pass
         def login(self, *a): pass
-        def sendmail(self, frm, to, msg_str):
-            captured["msg"] = msg_str
+        def sendmail(self, *a): pass
 
+    class FakeResp:
+        status_code = 200
+        text = "{}"
+
+    class FakeHttpx:
+        @staticmethod
+        def post(url, headers=None, json=None, timeout=None):
+            resend_called["hit"] = True
+            return FakeResp()
+
+    monkeypatch.setattr(email_mod, "RESEND_API_KEY", "test_key")
     monkeypatch.setattr(email_mod, "GMAIL_APP_PASSWORD", "x" * 16)
-    monkeypatch.setattr("smtplib.SMTP_SSL", CaptureSMTP)
-    email_mod.send_invite_email("c@d.com", "C", "head_coach", "t2")
+    monkeypatch.setattr("smtplib.SMTP_SSL", FakeSMTP)
+    monkeypatch.setitem(__import__("sys").modules, "httpx", FakeHttpx)
 
-    msg = captured["msg"]
-    assert "multipart/alternative" in msg
-    assert "Content-Type: text/plain" in msg
-    assert "Content-Type: text/html" in msg
+    email_mod.send_invite_email("a@b.com", "A", "head_coach", "t")
+    assert resend_called["hit"] is True
+    assert smtp_called["hit"] is False

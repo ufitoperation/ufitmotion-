@@ -1,17 +1,26 @@
 """
-email.py — Transactional email via Gmail SMTP.
+email.py — Transactional email transport.
 
-Set GMAIL_USER and GMAIL_APP_PASSWORD in your environment. If
-GMAIL_APP_PASSWORD is unset, emails are logged to stdout (development /
-local dev) so the app never crashes due to missing config.
+Tries Resend (HTTP API) first if RESEND_API_KEY is set, otherwise falls
+back to Gmail SMTP. If neither is configured, logs to stdout (dev mode).
 
-Why Gmail SMTP and not Resend / SES / Postmark:
-  - Operations team is non-technical; using a Gmail App Password avoids
-    DNS / SPF / DKIM setup.
-  - Google Workspace handles the auth domain (operations@ufitonline.net),
-    so deliverability is "free."
-  - 2,000 emails/day quota is well above the realistic onboarding volume
-    (~30 per school).
+Why dual transport:
+  - Render's free tier blocks outbound SMTP (errno 101, "Network is
+    unreachable"). HTTP-based transports like Resend bypass that.
+  - Gmail SMTP is preserved as the fallback so a paid-Render deploy
+    or local dev can use the operations@ufitonline.net Workspace mailbox
+    without configuring a separate provider.
+
+Configure Resend:
+  - RESEND_API_KEY=re_...
+  - EMAIL_FROM='Ufit Motion <onboarding@resend.dev>'   ← test domain, no DNS
+       OR
+  - EMAIL_FROM='Ufit Motion <noreply@ufitonline.net>'  ← needs DNS records
+       in Resend's "Domains" tab to verify SPF + DKIM
+
+Configure Gmail SMTP fallback:
+  - GMAIL_USER=operations@ufitonline.net
+  - GMAIL_APP_PASSWORD=<16-char Google App Password>
 
 Usage:
     from app.email import send_invite_email, send_password_reset_email
@@ -28,9 +37,13 @@ from email.mime.text import MIMEText
 from html import escape as _html_escape
 
 APP_BASE_URL = os.environ.get("UFIT_APP_BASE_URL", "http://localhost:5000")
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 GMAIL_USER = os.environ.get("GMAIL_USER", "operations@ufitonline.net")
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
-FROM_ADDRESS = f"Ufit Motion <{GMAIL_USER}>"
+# Sender address used by Resend AND as the default Gmail SMTP From header.
+# Prefer EMAIL_FROM if set (e.g. "Ufit Motion <onboarding@resend.dev>" while
+# domain verification is pending). Otherwise fall back to GMAIL_USER.
+FROM_ADDRESS = os.environ.get("EMAIL_FROM") or f"Ufit Motion <{GMAIL_USER}>"
 
 
 def _html_to_text(html: str) -> str:
@@ -44,21 +57,46 @@ def _html_to_text(html: str) -> str:
     return text.strip()
 
 
-def _send(to: str, subject: str, html: str) -> bool:
-    """Send an email via Gmail SMTP. Returns True on success, False on failure.
+def _send_via_resend(to: str, subject: str, html: str) -> bool:
+    """HTTP POST to api.resend.com/emails. Works on any host with outbound
+    HTTPS — bypasses SMTP-port firewalls (Render free tier blocks 465)."""
+    try:
+        import httpx
+    except ImportError:
+        # Fall through to Gmail. httpx is in requirements.txt so this
+        # shouldn't happen on a fresh deploy.
+        return False
 
-    Without GMAIL_APP_PASSWORD, no network call is made — the message is
-    logged to stdout so local development never blocks on missing creds.
-    """
-    if not GMAIL_APP_PASSWORD:
-        print(
-            f"[email] DEV MODE — would send to {to}\n"
-            f"  Subject: {subject}\n"
-            f"  (Set GMAIL_APP_PASSWORD to enable real delivery)",
-            flush=True,
+    try:
+        resp = httpx.post(
+            "https://api.resend.com/emails",
+            headers={
+                "Authorization": f"Bearer {RESEND_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "from": FROM_ADDRESS,
+                "to": [to],
+                "subject": subject,
+                "html": html,
+                "text": _html_to_text(html),
+            },
+            timeout=15,
         )
-        return True
+        if resp.status_code in (200, 201):
+            return True
+        print(f"[email] Resend HTTP {resp.status_code}: {resp.text[:200]}",
+              file=sys.stderr, flush=True)
+        return False
+    except Exception as exc:
+        print(f"[email] Resend send failed ({type(exc).__name__}): {exc}",
+              file=sys.stderr, flush=True)
+        return False
 
+
+def _send_via_gmail(to: str, subject: str, html: str) -> bool:
+    """SMTP_SSL to smtp.gmail.com:465. Won't work on Render's free tier
+    (outbound SMTP blocked) but works for paid Render and local dev."""
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
@@ -67,18 +105,34 @@ def _send(to: str, subject: str, html: str) -> bool:
         msg.attach(MIMEText(_html_to_text(html), "plain", "utf-8"))
         msg.attach(MIMEText(html, "html", "utf-8"))
 
-        # 15s connection+auth timeout — without this, a blocked Gmail
-        # auth (wrong app password, Render network throttle, etc.) hangs
-        # the entire Flask request thread until gunicorn's worker timeout
-        # (120s) kills it, blocking the user's UI for 2+ minutes.
         with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=15) as smtp:
             smtp.login(GMAIL_USER, GMAIL_APP_PASSWORD)
-            smtp.sendmail(FROM_ADDRESS, [to], msg.as_string())
+            smtp.sendmail(GMAIL_USER, [to], msg.as_string())
         return True
     except Exception as exc:
-        print(f"[email] Send failed ({type(exc).__name__}): {exc}",
+        print(f"[email] Gmail send failed ({type(exc).__name__}): {exc}",
               file=sys.stderr, flush=True)
         return False
+
+
+def _send(to: str, subject: str, html: str) -> bool:
+    """Dispatch to whichever transport is configured.
+
+    Order of preference: Resend (HTTP) > Gmail SMTP > stdout (dev mode).
+    """
+    if RESEND_API_KEY:
+        return _send_via_resend(to, subject, html)
+
+    if GMAIL_APP_PASSWORD:
+        return _send_via_gmail(to, subject, html)
+
+    print(
+        f"[email] DEV MODE — would send to {to}\n"
+        f"  Subject: {subject}\n"
+        f"  (Set RESEND_API_KEY or GMAIL_APP_PASSWORD to enable real delivery)",
+        flush=True,
+    )
+    return True
 
 
 def send_invite_email(to: str, first_name: str, role: str, token: str) -> bool:
