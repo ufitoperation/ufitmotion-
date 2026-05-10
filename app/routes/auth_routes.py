@@ -487,27 +487,42 @@ def forgot_password():
 
     db = get_db()
     try:
+        # C13: pending-invite users (active_status=FALSE, no password_hash)
+        # are eligible for forgot-password too — they just get a fresh
+        # invite link instead of a reset link. Don't filter by active_status.
         row = db.execute(
-            "SELECT user_id, first_name FROM users WHERE email = ? AND deleted_at IS NULL AND active_status = TRUE",
+            "SELECT user_id, first_name, role, active_status, password_hash "
+            "FROM users WHERE email = ? AND deleted_at IS NULL",
             (email,),
         ).fetchone()
 
         if row:
+            is_pending = not row["password_hash"]
             token = secrets.token_urlsafe(32)
             token_hash = hashlib.sha256(token.encode()).hexdigest()
-            expires_at = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+            # Pending users get a 24h invite token; existing users get a 1h reset token.
+            ttl_hours = 24 if is_pending else 1
+            expires_at = (datetime.now(timezone.utc) + timedelta(hours=ttl_hours)).isoformat()
             db.execute(
                 """UPDATE users
                    SET password_reset_token = ?, password_reset_expires_at = ?
                    WHERE user_id = ?""",
                 (token_hash, expires_at, row["user_id"]),
             )
-            audit(db, row["user_id"], "forgot_password", "users", row["user_id"],
-                  new_values={"action": "reset_token_issued", "ip": request.remote_addr})
+            audit(db, row["user_id"],
+                  "invite_resent" if is_pending else "forgot_password",
+                  "users", row["user_id"],
+                  new_values={"ip": request.remote_addr,
+                              "pending_invite": is_pending})
             db.commit()
 
-            from app.email import send_password_reset_email
-            send_password_reset_email(email, row["first_name"] or "there", token)
+            if is_pending:
+                from app.email import send_invite_email
+                send_invite_email(email, row["first_name"] or "there",
+                                  row["role"] or "staff", token)
+            else:
+                from app.email import send_password_reset_email
+                send_password_reset_email(email, row["first_name"] or "there", token)
 
         # Jitter prevents timing-based email enumeration — always delay ~100ms regardless of whether user exists.
         time.sleep(random.uniform(0.08, 0.15))
