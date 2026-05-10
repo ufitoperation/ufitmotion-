@@ -920,11 +920,15 @@ async function loadAdminDashboard(container) {
   try {
     const d = await api('GET', '/api/admin/dashboard');
     const eodPct = d.eod_compliance_rate != null ? Math.round(d.eod_compliance_rate * 100) : 0;
+    const isEmpty = (d.active_schools ?? 0) === 0
+      && (d.active_coaches ?? 0) === 0
+      && (d.sessions_this_week ?? 0) === 0;
     container.innerHTML = `
       <div class="welcome-card">
         <div class="welcome-greeting">Welcome back, ${esc(state.user?.first_name || 'Admin')}.</div>
         <div class="welcome-subtitle"><span class="badge badge-yellow" style="margin-right:8px;">${fmtLabel(state.user?.role || 'Admin')}</span>${todayFull()}</div>
       </div>
+      ${isEmpty ? renderOnboardingChecklist(d) : ''}
       <div class="stats-grid">
         ${statCard('Schools', d.active_schools ?? 0, iconSchools(), '')}
         ${statCard('Active Coaches', d.active_coaches ?? 0, iconCoaches(), 'accent')}
@@ -956,6 +960,39 @@ async function loadAdminDashboard(container) {
   } catch (err) {
     container.innerHTML = errorCard(err.message);
   }
+}
+
+/**
+ * C12 — Empty-state onboarding checklist for the admin dashboard.
+ * Shown when there are zero schools / coaches / sessions. Walks the user
+ * through the canonical first-school setup, with each row deep-linking
+ * to the relevant screen + opening the right modal.
+ */
+function renderOnboardingChecklist(d) {
+  const hasSchool = (d.active_schools ?? 0) > 0;
+  const hasCoach = (d.active_coaches ?? 0) > 0;
+  const hasSessions = (d.sessions_this_week ?? 0) > 0;
+  const item = (done, label, sub, btnLabel, onclick) => `
+    <div class="onboarding-row ${done ? 'done' : ''}">
+      <div class="onboarding-mark">${done ? iconCheck() : '<span class="onboarding-num"></span>'}</div>
+      <div class="onboarding-text">
+        <div class="onboarding-label">${esc(label)}</div>
+        <div class="onboarding-sub">${esc(sub)}</div>
+      </div>
+      ${done ? '<span class="onboarding-done">Done</span>' : `<button class="btn btn-primary btn-sm" onclick="${onclick}">${esc(btnLabel)}</button>`}
+    </div>
+  `;
+  return `
+    <div class="onboarding-card">
+      <div class="onboarding-header">
+        <div class="onboarding-title">Getting started</div>
+        <div class="onboarding-sub">A few steps to get your first school live on Ufit Motion.</div>
+      </div>
+      ${item(hasSchool, 'Add your first school', 'Lincoln Elementary, Roosevelt ES, etc.', 'Add School', "openAddSchoolModal()")}
+      ${item(hasCoach, 'Add your coaches', 'Send invites individually or in bulk via paste / CSV.', 'Add Coaches', "navigate('coaches')")}
+      ${item(hasSessions, 'Schedule the first session', 'Sessions log automatically once coaches start filing EOD reports.', 'Open Coaches', "navigate('coaches')")}
+    </div>
+  `;
 }
 
 function statCard(label, value, iconSvg, colorClass = '') {
