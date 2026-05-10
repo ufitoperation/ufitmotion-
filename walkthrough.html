@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ufit Motion — Walkthrough</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#E5E7EB;height:100vh;overflow:hidden;display:flex;flex-direction:column}
+  header{padding:14px 20px;background:#060E1D;border-bottom:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;gap:14px}
+  .brand{font-weight:800;font-size:18px;letter-spacing:.5px}
+  .brand .blue{color:#3B82F6} .brand .yellow{color:#F59E0B}
+  .crumb{color:rgba(255,255,255,.5);font-size:13px}
+  main{flex:1;display:flex;overflow:hidden}
+  aside{width:280px;background:#060E1D;border-right:1px solid rgba(255,255,255,0.08);overflow-y:auto;padding:16px 0;flex-shrink:0}
+  aside h3{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:rgba(255,255,255,.4);padding:0 18px;margin-bottom:8px}
+  .bookmark{display:block;width:100%;text-align:left;background:transparent;color:rgba(255,255,255,.7);border:0;padding:9px 18px;font-size:13px;cursor:pointer;font-family:inherit;border-left:3px solid transparent;line-height:1.4}
+  .bookmark:hover{background:rgba(255,255,255,.04);color:#fff}
+  .bookmark.active{background:rgba(59,130,246,.12);color:#fff;border-left-color:#3B82F6}
+  .bookmark .num{display:inline-block;width:30px;color:rgba(255,255,255,.4);font-weight:600}
+  #stage{flex:1;position:relative;overflow:hidden;background:#0F1F33}
+  .scene{position:absolute;inset:0;opacity:0;transition:opacity .5s ease;pointer-events:none;padding:36px 56px;overflow-y:auto}
+  .scene.active{opacity:1;pointer-events:auto}
+  .scene-num{font-size:11px;letter-spacing:.7px;text-transform:uppercase;color:rgba(255,255,255,.45);margin-bottom:6px}
+  .scene h1{font-size:28px;line-height:1.2;color:#fff;margin-bottom:6px;font-weight:800}
+  .scene .subtitle{color:rgba(255,255,255,.65);font-size:14px;margin-bottom:18px;max-width:780px;line-height:1.55}
+  .scene .bullets{margin:6px 0 16px;padding-left:22px;color:rgba(255,255,255,.78);max-width:780px;font-size:13px;line-height:1.7}
+  .scene .bullets li{margin:3px 0}
+  .scene .bullets code{background:rgba(255,255,255,.08);padding:1px 6px;border-radius:3px;font-size:12px}
+  .scene .caption{display:flex;gap:12px;align-items:flex-start;background:rgba(245,158,11,.12);border-left:3px solid #F59E0B;border-radius:0 8px 8px 0;padding:12px 16px;margin-top:14px;max-width:880px;font-size:13.5px;line-height:1.5}
+  .scene .caption strong{color:#FCD34D}
+
+  /* ---------- Mock UI primitives — high-fidelity Ufit Motion chrome ---------- */
+  .mock-row-h{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start}
+  .mock{background:#fff;color:#111827;border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.45);overflow:hidden;border:1px solid rgba(0,0,0,.08);max-width:880px;margin-bottom:14px}
+
+  /* Full app shell mock — sidebar + top-nav + body */
+  .app-shell{display:flex;background:#F9FAFB;min-height:340px;font-size:13px}
+  .app-sb{width:148px;background:#0A2463;color:#fff;padding:14px 0;flex-shrink:0}
+  .app-sb-logo{padding:0 14px;font-weight:800;font-size:14px;letter-spacing:.5px;color:#fff;margin-bottom:14px}
+  .app-sb-logo .y{color:#F59E0B}
+  .app-sb-item{padding:8px 14px;color:rgba(255,255,255,.75);font-size:12px;cursor:default;border-left:3px solid transparent}
+  .app-sb-item.active{background:rgba(255,255,255,.08);color:#fff;border-left-color:#F59E0B;font-weight:600}
+  .app-main{flex:1;display:flex;flex-direction:column;min-width:0}
+  .app-top{height:46px;background:#fff;border-bottom:1px solid #E5E7EB;display:flex;align-items:center;justify-content:space-between;padding:0 14px;font-size:12.5px}
+  .app-top-l{font-weight:600;color:#111827}
+  .app-top-r{display:flex;gap:6px;align-items:center}
+  .app-icon{width:28px;height:28px;border-radius:50%;background:#F3F4F6;display:flex;align-items:center;justify-content:center;font-size:12px;color:#6B7280}
+  .app-avatar{width:28px;height:28px;border-radius:50%;background:#1E40AF;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
+  .app-body{flex:1;padding:16px;overflow:hidden;background:#F9FAFB}
+  .app-h2{font-size:18px;font-weight:700;color:#111827;margin-bottom:2px}
+  .app-h2-sub{font-size:11.5px;color:#6B7280;margin-bottom:14px}
+
+  /* Stat cards grid */
+  .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}
+  .stat-card{background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:10px}
+  .stat-icon{font-size:14px;margin-bottom:4px}
+  .stat-val{font-size:18px;font-weight:800;color:#111827;line-height:1}
+  .stat-lbl{font-size:10.5px;color:#6B7280;margin-top:3px;text-transform:uppercase;letter-spacing:.3px}
+  .stat-card.green .stat-val{color:#10B981}
+  .stat-card.yellow .stat-val{color:#F59E0B}
+
+  /* Login portal selector */
+  .portal-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;max-width:560px;margin:0 auto}
+  .portal-card{padding:18px;background:#fff;border:1px solid #E5E7EB;border-radius:10px;text-align:center}
+  .portal-card.sel{border-color:#1E40AF;box-shadow:0 0 0 3px rgba(30,64,175,.15)}
+  .portal-emoji{font-size:24px;margin-bottom:6px}
+  .portal-name{font-weight:700;color:#111827;font-size:13px}
+  .portal-sub{color:#6B7280;font-size:11px;margin-top:2px}
+
+  /* Form / modal styling */
+  .modal-card{background:#fff;border-radius:10px;border:1px solid #E5E7EB;max-width:440px}
+  .modal-h{background:#1E40AF;color:#fff;padding:12px 18px;font-weight:700;font-size:14px;border-radius:10px 10px 0 0;display:flex;justify-content:space-between;align-items:center}
+  .modal-h .x{opacity:.7;cursor:default}
+  .modal-b{padding:18px}
+  .form-group{margin-bottom:12px}
+  .form-label{display:block;font-size:11px;font-weight:600;color:#374151;margin-bottom:4px;text-transform:uppercase;letter-spacing:.3px}
+  .form-input{width:100%;padding:8px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;background:#F9FAFB;color:#111827;font-family:inherit}
+  .form-input.lg{padding:12px;font-size:14px}
+  .btn-row{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
+  .btn-blue{background:#1E40AF;color:#fff;padding:8px 16px;border-radius:6px;font-size:12.5px;font-weight:600;border:0;display:inline-flex;align-items:center;gap:6px}
+  .btn-ghost{background:#fff;color:#6B7280;padding:8px 14px;border-radius:6px;font-size:12.5px;border:1px solid #D1D5DB}
+  .btn-yellow{background:#F59E0B;color:#fff;padding:8px 14px;border-radius:6px;font-size:12.5px;font-weight:600;border:0}
+
+  /* Data table */
+  .data-table{width:100%;border-collapse:collapse;background:#fff;border-radius:6px;overflow:hidden;font-size:12.5px}
+  .data-table th{background:#F3F4F6;color:#374151;padding:8px 10px;text-align:left;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.3px}
+  .data-table td{padding:8px 10px;border-top:1px solid #F3F4F6;color:#374151}
+  .data-table tr:hover td{background:#F9FAFB}
+
+  /* Pills + badges */
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:10.5px;font-weight:600}
+  .pill-ok{background:#DCFCE7;color:#15803D}
+  .pill-warn{background:#FEF3C7;color:#B45309}
+  .pill-err{background:#FEE2E2;color:#B91C1C}
+  .pill-muted{background:#F3F4F6;color:#6B7280}
+  .pill-blue{background:#DBEAFE;color:#1E3A8A}
+
+  /* Onboarding checklist row */
+  .ob-row{display:flex;gap:10px;align-items:center;padding:10px;background:#fff;border-radius:6px;margin-bottom:6px;border:1px solid #E5E7EB}
+  .ob-row.done{background:#F9FAFB;opacity:.78}
+  .ob-mark{width:22px;height:22px;border-radius:50%;border:2px solid #D1D5DB;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;color:#10B981}
+  .ob-row.done .ob-mark{background:#DCFCE7;border-color:#10B981}
+  .ob-text{flex:1;font-size:12px;color:#374151}
+  .ob-text strong{color:#111827;font-weight:600}
+  .ob-text .sub{color:#6B7280;font-size:11px;margin-top:1px}
+  .ob-cta{font-size:11.5px;color:#1E40AF;font-weight:600;cursor:default}
+  .ob-done-pill{background:#DCFCE7;color:#15803D;font-size:10px;font-weight:600;padding:3px 8px;border-radius:999px}
+
+  /* Misc */
+  .kv-list{background:#fff;border-radius:6px;padding:0 12px}
+  .kv-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #F3F4F6;font-size:12.5px}
+  .kv-row:last-child{border-bottom:0}
+  .kv-key{color:#6B7280}
+  .kv-val{color:#111827;font-weight:600}
+  .label{font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:.3px}
+
+  /* Annotation arrows / callouts on top of mocks */
+  .callout{display:inline-block;background:#FEF3C7;color:#92400E;font-size:11px;padding:4px 10px;border-radius:4px;font-weight:600;margin-left:8px;border:1px dashed #F59E0B}
+
+  /* Footer + controls */
+  footer{background:#060E1D;border-top:1px solid rgba(255,255,255,0.08);padding:12px 20px;display:flex;align-items:center;gap:12px}
+  .btn{background:rgba(255,255,255,0.08);color:#fff;border:1px solid rgba(255,255,255,0.14);border-radius:6px;padding:8px 14px;font-size:13px;font-family:inherit;cursor:pointer;font-weight:600}
+  .btn:hover{background:rgba(255,255,255,.16)}
+  .btn.primary{background:#1E40AF;border-color:#1E40AF}
+  .btn.primary:hover{background:#1d3a98}
+  #progress{flex:1;height:6px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;margin:0 14px}
+  #progress-fill{height:100%;background:#F59E0B;width:0;transition:width .3s linear}
+  #count{font-size:12px;color:rgba(255,255,255,.5);min-width:55px;text-align:right}
+  @media (max-width:760px){
+    aside{display:none}
+    .scene{padding:20px}
+    .scene h1{font-size:22px}
+    .stats-grid{grid-template-columns:repeat(2,1fr)}
+    .portal-grid{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="blue">UFIT</span> <span class="yellow">MOTION</span></div>
+  <div class="crumb">First-school onboarding walkthrough · ~10 minutes</div>
+</header>
+<main>
+  <aside>
+    <h3>Scenes</h3>
+    <div id="bookmarks"></div>
+  </aside>
+  <div id="stage"></div>
+</main>
+<footer>
+  <button class="btn" id="prev">◀ Prev</button>
+  <button class="btn primary" id="play">▶ Play</button>
+  <button class="btn" id="next">Next ▶</button>
+  <div id="progress"><div id="progress-fill"></div></div>
+  <span id="count"></span>
+</footer>
+
+<script>
+/* ============================================================
+   Scene definitions — 16 scenes per the design doc, ~37s avg
+   for a ~10-minute auto-play.
+   Each scene now ships rich high-fidelity mocks with the actual
+   Ufit Motion app chrome (sidebar + top-nav + branded panels)
+   so the boss sees what the live app actually looks like.
+   ============================================================ */
+const SCENES = [
+  // -----------------------------------------------------------------
+  {
+    id: "01-cold-load",
+    title: "Cold load — portal selector",
+    subtitle: "Anyone landing at ufitmotion.onrender.com sees one screen with four roles. Single click to pick yours, then sign in.",
+    bullets: [
+      "<code>Admin Portal</code> → Ufit operations + administrators",
+      "<code>Coach Portal</code> → head coaches + assistant coaches working in the field",
+      "<code>Organization Portal</code> → school principals + designated school staff",
+      "<code>Parent Portal</code> → parents tracking their child's progress",
+      "Forgot Password and Sign-Up With School Code links live below the Sign In form on the Coach Portal",
+    ],
+    mock: `
+      <div class="mock" style="background:#F9FAFB;padding:30px 24px;">
+        <div style="text-align:center;margin-bottom:18px;">
+          <div style="font-weight:800;font-size:20px;color:#111827;letter-spacing:.5px;">UFIT <span style="color:#F59E0B;">MOTION</span></div>
+          <div style="font-size:12px;color:#6B7280;margin-top:4px;">Sign in to your portal</div>
+        </div>
+        <div class="portal-grid">
+          <div class="portal-card sel">
+            <div class="portal-emoji">🏢</div>
+            <div class="portal-name">Admin Portal</div>
+            <div class="portal-sub">Ufit operations &amp; administrators</div>
+          </div>
+          <div class="portal-card">
+            <div class="portal-emoji">🏃</div>
+            <div class="portal-name">Coach Portal</div>
+            <div class="portal-sub">Head &amp; assistant coaches</div>
+          </div>
+          <div class="portal-card">
+            <div class="portal-emoji">🏫</div>
+            <div class="portal-name">Organization Portal</div>
+            <div class="portal-sub">Principals &amp; school staff</div>
+          </div>
+          <div class="portal-card">
+            <div class="portal-emoji">👨‍👩‍👧</div>
+            <div class="portal-name">Parent Portal</div>
+            <div class="portal-sub">View your child's progress</div>
+          </div>
+        </div>
+        <div class="modal-card" style="max-width:440px;margin:18px auto 0;">
+          <div class="modal-b">
+            <div class="form-group">
+              <label class="form-label">Email address</label>
+              <div class="form-input lg" style="color:#111827;">admin@ufit.com</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Password</label>
+              <div class="form-input lg" style="color:#9CA3AF;">••••••••••</div>
+            </div>
+            <button class="btn-blue" style="width:100%;justify-content:center;padding:11px;font-size:13px;">Sign In</button>
+            <div style="text-align:center;margin-top:10px;font-size:11.5px;"><span style="color:#6B7280;">Forgot password?</span></div>
+          </div>
+        </div>
+      </div>`,
+    caption: "<strong>What the boss sees.</strong> No marketing. No clutter. Pick your role, type your email and password, you're in."
+  },
+
+  // -----------------------------------------------------------------
+  {
+    id: "02-admin-dashboard",
+    title: "Admin signs in → Dashboard",
+    subtitle: "First load post-go-live: zero schools, zero coaches, zero sessions. The dashboard tells the boss exactly what to do next via the onboarding checklist.",
+    bullets: [
+      "Welcome card greets by first name + role badge",
+      "Stats grid: schools, active coaches, sessions this week, EOD compliance, open incidents",
+      "Onboarding checklist appears until a school + coaches + sessions exist",
+      "Quick Actions card has Add School + Add Coach + Review Incidents shortcuts",
+      "Bell icon top-right shows unread notifications; ? icon opens Help &amp; Feedback modal",
+    ],
+    mock: `
+      <div class="mock">
+        <div class="app-shell">
+          <div class="app-sb">
+            <div class="app-sb-logo">UFIT <span class="y">·</span></div>
+            <div class="app-sb-item active">📊 Dashboard</div>
+            <div class="app-sb-item">🏫 Schools</div>
+            <div class="app-sb-item">👟 Coaches</div>
+            <div class="app-sb-item">👦 Students</div>
+            <div class="app-sb-item">📋 EOD Reports</div>
+            <div class="app-sb-item">⚠ Incidents</div>
+            <div class="app-sb-item">📈 Reports</div>
+            <div class="app-sb-item">⚙ Settings</div>
+          </div>
+          <div class="app-main">
+            <div class="app-top">
+              <div class="app-top-l">Dashboard</div>
+              <div class="app-top-r">
+                <div class="app-icon">?</div>
+                <div class="app-icon">🔔</div>
+                <div class="app-avatar">A</div>
+              </div>
+            </div>
+            <div class="app-body">
+              <div style="background:#1E40AF;color:#fff;padding:14px 16px;border-radius:8px;margin-bottom:12px;">
+                <div style="font-size:15px;font-weight:700;">Welcome back, Admin.</div>
+                <div style="font-size:11px;opacity:.85;margin-top:2px;"><span class="pill" style="background:#F59E0B;color:#fff;margin-right:6px;">Admin</span>Saturday, May 9, 2026</div>
+              </div>
+              <div class="stats-grid">
+                <div class="stat-card"><div class="stat-icon">🏫</div><div class="stat-val">0</div><div class="stat-lbl">Schools</div></div>
+                <div class="stat-card"><div class="stat-icon">👟</div><div class="stat-val">0</div><div class="stat-lbl">Coaches</div></div>
+                <div class="stat-card"><div class="stat-icon">📅</div><div class="stat-val">0</div><div class="stat-lbl">Sessions / wk</div></div>
+                <div class="stat-card yellow"><div class="stat-icon">📋</div><div class="stat-val">—</div><div class="stat-lbl">EOD compliance</div></div>
+              </div>
+              <div style="background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:14px;margin-bottom:8px;">
+                <div style="font-weight:700;color:#111827;font-size:13px;margin-bottom:2px;">Getting started</div>
+                <div style="color:#6B7280;font-size:11px;margin-bottom:10px;">A few steps to get your first school live on Ufit Motion.</div>
+                <div class="ob-row"><div class="ob-mark">○</div><div class="ob-text"><strong>Add your first school</strong><div class="sub">Lincoln Elementary, Roosevelt ES, etc.</div></div><span class="ob-cta">Add School →</span></div>
+                <div class="ob-row"><div class="ob-mark">○</div><div class="ob-text"><strong>Add your coaches</strong><div class="sub">Send invites individually or in bulk via paste / CSV.</div></div><span class="ob-cta">Add Coaches →</span></div>
+                <div class="ob-row"><div class="ob-mark">○</div><div class="ob-text"><strong>Schedule the first session</strong><div class="sub">Sessions log automatically once coaches start filing EOD reports.</div></div><span class="ob-cta">Open Coaches →</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>`,
+    caption: "<strong>Empty state isn't blank.</strong> The dashboard literally tells you 'add school, then coaches, then schedule sessions.' No guessing what to click."
+  },
+
+  // -----------------------------------------------------------------
+  {
+    id: "03-settings",
+    title: "Settings tour",
+    subtitle: "Account profile, password change, organization details, and privacy/terms links. Boring on purpose — no customization knobs to tempt the boss into breaking something.",
+    bullets: [
+      "<strong>My Profile</strong> — name, email, phone, position title (read-only org-bound fields hidden)",
+      "<strong>Change Password</strong> — current → new (8+ chars, PBKDF2-SHA-256 hash)",
+      "<strong>Organization Details</strong> (CEO only) — name, type, billing contact",
+      "<strong>Sign Out</strong> — clears session, 8-hour idle timeout",
+      "Footer: links to Privacy Policy and Terms of Service (FERPA-aware self-authored copy)",
+    ],
+    mock: `
+      <div class="mock">
+        <div class="app-shell">
+          <div class="app-sb">
+            <div class="app-sb-logo">UFIT <span class="y">·</span></div>
+            <div class="app-sb-item">📊 Dashboard</div>
+            <div class="app-sb-item">🏫 Schools</div>
+            <div class="app-sb-item">👟 Coaches</div>
+            <div class="app-sb-item">👦 Students</div>
+            <div class="app-sb-item">📋 EOD Reports</div>
+            <div class="app-sb-item">⚠ Incidents</div>
+            <div class="app-sb-item">📈 Reports</div>
+            <div class="app-sb-item active">⚙ Settings</div>
+          </div>
+          <div class="app-main">
+            <div class="app-top"><div class="app-top-l">Settings</div><div class="app-top-r"><div class="app-icon">?</div><div class="app-icon">🔔</div><div class="app-avatar">A</div></div></div>
+            <div class="app-body">
+              <div class="app-h2">Settings</div>
+              <div class="app-h2-sub">Manage your account, password, and organization details.</div>
+              <div class="kv-list">
+                <div class="kv-row"><span class="kv-key">My Profile</span><span class="kv-val">Admin User · admin@ufit.com →</span></div>
+                <div class="kv-row"><span class="kv-key">Change Password</span><span class="kv-val">Update your sign-in password →</span></div>
+                <div class="kv-row"><span class="kv-key">Organization Details</span><span class="kv-val">Ufit · School District →</span></div>
+                <div class="kv-row"><span class="kv-key">Privacy Policy</span><span class="kv-val">/privacy →</span></div>
+                <div class="kv-row"><span class="kv-key">Terms of Service</span><span class="kv-val">/terms →</span></div>
+                <div class="kv-row"><span class="kv-key" style="color:#B91C1C;">Sign Out</span><span class="kv-val" style="color:#B91C1C;">End session →</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>`,
+    caption: "<strong>Bureaucracy in one place.</strong> Everything administrative — and nothing else — lives behind one icon."
+  },
+
+  // -----------------------------------------------------------------
+  {
+    id: "04-add-school",
+    title: "Add a school",
+    subtitle: "One modal. Org → name → city/state → optional principal. Saving auto-emails the principal a set-password invite.",
+    bullets: [
+      "Pick or create the parent organization (e.g. Lincoln USD)",
+      "School name + type (Elementary / Middle / K-8 / Pre-K)",
+      "Optional principal name + email — invite is auto-sent on save",
+      "School appears in the list within 200ms; HubSpot sync fires in the background",
+      "Principal status badge shows ⏱ Pending until they set their password",
+    ],
+    mock: `
+      <div class="mock-row-h">
+        <div class="mock modal-card">
+          <div class="modal-h">Add School <span class="x">×</span></div>
+          <div class="modal-b">
+            <div class="form-group"><label class="form-label">Organization</label><div class="form-input">Lincoln Unified School District</div></div>
+            <div class="form-group"><label class="form-label">School Name</label><div class="form-input">Lincoln Elementary</div></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+              <div class="form-group"><label class="form-label">Type</label><div class="form-input">Elementary</div></div>
+              <div class="form-group"><label class="form-label">Grade Levels</label><div class="form-input">K–5</div></div>
+            </div>
+            <div style="display:grid;grid-template-columns:2fr 1fr;gap:8px;">
+              <div class="form-group"><label class="form-label">City</label><div class="form-input">Stockton</div></div>
+              <div class="form-group"><label class="form-label">State</label><div class="form-input">CA</div></div>
+            </div>
+            <div class="form-group"><label class="form-label">Principal Name</label><div class="form-input">Sarah Smith</div></div>
+            <div class="form-group"><label class="form-label">Principal Email</label><div class="form-input">sarah@lincoln.edu</div></div>
+            <div class="btn-row"><button class="btn-ghost">Cancel</button><button class="btn-blue">Add School</button></div>
+          </div>
+        </div>
+        <div style="flex:1;min-width:280px;">
+          <div style="font-size:11px;color:rgba(255,255,255,.5);margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px;">After save → schools table</div>
+          <div class="mock" style="padding:12px;">
+            <table class="data-table">
+              <thead><tr><th>School</th><th>Coaches</th><th>Status</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Lincoln Elementary</strong><br/><span style="font-size:10.5px;color:#6B7280;">● Principal: Sarah Smith ⏱ Pending Invite</span></td><td>0</td><td><span class="pill pill-ok">Active</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div style="background:rgba(16,185,129,.12);border-left:3px solid #10B981;border-radius:0 6px 6px 0;padding:10px 12px;font-size:12px;color:#A7F3D0;margin-top:10px;">
+            ✓ Email sent to <strong>sarah@lincoln.edu</strong> — "You're invited to Ufit Motion — set your password"
+          </div>
+        </div>
+      </div>`,
+    caption: "<strong>Two emails on save.</strong> The principal gets a set-password invite; HubSpot gets a new-school sync ping. Nothing manual."
+  },
+
+  // -----------------------------------------------------------------
+  {
+    id: "04a-multi-school-picker",
+    title: "Multi-school coach picker",
+    subtitle: "Coach with two or more active assignments hits a picker on login. Click the school they're working at today, dashboard renders for that school. Switch any time via the top-nav chip.",
+    bullets: [
+      "Login response includes <code>assignments[]</code> — server auto-selects when N=1",
+      'Picker is full-screen press-and-go: "Where are you working today?"',
+      'Top-nav chip "● Lincoln Elementary ▾" — one click reopens the picker mid-day',
+      "Schema unchanged — <code>staff_assignments</code> already supported multi-school",
+    ],
+    mock: `
+      <div class="mock-row-h">
+        <div class="mock" style="background:linear-gradient(135deg,#1E40AF 0%,#1E3A8A 100%);padding:36px 24px;max-width:520px;">
+          <div style="background:#fff;border-radius:12px;padding:24px;color:#111827;">
+            <h2 style="font-size:18px;font-weight:800;margin-bottom:4px;">Where are you working today?</h2>
+            <p style="font-size:12px;color:#6B7280;margin-bottom:16px;">Select the school you're coaching at right now. You can switch any time from the top nav.</p>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+              <div style="padding:14px;border:2px solid #1E40AF;border-radius:8px;background:#EFF6FF;"><strong style="font-size:13px;">Lincoln Elementary</strong><div style="font-size:10.5px;color:#6B7280;text-transform:capitalize;">head coach</div></div>
+              <div style="padding:14px;border:1px solid #E5E7EB;border-radius:8px;"><strong style="font-size:13px;">Roosevelt Elementary</strong><div style="font-size:10.5px;color:#6B7280;text-transform:capitalize;">head coach</div></div>
+            </div>
+            <div style="text-align:center;margin-top:14px;font-size:11px;color:#6B7280;">Sign out</div>
+          </div>
+        </div>
+        <div style="flex:1;min-width:260px;">
+          <div style="font-size:11px;color:rgba(255,255,255,.5);margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px;">Mid-day → top-nav chip</div>
+          <div class="mock" style="padding:0;">
+            <div class="app-top" style="background:#fff;">
+              <div class="app-top-l">Coach · Dashboard</div>
+              <div class="app-top-r" style="gap:8px;">
+                <div style="border:1px solid #E5E7EB;border-radius:999px;padding:4px 12px;font-size:11px;font-weight:600;color:#111827;display:inline-flex;align-items:center;gap:6px;background:#fff;"><span style="width:6px;height:6px;border-radius:50%;background:#10B981;"></span>Lincoln Elementary <span style="color:#6B7280;font-size:9px;">▾</span></div>
+                <div class="app-icon">?</div><div class="app-icon">🔔</div><div class="app-avatar">W</div>
+              </div>
+            </div>
+            <div style="padding:16px;font-size:12px;color:#6B7280;">Click the chip ↑ to switch schools without logging out.</div>
+          </div>
+        </div>
+      </div>`,
+    caption: "<strong>One picker. One chip.</strong> Mid-day school change doesn't require a logout."
+  },
+
+  // -----------------------------------------------------------------
+  {
+    id: "05-bulk-coaches",
+    title: "Bulk-add coaches with role mix",
+    subtitle: "Paste up to 200 rows in <code>first,last,email,role</code> format. Default role + default schools fill in any blank cells. Server returns per-row results so one bad row doesn't kill the batch.",
+    bullets: [
+      "Paste OR upload CSV — same input field accepts both",
+      'Default Role dropdown applies when a row leaves <code>role</code> blank',
+      "Default Schools multi-select applies when a row leaves <code>school_ids</code> blank",
+      "Each row gets a 24h invite token + auto-emailed set-password link",
+      "Server returns summary: created · duplicates · errors with row indexes",
+    ],
+    mock: `
+      <div class="mock-row-h">
+        <div class="mock modal-card" style="max-width:480px;">
+          <div class="modal-h">Bulk Invite Coaches <span class="x">×</span></div>
+          <div class="modal-b">
+            <div style="font-size:11.5px;color:#6B7280;margin-bottom:10px;">Paste rows in <code style="background:#F3F4F6;padding:1px 4px;border-radius:3px;">first,last,email,role</code> format — one per line. Empty role uses the default.</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+              <div class="form-group" style="margin:0;"><label class="form-label">Default Role</label><div class="form-input">Head Coach ▾</div></div>
+              <div class="form-group" style="margin:0;"><label class="form-label">Default Schools</label><div class="form-input">Lincoln Elem. ▾</div></div>
+            </div>
+            <div class="form-group"><label class="form-label">Rows</label>
+              <div style="background:#F3F4F6;border-radius:6px;padding:10px;font-family:ui-monospace,Menlo,monospace;font-size:11px;color:#111827;line-height:1.6;">
+                Ada,Lovelace,ada@lincoln.edu,head_coach<br/>Bo,Knight,bo@lincoln.edu,<br/>Cam,Reyes,cam@lincoln.edu,assistant_coach
+              </div>
+            </div>
+            <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:6px;padding:10px;font-size:12px;color:#15803D;margin-top:10px;">
+              <strong>3 created</strong> · 0 duplicates · <span style="color:#6B7280;">0 errors</span>
+            </div>
+            <div class="btn-row"><button class="btn-ghost">Cancel</button><button class="btn-blue">Send More</button></div>
+          </div>
+        </div>
+        <div style="flex:1;min-width:300px;">
+          <div style="font-size:11px;color:rgba(255,255,255,.5);margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px;">After submit → coaches table</div>
+          <div class="mock" style="padding:12px;">
+            <table class="data-table">
+              <thead><tr><th>Coach</th><th>Role</th><th>School</th><th>Status</th></tr></thead>
+              <tbody>
+                <tr><td>Ada Lovelace</td><td>Head Coach</td><td>Lincoln Elem.</td><td><span class="pill pill-warn">⏱ Pending</span></td></tr>
+                <tr><td>Bo Knight</td><td>Head Coach</td><td>Lincoln Elem.</td><td><span class="pill pill-warn">⏱ Pending</span></td></tr>
+                <tr><td>Cam Reyes</td><td>Assistant</td><td>Lincoln Elem.</td><td><span class="pill pill-warn">⏱ Pending</span></td></tr>
+              </tbody>
+            </table>
+            <div style="font-size:11px;color:#6B7280;margin-top:10px;">3 invite emails queued via Gmail SMTP · all pending until each coach clicks their link</div>
+          </div>
+        </div>
+      </div>`,
+    caption: "<strong>30-coach onboarding takes one minute.</strong> No 30 modal clicks. No spreadsheet imports. Per-row error reporting means typos don't kill the batch."
+  },
+
+  // -----------------------------------------------------------------
+  {
+    id: "06-import-students",
+    title: "Import students CSV",
+    subtitle: "Schools provide rosters as CSV. Upload, map columns, preview, commit. Local identifier (LAUSD-style ID) is the parent-verification key — never silently overwritten on duplicates.",
+    bullets: [
+      "Drop a CSV — preview shows the first 5 rows",
+      "Auto-maps standard column headers; manual override available",
+      "Duplicate <code>local_student_identifier</code> values are flagged with row numbers, NOT auto-merged",
+      "Active students count updates in real time on the admin dashboard",
+    ],
+    mock: `
+      <div class="mock-row-h">
+        <div class="mock modal-card" style="max-width:520px;">
+          <div class="modal-h">Import Students <span class="x">×</span></div>
+          <div class="modal-b">
+            <div style="border:2px dashed #D1D5DB;border-radius:8px;padding:18px;text-align:center;background:#F9FAFB;font-size:12px;color:#6B7280;margin-bottom:12px;">📄 lincoln-roster-2026-spring.csv (30 rows, 4.2 KB)</div>
+            <div style="font-size:11px;color:#6B7280;margin-bottom:6px;">Preview (first 5 of 30):</div>
+            <div style="background:#F3F4F6;border-radius:6px;padding:10px;font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:#111827;line-height:1.6;overflow-x:auto;white-space:nowrap;">
+              first,last,grade,local_student_identifier<br/>Sam,Quinn,3,LAUSD-2026-0001<br/>Riley,Tan,3,LAUSD-2026-0002<br/>Marcus,Hill,4,LAUSD-2026-0003<br/>Aria,Mitchell,4,LAUSD-2026-0004<br/>Eli,Wong,5,LAUSD-2026-0005
+            </div>
+            <div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:6px;padding:10px;font-size:12px;color:#15803D;margin-top:10px;">
+              ✓ 30 students staged · 0 duplicates · 0 invalid rows
+            </div>
+            <div class="btn-row"><button class="btn-ghost">Cancel</button><button class="btn-blue">Confirm Import</button></div>
+          </div>
+        </div>
+        <div style="flex:1;min-width:240px;">
+          <div style="font-size:11px;color:rgba(255,255,255,.5);margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px;">After import → students table</div>
+          <div class="mock" style="padding:12px;">
+            <table class="data-table">
+              <thead><tr><th>Student</th><th>Grade</th><th>ID</th></tr></thead>
+              <tbody>
+                <tr><td>Sam Quinn</td><td>3</td><td><code style="font-size:10px;color:#6B7280;">LAUSD-2026-0001</code></td></tr>
+                <tr><td>Riley Tan</td><td>3</td><td><code style="font-size:10px;color:#6B7280;">LAUSD-2026-0002</code></td></tr>
+                <tr><td>Marcus Hill</td><td>4</td><td><code style="font-size:10px;color:#6B7280;">LAUSD-2026-0003</code></td></tr>
+                <tr style="color:#9CA3AF;"><td colspan="3" style="text-align:center;font-size:11px;">+ 27 more</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>`,
+    caption: "<strong>Local identifier is the key.</strong> It's how parents will later verify a student is actually theirs — without that, the parent self-register flow can't be trusted."
+  },
+
+  // -----------------------------------------------------------------
+  {
+    id: "07-coach-self-register",
+    title: "Coach self-registers via school code",
+    subtitle: "When the admin doesn't know about a new coach yet, the school hands them an invite code. Coach goes to Coach Portal → Sign Up With School Code → enters code + name + email → gets the same invite-email flow.",
+    bullets: [
+      "School invite code: <code>LCN-X7M9-2026</code> (auto-generated per school, 180-day expiry, regen-able)",
+      "Public endpoint <code>POST /api/auth/coach-register</code> — rate-limited 5/hour per IP",
+      "Role allowlist: <code>head_coach</code> or <code>assistant_coach</code> only — no admin escalation",
+      "Admin gets a notification: <em>Coach Z self-registered at Lincoln via invite code</em>",
+    ],
+    mock: `
+      <div class="mock-row-h">
+        <div class="mock modal-card" style="max-width:440px;">
+          <div class="modal-h">Sign up with a school code <span class="x">×</span></div>
+          <div class="modal-b">
+            <div style="font-size:11.5px;color:#6B7280;margin-bottom:12px;">Enter the code your school provided, plus your name and email. We'll send you a link to set your password.</div>
+            <div class="form-group"><label class="form-label">School code</label><div class="form-input" style="font-family:ui-monospace,Menlo,monospace;color:#1E40AF;font-weight:700;">LCN-X7M9-2026</div></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+              <div class="form-group"><label class="form-label">First Name</label><div class="form-input">Z.</div></div>
+              <div class="form-group"><label class="form-label">Last Name</label><div class="form-input">Knight</div></div>
+            </div>
+            <div class="form-group"><label class="form-label">Email</label><div class="form-input">z.knight@lincoln.edu</div></div>
+            <div class="form-group"><label class="form-label">Role</label><div class="form-input">Head Coach ▾</div></div>
+            <div class="btn-row"><button class="btn-ghost">Cancel</button><button class="btn-blue">Sign Up</button></div>
+          </div>
+        </div>
+        <div style="flex:1;min-width:240px;">
+          <div style="font-size:11px;color:rgba(255,255,255,.5);margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px;">Admin's notification bell</div>
+          <div class="mock" style="padding:0;">
+            <div style="padding:12px 14px;border-bottom:1px solid #F3F4F6;display:flex;gap:10px;align-items:flex-start;">
+              <div style="width:6px;height:6px;background:#3B82F6;border-radius:50%;margin-top:6px;flex-shrink:0;"></div>
+              <div style="font-size:12px;line-height:1.4;color:#111827;">
+                <strong>Coach Z. Knight (z.knight@lincoln.edu) self-registered at Lincoln Elementary via invite code</strong>
+                <div style="font-size:10.5px;color:#6B7280;margin-top:2px;">2 minutes ago</div>
+              </div>
+            </div>
+          </div>
+          <div style="background:rgba(245,158,11,.12);border-left:3px solid #F59E0B;border-radius:0 6px 6px 0;padding:10px 12px;font-size:11.5px;color:#FCD34D;margin-top:10px;">
+            <strong>Path of least resistance.</strong> If admin didn't know about a new hire, the school can still onboard them safely.
+          </div>
+        </div>
+      </div>`,
+    caption: "<strong>Three paths to coach onboarding.</strong> Single invite, bulk invite, school invite code. All three converge on the same email → set-password flow."
+  },
+
+  // -----------------------------------------------------------------
+  {
+    id: "08-eod",
+    title: "Coach files an EOD report",
+    subtitle: "End-of-day, in the field, on a phone. Fixed structure so every coach reports the same things. Target: under 2 minutes per session.",
+    bullets: [
+      "Pre-filled school + program + session date based on the coach's day",
+      "Required: activities completed, engagement, behavior summary, success story, challenge",
+      "Optional incident flag — checking it pre-fills an incident report afterwards",
+      "Submit-on-time tracking feeds the EOD compliance % on the admin dashboard",
+    ],
+    mock: `
+      <div class="mock">
+        <div class="app-shell" style="min-height:380px;">
+          <div class="app-sb">
+            <div class="app-sb-logo">UFIT <span class="y">·</span></div>
+            <div class="app-sb-item">📊 Dashboard</div>
+            <div class="app-sb-item active">📋 EOD Reports</div>
+            <div class="app-sb-item">📝 Assessments</div>
+            <div class="app-sb-item">😊 Behavior</div>
+            <div class="app-sb-item">⚠ Incidents</div>
+            <div class="app-sb-item">⚙ Settings</div>
+          </div>
+          <div class="app-main">
+            <div class="app-top"><div class="app-top-l">EOD — Lincoln · Period 3 · 2026-05-09</div><div class="app-top-r"><div style="border:1px solid #E5E7EB;border-radius:999px;padding:4px 10px;font-size:10.5px;font-weight:600;color:#111827;display:inline-flex;align-items:center;gap:5px;"><span style="width:5px;height:5px;border-radius:50%;background:#10B981;"></span>Lincoln Elementary <span style="color:#6B7280;">▾</span></div><div class="app-avatar">W</div></div></div>
+            <div class="app-body">
+              <div class="kv-list">
+                <div class="kv-row"><span class="kv-key">Activities completed</span><span class="kv-val">Dribbling drills · Chest pass · 4-on-4 game</span></div>
+                <div class="kv-row"><span class="kv-key">Student engagement</span><span class="kv-val">High — 28 of 30 students active most of session</span></div>
+                <div class="kv-row"><span class="kv-key">Behavior summary</span><span class="kv-val">Two students received verbal redirects; reset by mid-class.</span></div>
+                <div class="kv-row"><span class="kv-key">Success story</span><span class="kv-val">Marcus made his first 3-pointer; whole class cheered.</span></div>
+                <div class="kv-row"><span class="kv-key">Challenge</span><span class="kv-val">Yard temperature 92°F — early end at 25 min</span></div>
+                <div class="kv-row"><span class="kv-key">Incident filed?</span><span class="kv-val" style="color:#10B981;">No</span></div>
+                <div class="kv-row"><span class="kv-key">Principal heads-up?</span><span class="kv-val" style="color:#6B7280;">No</span></div>
+                <div class="kv-row"><span class="kv-key">Submitted</span><span class="kv-val"><span class="pill pill-ok">✓ On time · 3:42 PM</span></span></div>
+              </div>
+              <div style="display:flex;justify-content:flex-end;margin-top:12px;gap:8px;"><button class="btn-ghost">Save Draft</button><button class="btn-blue">Submit EOD</button></div>
+            </div>
+          </div>
+        </div>
+      </div>`,
+    caption: "<strong>2-minute target.</strong> Every field exists for a reason; nothing optional that the boss can't justify on review."
+  },
+
+  // -----------------------------------------------------------------
+  {
+    id: "08a-assessment",
+    title: "Coach scores an assessment",
+    subtitle: "1–5 rubric (Emerging · Developing · Functional · Proficient · Advanced) plus a required observation tag. No free-text required — tags force a defensible reason for the level.",
+    bullets: [
+      "Skill catalog filtered to the student's grade band",
+      "Required tag: <code>independent</code> · <code>needs_prompt</code> · <code>inconsistent</code> · <code>strong_control</code> · <code>low_confidence</code> · <code>gameplay_transfer_observed</code>",
+      "Optional note for nuance",
+      "Normalized scores (20-40-60-80-100) computed automatically",
+      "Growth = current_normalized − baseline_normalized; surfaced on parent's progress view",
+    ],
+    mock: `
+      <div class="mock-row-h">
+        <div class="mock" style="padding:18px;max-width:440px;">
+          <div style="font-weight:700;color:#111827;font-size:15px;margin-bottom:2px;">Assess: Sam Quinn — Dribbling</div>
+          <div style="font-size:11px;color:#6B7280;margin-bottom:14px;">Grade 3 · Lincoln Elementary · Spring Window</div>
+          <div class="form-group"><label class="form-label">Performance Level</label>
+            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;">
+              <div style="text-align:center;padding:8px 4px;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:6px;font-size:10.5px;color:#9CA3AF;">1<br/>Emerging</div>
+              <div style="text-align:center;padding:8px 4px;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:6px;font-size:10.5px;color:#9CA3AF;">2<br/>Developing</div>
+              <div style="text-align:center;padding:8px 4px;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:6px;font-size:10.5px;color:#9CA3AF;">3<br/>Functional</div>
+              <div style="text-align:center;padding:8px 4px;background:#1E40AF;border:1px solid #1E40AF;border-radius:6px;font-size:10.5px;color:#fff;font-weight:700;">4<br/>Proficient</div>
+              <div style="text-align:center;padding:8px 4px;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:6px;font-size:10.5px;color:#9CA3AF;">5<br/>Advanced</div>
+            </div>
+          </div>
+          <div class="form-group"><label class="form-label">Observation Tag (required)</label><div class="form-input">strong_control ▾</div></div>
+          <div class="form-group"><label class="form-label">Note (optional)</label><div class="form-input" style="height:auto;padding:10px;font-size:12px;color:#6B7280;line-height:1.5;">Confident under defender pressure today.</div></div>
+          <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:6px;padding:10px;font-size:12px;color:#1E40AF;margin-top:6px;">
+            <strong>Normalized score:</strong> 80 / 100 → <span class="pill pill-blue">On Track</span>
+          </div>
+          <div class="btn-row"><button class="btn-ghost">Cancel</button><button class="btn-blue">Save Score</button></div>
+        </div>
+        <div style="flex:1;min-width:240px;">
+          <div style="font-size:11px;color:rgba(255,255,255,.5);margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px;">Sam's running progress</div>
+          <div class="mock" style="padding:12px;">
+            <div class="kv-list">
+              <div class="kv-row"><span class="kv-key">Baseline (Sept)</span><span class="kv-val">Level 2 · 40</span></div>
+              <div class="kv-row"><span class="kv-key">Current (May)</span><span class="kv-val" style="color:#10B981;">Level 4 · 80</span></div>
+              <div class="kv-row"><span class="kv-key">Growth</span><span class="kv-val" style="color:#10B981;">+40 points</span></div>
+              <div class="kv-row"><span class="kv-key">Performance Band</span><span class="kv-val"><span class="pill pill-blue">On Track</span></span></div>
+            </div>
+          </div>
+        </div>
+      </div>`,
+    caption: "<strong>No raw scores without context.</strong> The tag is required. The note is optional. The number is computed."
+  },
+
+  // -----------------------------------------------------------------
+  {
+    id: "09-incident",
+    title: "Coach files an incident",
+    subtitle: "Type, severity, description, action taken. School + family notification flags tracked separately for compliance. Critical incidents trigger admin notifications immediately.",
+    bullets: [
+      "Type: injury / behavior / equipment / facility",
+      "Severity: low · medium · high · critical",
+      "Critical → notification fires to all org admins / overseers",
+      "School &amp; family notification booleans tracked separately for FERPA / duty-of-care logs",
+      "Audit log captures the chain of custody on every state change",
+    ],
+    mock: `
+      <div class="mock-row-h">
+        <div class="mock" style="padding:18px;max-width:480px;">
+          <div style="background:#1E40AF;color:#fff;padding:10px 14px;border-radius:6px;font-weight:700;font-size:14px;margin:-18px -18px 14px;">⚠ Incident · Lincoln · 2026-05-09</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <div class="form-group" style="margin:0;"><label class="form-label">Type</label><div class="form-input">Injury ▾</div></div>
+            <div class="form-group" style="margin:0;"><label class="form-label">Severity</label><div class="form-input"><span class="pill pill-warn">Medium</span></div></div>
+          </div>
+          <div class="form-group"><label class="form-label">Student (optional)</label><div class="form-input">Sam Quinn (LAUSD-2026-0001)</div></div>
+          <div class="form-group"><label class="form-label">Description</label><div class="form-input" style="height:auto;padding:10px;font-size:12px;color:#374151;line-height:1.5;">Student turned ankle during 4-on-4 game; ice + RICE protocol applied; pain rating 4/10 on dismissal.</div></div>
+          <div class="form-group"><label class="form-label">Immediate action taken</label><div class="form-input" style="height:auto;padding:10px;font-size:12px;color:#374151;line-height:1.5;">Removed from activity, applied ice 15 min, called front office for parent pickup.</div></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px;">
+            <div style="padding:8px;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:6px;font-size:12px;color:#15803D;text-align:center;">✓ School notified</div>
+            <div style="padding:8px;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:6px;font-size:12px;color:#15803D;text-align:center;">✓ Family notified</div>
+          </div>
+          <div class="btn-row"><button class="btn-ghost">Cancel</button><button class="btn-yellow">Submit Incident</button></div>
+        </div>
+        <div style="flex:1;min-width:240px;">
+          <div style="font-size:11px;color:rgba(255,255,255,.5);margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px;">If severity = critical</div>
+          <div class="mock" style="padding:0;">
+            <div style="padding:12px 14px;border-left:3px solid #B91C1C;background:#FEF2F2;">
+              <div style="font-size:12px;color:#991B1B;font-weight:700;">⚠ Critical incident at Lincoln Elementary</div>
+              <div style="font-size:11px;color:#6B7280;margin-top:2px;">Notification sent to all admins · CEO · coach overseer</div>
+            </div>
+          </div>
+          <div style="font-size:11.5px;color:rgba(255,255,255,.5);margin-top:14px;line-height:1.5;">
+            Audit log row written: <code style="background:rgba(255,255,255,.08);padding:1px 4px;border-radius:3px;color:#E5E7EB;">incident_filed</code> · table=incident_reports · record_id=42
+          </div>
+        </div>
+      </div>`,
+    caption: "<strong>Compliance + duty-of-care logged in one form.</strong> Audit log keeps the trail."
+  },
+
+  // -----------------------------------------------------------------
+  {
+    id: "09a-principal",
+    title: "Principal sees the EOD on her dashboard",
+    subtitle: "Principal-portal users see only their school. Read-only summary designed for a 30-second scan between bell rings.",
+    bullets: [
+      "Most recent EOD across all coaches at her school",
+      "Open incidents pinned to the top of the page",
+      "Compliance summary at a glance: % EODs filed on time, today's session count",
+      "Click any session to drill into the full EOD detail",
+    ],
+    mock: `
+      <div class="mock">
+        <div class="app-shell">
+          <div class="app-sb">
+            <div class="app-sb-logo">UFIT <span class="y">·</span></div>
+            <div class="app-sb-item active">📊 Dashboard</div>
+            <div class="app-sb-item">👦 My Students</div>
+            <div class="app-sb-item">📋 EOD Reports</div>
+            <div class="app-sb-item">📊 Surveys</div>
+            <div class="app-sb-item">⚙ Settings</div>
+          </div>
+          <div class="app-main">
+            <div class="app-top"><div class="app-top-l">Lincoln Elementary · Principal Dashboard</div><div class="app-top-r"><div class="app-avatar" style="background:#F59E0B;">SS</div></div></div>
+            <div class="app-body">
+              <div class="app-h2">Welcome, Sarah.</div>
+              <div class="app-h2-sub">Spring 2026 · 12 weeks of programming logged</div>
+              <div style="background:#FEF2F2;border-left:3px solid #B91C1C;border-radius:0 6px 6px 0;padding:10px 12px;font-size:12px;color:#991B1B;margin-bottom:12px;">
+                <strong>1 open incident</strong> — Sam Quinn, ankle injury (Medium, 2026-05-09) — <span style="color:#1E40AF;font-weight:600;">Review →</span>
+              </div>
+              <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);">
+                <div class="stat-card green"><div class="stat-icon">📋</div><div class="stat-val">96%</div><div class="stat-lbl">EOD on time (this week)</div></div>
+                <div class="stat-card"><div class="stat-icon">📅</div><div class="stat-val">12</div><div class="stat-lbl">Sessions logged</div></div>
+                <div class="stat-card"><div class="stat-icon">👦</div><div class="stat-val">126</div><div class="stat-lbl">Students active</div></div>
+              </div>
+              <div style="background:#fff;border:1px solid #E5E7EB;border-radius:6px;padding:12px;">
+                <div style="font-weight:700;font-size:12.5px;color:#111827;margin-bottom:6px;">Latest EOD</div>
+                <div style="font-size:12px;color:#374151;line-height:1.5;">Period 3, 2026-05-09 · Coach Williams · ✓ on-time<br/><span style="color:#6B7280;font-size:11px;">Activities: dribbling drills, chest pass, 4-on-4 game · Engagement: high</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>`,
+    caption: "<strong>30-second scan.</strong> Designed for a principal between bell rings. No tables of raw data, no walls of numbers."
+  },
+
+  // -----------------------------------------------------------------
+  {
+    id: "10-parent-register",
+    title: "Parent self-registers",
+    subtitle: "Parent enters their child's name + LAUSD-style local identifier. We verify it's a real student in the system, then create the parent account and link it. Auto-login at the end.",
+    bullets: [
+      "<strong>Step 1</strong>: child first / last / local identifier — server verifies the match",
+      "<strong>Step 2</strong>: parent name / email / phone / relationship",
+      "Auto-login post-create + admin notification fires",
+      "If both parent slots are full, parent record stays unlinked + admin gets a manual-resolution alert",
+    ],
+    mock: `
+      <div class="mock-row-h">
+        <div class="mock modal-card" style="max-width:380px;">
+          <div class="modal-h">Verify Student <span class="x">×</span></div>
+          <div class="modal-b">
+            <div style="font-size:11.5px;color:#6B7280;margin-bottom:10px;">Enter your child's full name and student ID exactly as it appears on school records.</div>
+            <div class="form-group"><label class="form-label">Student First Name</label><div class="form-input">Sam</div></div>
+            <div class="form-group"><label class="form-label">Student Last Name</label><div class="form-input">Quinn</div></div>
+            <div class="form-group"><label class="form-label">Student ID</label><div class="form-input" style="font-family:ui-monospace,Menlo,monospace;color:#1E40AF;font-weight:700;">LAUSD-2026-0001</div></div>
+            <div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:6px;padding:10px;font-size:12px;color:#15803D;margin-top:8px;">
+              ✓ Verified — <strong>Sam Quinn</strong>, Grade 3, Lincoln Elementary
+            </div>
+            <div class="btn-row"><button class="btn-ghost">Cancel</button><button class="btn-blue">Continue</button></div>
+          </div>
+        </div>
+        <div class="mock modal-card" style="max-width:380px;">
+          <div class="modal-h">Your Information <span class="x">×</span></div>
+          <div class="modal-b">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+              <div class="form-group" style="margin-bottom:8px;"><label class="form-label">First Name</label><div class="form-input">Jamie</div></div>
+              <div class="form-group" style="margin-bottom:8px;"><label class="form-label">Last Name</label><div class="form-input">Quinn</div></div>
+            </div>
+            <div class="form-group" style="margin-bottom:8px;"><label class="form-label">Email</label><div class="form-input">jamie.quinn@gmail.com</div></div>
+            <div class="form-group" style="margin-bottom:8px;"><label class="form-label">Phone</label><div class="form-input">(555) 123-4567</div></div>
+            <div class="form-group" style="margin-bottom:8px;"><label class="form-label">Relationship</label><div class="form-input">Mother ▾</div></div>
+            <div class="form-group" style="margin-bottom:8px;"><label class="form-label">Password</label><div class="form-input" style="color:#9CA3AF;">••••••••</div></div>
+            <div class="btn-row"><button class="btn-ghost">Back</button><button class="btn-blue">Create Account</button></div>
+          </div>
+        </div>
+      </div>`,
+    caption: "<strong>Self-service onboarding.</strong> School staff aren't a bottleneck for parent enrollment. The school provides the IDs once, parents do the rest themselves."
+  },
+
+  // -----------------------------------------------------------------
+  {
+    id: "10a-parent-progress",
+    title: "Parent views child's progress",
+    subtitle: "Baseline → current → growth bands. Behavior readiness. Attendance / participation. Read-only, plain-English. Designed for a phone screen.",
+    bullets: [
+      "Skill summary: baseline 60 → current 80 (+20 growth, On Track → Proficient)",
+      "Top strengths and top growth areas — surfaced automatically",
+      "Behavior readiness: teamwork, effort, self-control, listening, sportsmanship, confidence",
+      "Attendance: 96% · participation: full · last seen 2026-05-09",
+    ],
+    mock: `
+      <div class="mock">
+        <div class="app-shell">
+          <div class="app-sb">
+            <div class="app-sb-logo">UFIT <span class="y">·</span></div>
+            <div class="app-sb-item active">👦 My Children</div>
+            <div class="app-sb-item">⚙ Settings</div>
+          </div>
+          <div class="app-main">
+            <div class="app-top"><div class="app-top-l">Sam Quinn — Spring 2026 Progress</div><div class="app-top-r"><div class="app-avatar" style="background:#F59E0B;">JQ</div></div></div>
+            <div class="app-body">
+              <div style="background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:16px;margin-bottom:10px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                  <div>
+                    <div style="font-weight:800;font-size:18px;color:#111827;">78 / 100</div>
+                    <div style="font-size:11px;color:#6B7280;">Overall UFIT score</div>
+                  </div>
+                  <span class="pill pill-ok" style="font-size:12px;padding:4px 10px;">On Track</span>
+                </div>
+                <div style="height:8px;background:#F3F4F6;border-radius:999px;overflow:hidden;"><div style="width:78%;height:100%;background:linear-gradient(90deg,#10B981 0%,#3B82F6 100%);"></div></div>
+                <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:10px;color:#9CA3AF;"><span>Emerging</span><span>Developing</span><span>On Track</span><span>Proficient</span><span>Advanced</span></div>
+              </div>
+              <div class="mock-row-h" style="gap:8px;">
+                <div style="flex:1;background:#fff;border:1px solid #E5E7EB;border-radius:6px;padding:10px;">
+                  <div style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:.3px;">Top Strength</div>
+                  <div style="font-size:13px;font-weight:700;color:#111827;margin-top:2px;">Dribbling</div>
+                  <div style="font-size:11px;color:#10B981;">80 · Proficient</div>
+                </div>
+                <div style="flex:1;background:#fff;border:1px solid #E5E7EB;border-radius:6px;padding:10px;">
+                  <div style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:.3px;">Top Growth</div>
+                  <div style="font-size:13px;font-weight:700;color:#111827;margin-top:2px;">Receiving Passes</div>
+                  <div style="font-size:11px;color:#3B82F6;">60 → 75 · +15</div>
+                </div>
+                <div style="flex:1;background:#fff;border:1px solid #E5E7EB;border-radius:6px;padding:10px;">
+                  <div style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:.3px;">Attendance</div>
+                  <div style="font-size:13px;font-weight:700;color:#111827;margin-top:2px;">96%</div>
+                  <div style="font-size:11px;color:#10B981;">23 of 24 sessions</div>
+                </div>
+              </div>
+              <div style="background:#fff;border:1px solid #E5E7EB;border-radius:6px;padding:10px;margin-top:8px;font-size:12px;color:#374151;line-height:1.7;">
+                <strong style="color:#111827;">Behavior readiness:</strong> Teamwork 4 · Effort 5 · Self-control 4 · Listening 5 · Sportsmanship 4 · Confidence 4
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>`,
+    caption: "<strong>No grades. No rankings.</strong> Just baseline, current, and the gap between."
+  },
+
+  // -----------------------------------------------------------------
+  {
+    id: "11-csv-export",
+    title: "Admin exports CSV reports",
+    subtitle: "Schools / Coaches / Students each export to CSV with one click. Open in Excel, share via email, attach to a board update.",
+    bullets: [
+      "<code>GET /api/admin/schools/export.csv</code>",
+      "<code>GET /api/admin/coaches/export.csv</code>",
+      "<code>GET /api/admin/students/export.csv</code>",
+      "All admin / CEO only · downloads as attachment with the right filename",
+      "Audit log viewer endpoint also exists (CEO/admin only) for compliance reviews",
+    ],
+    mock: `
+      <div class="mock-row-h">
+        <div class="mock" style="padding:0;flex:1;min-width:340px;">
+          <div class="app-top" style="background:#fff;"><div class="app-top-l">Coaches</div><div class="app-top-r"><button class="btn-ghost" style="font-size:11px;padding:5px 10px;">Export CSV</button><button class="btn-ghost" style="font-size:11px;padding:5px 10px;">Bulk Invite</button><button class="btn-blue" style="font-size:11px;padding:5px 10px;">+ Add Coach</button></div></div>
+          <div style="padding:12px;">
+            <table class="data-table">
+              <thead><tr><th>Coach</th><th>Role</th><th>School</th><th>Status</th></tr></thead>
+              <tbody>
+                <tr><td>Coach Williams</td><td>Head</td><td>Lincoln</td><td><span class="pill pill-ok">✓ Active</span></td></tr>
+                <tr><td>Coach Davis</td><td>Assistant</td><td>Lincoln</td><td><span class="pill pill-ok">✓ Active</span></td></tr>
+                <tr><td>Z. Knight</td><td>Head</td><td>Lincoln</td><td><span class="pill pill-warn">⏱ Pending</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div style="flex:1;min-width:300px;">
+          <div style="font-size:11px;color:rgba(255,255,255,.5);margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px;">Downloaded coaches.csv</div>
+          <div class="mock" style="padding:12px;">
+            <div style="background:#F3F4F6;border-radius:4px;padding:10px;font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:#111827;line-height:1.6;overflow-x:auto;white-space:nowrap;">
+              User ID,First Name,Last Name,Email,Role,Status,Schools<br/>14,Coach,Williams,coach@lincoln.edu,head_coach,active,Lincoln Elementary<br/>15,Coach,Davis,coach@lincoln.edu,assistant_coach,active,Lincoln Elementary<br/>16,Z.,Knight,z.knight@lincoln.edu,head_coach,pending_invite,Lincoln Elementary
+            </div>
+            <div style="font-size:11px;color:#6B7280;margin-top:8px;line-height:1.5;"><strong>Filename:</strong> coaches.csv · <strong>Type:</strong> text/csv · <strong>Disposition:</strong> attachment</div>
+          </div>
+        </div>
+      </div>`,
+    caption: "<strong>Boring CSV.</strong> No proprietary format. The boss owns her data — she can drop it in any spreadsheet, BI tool, or email."
+  },
+
+  // -----------------------------------------------------------------
+  {
+    id: "12-help",
+    title: "Help &amp; feedback",
+    subtitle: "? icon in the top-nav opens a modal. Subject + message → email lands at operations@ufitonline.net within 30 seconds. Auto-captures the page URL the user was on so ops can triage.",
+    bullets: [
+      "Anyone authenticated can submit (any role)",
+      "Auto-captures the page URL via <code>window.location.pathname</code>",
+      "Rate-limited 5/min to deflect abuse",
+      "Audit log row written for every submission (<code>feedback_submitted</code>)",
+      "Server caps subject @ 200 chars and message @ 5000 — defense against pasted novels",
+    ],
+    mock: `
+      <div class="mock-row-h">
+        <div class="mock modal-card" style="max-width:440px;">
+          <div class="modal-h">Help &amp; Feedback <span class="x">×</span></div>
+          <div class="modal-b">
+            <div style="font-size:11.5px;color:#6B7280;margin-bottom:12px;line-height:1.5;">Need help, found a bug, or have feedback? Email <span style="color:#1E40AF;font-weight:600;">operations@ufitonline.net</span> or send a message below.</div>
+            <div class="form-group"><label class="form-label">Subject</label><div class="form-input">Login screen on iPad won't accept my password</div></div>
+            <div class="form-group"><label class="form-label">Message</label><div class="form-input" style="height:auto;padding:10px;font-size:12px;color:#374151;line-height:1.5;">The keyboard covers the password field on portrait orientation. Working in landscape for now. iPad Pro 11" iOS 18.</div></div>
+            <div class="btn-row"><button class="btn-ghost">Cancel</button><button class="btn-blue">Send</button></div>
+          </div>
+        </div>
+        <div style="flex:1;min-width:240px;">
+          <div style="font-size:11px;color:rgba(255,255,255,.5);margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px;">Email lands at ops</div>
+          <div class="mock" style="padding:0;">
+            <div style="background:#1E40AF;color:#fff;padding:10px 14px;font-size:11px;">From: <strong>Ufit Motion</strong> &lt;operations@ufitonline.net&gt;<br/>To: operations@ufitonline.net<br/>Subject: <strong>[Ufit Feedback] Login screen on iPad...</strong></div>
+            <div style="padding:14px;font-size:12px;line-height:1.6;color:#111827;">
+              <strong>From:</strong> admin@ufit.com (admin)<br/>
+              <strong>Page:</strong> /login<br/>
+              <strong>Subject:</strong> Login screen on iPad...
+              <hr style="border:none;border-top:1px solid #E5E7EB;margin:8px 0;"/>
+              <span style="color:#374151;">The keyboard covers the password field on portrait orientation. Working in landscape for now. iPad Pro 11" iOS 18.</span>
+            </div>
+          </div>
+          <div style="background:rgba(245,158,11,.12);border-left:3px solid #F59E0B;border-radius:0 6px 6px 0;padding:10px 12px;font-size:11.5px;color:#FCD34D;margin-top:10px;line-height:1.5;">
+            <strong>No "file a Jira ticket" friction.</strong> Email lands directly with the right human within 30 seconds.
+          </div>
+        </div>
+      </div>`,
+    caption: "<strong>Right answer, right inbox.</strong> Coach in the field can flag a bug in 60 seconds without leaving the app."
+  },
+
+  // -----------------------------------------------------------------
+  {
+    id: "13-thanks",
+    title: "That's the platform.",
+    subtitle: "16 scenes. Four roles. One source of truth on student progress. Built so a coach in the field can submit an EOD in two minutes, an admin can find any school's data in three clicks, and a principal can read a student's progress in thirty seconds.",
+    bullets: [
+      "<strong>32 tables</strong>, all org-scoped — no cross-school data leakage",
+      "<strong>FERPA-aware</strong> by design — student records are education records",
+      "<strong>~1,250 lines of test code</strong> covering wipe / email / picker / bulk-invite / invite-codes / role-edit / CSV / audit-log",
+      "<strong>Self-authored</strong> Privacy Policy + Terms of Service — iterate as feedback comes in",
+      "<strong>Hosted on Render</strong>, Postgres on Supabase, transactional email via Gmail Workspace",
+    ],
+    mock: `
+      <div class="mock" style="background:linear-gradient(135deg,#1E40AF 0%,#1E3A8A 100%);padding:36px 24px;color:#fff;text-align:center;">
+        <div style="font-weight:900;font-size:32px;letter-spacing:.5px;">UFIT <span style="color:#F59E0B;">MOTION</span></div>
+        <div style="font-size:14px;opacity:.85;margin-top:6px;font-weight:500;">The future of PE program management.</div>
+        <div style="font-size:12px;opacity:.7;margin-top:18px;font-family:ui-monospace,Menlo,monospace;background:rgba(0,0,0,.25);display:inline-block;padding:8px 14px;border-radius:6px;border:1px solid rgba(255,255,255,.15);">https://ufitmotion.onrender.com</div>
+        <div style="display:flex;justify-content:center;gap:30px;margin-top:24px;font-size:12px;opacity:.7;">
+          <span>🏫 Multi-school</span><span>👟 Coach-first</span><span>👦 Student-centered</span><span>👨‍👩‍👧 Parent-visible</span>
+        </div>
+      </div>`,
+    caption: "<strong>Built for the field.</strong> Now ready for the first school."
+  }
+];
+
+const stage = document.getElementById('stage');
+const bookmarks = document.getElementById('bookmarks');
+const progFill = document.getElementById('progress-fill');
+const countEl = document.getElementById('count');
+
+let current = 0;
+let playing = false;
+let timer = null;
+const SCENE_MS = 37000;  // ~10 min total for 17 scenes
+
+SCENES.forEach((s, i) => {
+  const div = document.createElement('div');
+  div.className = 'scene';
+  div.id = `scene-${i}`;
+  const bulletsHtml = (s.bullets || []).map(b => `<li>${b}</li>`).join('');
+  div.innerHTML = `
+    <div class="scene-num">Scene ${String(i + 1).padStart(2, '0')} of ${SCENES.length}</div>
+    <h1>${s.title}</h1>
+    <div class="subtitle">${s.subtitle}</div>
+    <ul class="bullets">${bulletsHtml}</ul>
+    ${s.mock || ''}
+    <div class="caption">${s.caption}</div>
+  `;
+  stage.appendChild(div);
+
+  const b = document.createElement('button');
+  b.className = 'bookmark';
+  b.dataset.idx = i;
+  b.innerHTML = `<span class="num">${String(i + 1).padStart(2, '0')}</span> ${s.title}`;
+  b.addEventListener('click', () => goTo(i));
+  bookmarks.appendChild(b);
+});
+
+function goTo(i) {
+  if (i < 0 || i >= SCENES.length) return;
+  document.querySelectorAll('.scene').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.bookmark').forEach(el => el.classList.remove('active'));
+  document.getElementById(`scene-${i}`).classList.add('active');
+  document.querySelector(`.bookmark[data-idx="${i}"]`).classList.add('active');
+  current = i;
+  countEl.textContent = `${i + 1} / ${SCENES.length}`;
+  progFill.style.width = `${((i + 1) / SCENES.length) * 100}%`;
+  document.querySelector(`.bookmark[data-idx="${i}"]`).scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+function next() { goTo(Math.min(SCENES.length - 1, current + 1)); }
+function prev() { goTo(Math.max(0, current - 1)); }
+
+document.getElementById('next').addEventListener('click', () => { stop(); next(); });
+document.getElementById('prev').addEventListener('click', () => { stop(); prev(); });
+document.getElementById('play').addEventListener('click', () => playing ? stop() : play());
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight') next();
+  else if (e.key === 'ArrowLeft') prev();
+  else if (e.key === ' ') { e.preventDefault(); playing ? stop() : play(); }
+});
+
+function play() {
+  playing = true;
+  document.getElementById('play').textContent = '⏸ Pause';
+  timer = setInterval(() => {
+    if (current >= SCENES.length - 1) return stop();
+    next();
+  }, SCENE_MS);
+}
+function stop() {
+  playing = false;
+  document.getElementById('play').textContent = '▶ Play';
+  clearInterval(timer);
+}
+
+goTo(0);
+</script>
+</body>
+</html>

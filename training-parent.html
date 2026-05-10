@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ufit Motion — Parent Training</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',system-ui,sans-serif;background:#0A1628;color:#E5E7EB;height:100vh;overflow:hidden;display:flex;flex-direction:column}
+  header{padding:14px 20px;background:#060E1D;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;gap:14px}
+  .brand{font-weight:800;font-size:18px;letter-spacing:.5px}
+  .brand .y{color:#F59E0B}
+  .crumb{color:rgba(255,255,255,.5);font-size:13px}
+  .role-pill{padding:3px 10px;background:#A855F7;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase}
+  main{flex:1;display:flex;overflow:hidden}
+  aside{width:260px;background:#060E1D;border-right:1px solid rgba(255,255,255,.08);overflow-y:auto;padding:16px 0;flex-shrink:0}
+  aside h3{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:rgba(255,255,255,.4);padding:0 18px;margin-bottom:8px}
+  .bk{display:block;width:100%;text-align:left;background:transparent;color:rgba(255,255,255,.7);border:0;padding:9px 18px;font-size:13px;cursor:pointer;font-family:inherit;border-left:3px solid transparent;line-height:1.4}
+  .bk:hover{background:rgba(255,255,255,.04);color:#fff}
+  .bk.active{background:rgba(168,85,247,.15);color:#fff;border-left-color:#A855F7}
+  .bk .num{display:inline-block;width:30px;color:rgba(255,255,255,.4);font-weight:600}
+  #stage{flex:1;position:relative;overflow:hidden;background:#0F1F33}
+  .scene{position:absolute;inset:0;opacity:0;transition:opacity .5s ease;pointer-events:none;padding:36px 56px;overflow-y:auto}
+  .scene.active{opacity:1;pointer-events:auto}
+  .scene-num{font-size:11px;letter-spacing:.7px;text-transform:uppercase;color:rgba(255,255,255,.45);margin-bottom:6px}
+  .scene h1{font-size:28px;line-height:1.2;color:#fff;margin-bottom:6px;font-weight:800}
+  .subtitle{color:rgba(255,255,255,.65);font-size:14px;margin-bottom:18px;max-width:780px;line-height:1.55}
+  .steps{margin:6px 0 16px;padding-left:0;list-style:none;color:rgba(255,255,255,.85);max-width:780px;counter-reset:stp}
+  .steps li{margin:6px 0;display:flex;gap:10px;font-size:13px;line-height:1.6}
+  .steps li::before{content:counter(stp);counter-increment:stp;width:22px;height:22px;background:#A855F7;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0;margin-top:1px}
+  .steps code{background:rgba(255,255,255,.08);padding:1px 6px;border-radius:3px;font-size:12px}
+  .caption{display:flex;gap:12px;background:rgba(245,158,11,.12);border-left:3px solid #F59E0B;border-radius:0 8px 8px 0;padding:12px 16px;margin-top:14px;max-width:880px;font-size:13.5px;line-height:1.5}
+  .caption strong{color:#FCD34D}
+  .mock{background:#fff;color:#111827;border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.45);overflow:hidden;border:1px solid rgba(0,0,0,.08);max-width:780px;margin-bottom:14px;padding:20px}
+  .mock-h{background:#A855F7;color:#fff;font-weight:700;padding:12px 18px;font-size:13px;margin:-20px -20px 14px;border-radius:10px 10px 0 0}
+  .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600}
+  .pill-ok{background:#DCFCE7;color:#15803D} .pill-blue{background:#DBEAFE;color:#1E3A8A}
+  .form{background:#F9FAFB;padding:8px 10px;border-radius:6px;font-size:12.5px;color:#111827;border:1px solid #E5E7EB;margin-bottom:6px}
+  .lbl{font-size:10.5px;color:#6B7280;text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px}
+  footer{background:#060E1D;border-top:1px solid rgba(255,255,255,.08);padding:12px 20px;display:flex;align-items:center;gap:12px}
+  .btn{background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.14);border-radius:6px;padding:8px 14px;font-size:13px;font-family:inherit;cursor:pointer;font-weight:600}
+  .btn:hover{background:rgba(255,255,255,.16)}
+  .btn.primary{background:#A855F7;border-color:#A855F7}
+  #progress{flex:1;height:6px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden;margin:0 14px}
+  #fill{height:100%;background:#F59E0B;width:0;transition:width .3s linear}
+  #count{font-size:12px;color:rgba(255,255,255,.5);min-width:55px;text-align:right}
+  @media (max-width:760px){aside{display:none}.scene{padding:20px}.scene h1{font-size:22px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">UFIT <span class="y">MOTION</span></div>
+  <div class="role-pill">Parent Training</div>
+  <div class="crumb">Press-play tutorial · ~3 minutes</div>
+</header>
+<main>
+  <aside><h3>Scenes</h3><div id="bk"></div></aside>
+  <div id="stage"></div>
+</main>
+<footer>
+  <button class="btn" id="prev">◀ Prev</button>
+  <button class="btn primary" id="play">▶ Play</button>
+  <button class="btn" id="next">Next ▶</button>
+  <div id="progress"><div id="fill"></div></div>
+  <span id="count"></span>
+</footer>
+<script>
+const SCENES = [
+  {
+    title: "Welcome",
+    sub: "You're a parent. You want to see how your child is doing in PE. The platform is built so you can self-register and view progress in plain English — no school staff intervention required.",
+    steps: [
+      "You'll need: your child's first name, last name, and student ID.",
+      "Don't have the ID? Your school's office can give it to you.",
+      "Three minutes to register. Lifetime access.",
+      "Watch this once before signing up.",
+    ],
+    mock: `<div class="mock"><div class="mock-h">What you'll see</div>
+      <ul style="margin-left:18px;font-size:13px;line-height:1.7;">
+        <li>Overall progress score (0-100) with a performance band</li>
+        <li>Top strength · top growth area · attendance</li>
+        <li>Behavior readiness across 6 dimensions</li>
+        <li>Updates in real time as your child's coach files reports</li>
+      </ul></div>`,
+    cap: "<strong>No grades. No rankings.</strong> Just baseline, current, and the growth between."
+  },
+  {
+    title: "Self-registering · Step 1 (verify your child)",
+    sub: "Enter your child's name + student ID. The system verifies it's a real student before letting you continue.",
+    steps: [
+      "Open <code>ufitmotion.onrender.com/login</code>",
+      "Click <strong>Parent Portal</strong> (family icon)",
+      "Click <strong>Create Account</strong> below the Sign In form",
+      "Enter your child's first name, last name, and student ID",
+      "Click <strong>Continue</strong>. The system shows ✓ Verified if everything matches.",
+    ],
+    mock: `<div class="mock"><div class="mock-h">Verify Student</div>
+      <div style="font-size:11.5px;color:#6B7280;margin-bottom:8px;">Enter your child's full name and student ID exactly as it appears on school records.</div>
+      <div class="lbl">First Name</div><div class="form">Sam</div>
+      <div class="lbl">Last Name</div><div class="form">Quinn</div>
+      <div class="lbl">Student ID</div><div class="form" style="font-family:ui-monospace,Menlo,monospace;color:#1E40AF;font-weight:700;">LAUSD-2026-0001</div>
+      <div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:6px;padding:10px;font-size:12px;color:#15803D;margin-top:8px;">✓ Verified — <strong>Sam Quinn</strong>, Grade 3, Lincoln Elementary</div></div>`,
+    cap: "<strong>If verification fails:</strong> double-check the spelling. Names + ID must match school records exactly. Your school's office can help."
+  },
+  {
+    title: "Self-registering · Step 2 (your info)",
+    sub: "Now your details — name, email, phone, relationship, and a password (8+ characters). Submit and you're in.",
+    steps: [
+      "First name + last name (yours, not your child's)",
+      "Email — this is your login + where reset links go",
+      "Phone — for ops contact only, not shown to coaches",
+      'Relationship — Mother / Father / Guardian / Grandparent / Other',
+      "Password — 8+ characters",
+      "Click <strong>Create Account</strong> → auto-logged in to your child's progress view",
+    ],
+    mock: `<div class="mock"><div class="mock-h">Your Information</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div><div class="lbl">First</div><div class="form">Jamie</div></div>
+        <div><div class="lbl">Last</div><div class="form">Quinn</div></div>
+      </div>
+      <div class="lbl">Email</div><div class="form">jamie.quinn@gmail.com</div>
+      <div class="lbl">Phone</div><div class="form">(555) 123-4567</div>
+      <div class="lbl">Relationship</div><div class="form">Mother ▾</div>
+      <div class="lbl">Password</div><div class="form">••••••••</div></div>`,
+    cap: "<strong>Both parent slots full?</strong> If your child already has two parents registered, your account creates but stays unlinked. Email <code>operations@ufitonline.net</code> for help."
+  },
+  {
+    title: "Viewing your child's progress",
+    sub: "Read-only. There's nothing to fill in — Ufit's coaches do all the data entry. Updates show up as the season progresses.",
+    steps: [
+      "<strong>Overall UFIT score</strong> (0-100) with a performance band: Emerging / Developing / On Track / Proficient / Advanced",
+      "<strong>Top strength</strong> — your child's highest-scoring skill",
+      "<strong>Top growth</strong> — biggest improvement from baseline",
+      "<strong>Attendance</strong> — how many sessions your child attended",
+      "<strong>Behavior readiness</strong> — six dimensions (teamwork, effort, self-control, listening, sportsmanship, confidence)",
+    ],
+    mock: `<div class="mock"><div class="mock-h">Sam Quinn · Spring 2026 Progress</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;"><div><div style="font-weight:800;font-size:18px;">78 / 100</div><div style="font-size:11px;color:#6B7280;">Overall UFIT score</div></div><span class="pill pill-ok">On Track</span></div>
+      <div style="height:8px;background:#F3F4F6;border-radius:999px;overflow:hidden;margin-bottom:10px;"><div style="width:78%;height:100%;background:linear-gradient(90deg,#10B981,#3B82F6);"></div></div>
+      <div style="display:flex;gap:6px;">
+        <div style="flex:1;background:#F9FAFB;border-radius:6px;padding:8px;"><div style="font-size:10px;color:#6B7280;">TOP STRENGTH</div><div style="font-size:13px;font-weight:700;">Dribbling · 80</div></div>
+        <div style="flex:1;background:#F9FAFB;border-radius:6px;padding:8px;"><div style="font-size:10px;color:#6B7280;">TOP GROWTH</div><div style="font-size:13px;font-weight:700;">+15 · Receiving</div></div>
+        <div style="flex:1;background:#F9FAFB;border-radius:6px;padding:8px;"><div style="font-size:10px;color:#6B7280;">ATTENDANCE</div><div style="font-size:13px;font-weight:700;">96%</div></div>
+      </div></div>`,
+    cap: "<strong>Plain English.</strong> No grades, no rankings — just where your child started, where they are now, and what's improving."
+  },
+  {
+    title: "Multiple children?",
+    sub: "Once you've registered with one child, you can add more from your dashboard.",
+    steps: [
+      "From your dashboard, click <strong>My Children</strong>",
+      "Click <strong>+ Add Another Child</strong>",
+      "Repeat the verification step (first / last / student ID)",
+      "Both children appear on your dashboard going forward",
+    ],
+    mock: `<div class="mock"><div class="mock-h">My Children</div>
+      <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:6px;padding:12px;margin-bottom:6px;"><strong>Sam Quinn</strong> · Grade 3 · Lincoln Elementary <span class="pill pill-ok" style="float:right;">On Track</span></div>
+      <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:6px;padding:12px;"><strong>Riley Quinn</strong> · Grade 1 · Lincoln Elementary <span class="pill pill-blue" style="float:right;">Proficient</span></div>
+      <div style="text-align:center;margin-top:10px;color:#A855F7;font-weight:600;font-size:12px;">+ Add Another Child</div></div>`,
+    cap: "<strong>One account, all your children.</strong> No need to create separate accounts per child."
+  },
+  {
+    title: "Account &amp; password",
+    sub: "Two settings to know: update your contact info, and change your password.",
+    steps: [
+      "Settings → <strong>My Profile</strong> → edit name, email, phone, preferred contact",
+      "Settings → <strong>Change Password</strong> → enter current + new (8+ chars)",
+      "Forgot your password? Login screen → 'Forgot password?' → reset link arrives in ~30 sec",
+      "Need to disable parent-portal access? Email <code>operations@ufitonline.net</code>",
+    ],
+    mock: `<div class="mock"><div class="mock-h">Settings</div>
+      <div style="border-bottom:1px solid #F3F4F6;padding:10px 0;font-size:13px;"><strong>My Profile</strong> <span style="color:#6B7280;">→ name, email, phone</span></div>
+      <div style="border-bottom:1px solid #F3F4F6;padding:10px 0;font-size:13px;"><strong>Change Password</strong> <span style="color:#6B7280;">→ current, new (8+ chars)</span></div>
+      <div style="padding:10px 0;font-size:13px;color:#B91C1C;"><strong>Sign Out</strong></div></div>`,
+    cap: "<strong>Privacy guaranteed.</strong> Your contact info is never shared with other parents or with the school's coaches."
+  },
+  {
+    title: "You're set.",
+    sub: "Sign up takes 3 minutes. Once registered, you can check in any time. Updates show up as your child's coach files reports.",
+    steps: [
+      "Visit <code>ufitmotion.onrender.com/login</code>",
+      "Click Parent Portal → Create Account",
+      "Verify with your child's name + student ID",
+      "Check progress as often as you'd like",
+      "Questions? Email <code>operations@ufitonline.net</code> — real humans respond.",
+    ],
+    mock: `<div class="mock" style="background:linear-gradient(135deg,#A855F7,#7C3AED);color:#fff;text-align:center;padding:32px;">
+      <div style="font-weight:900;font-size:24px;letter-spacing:.5px;">UFIT <span style="color:#F59E0B;">MOTION</span></div>
+      <div style="opacity:.9;margin-top:6px;font-size:13px;">A clear window into your child's PE program.</div></div>`,
+    cap: "<strong>Privacy first.</strong> Your child's records are protected under FERPA. Read our Privacy Policy at <code>/privacy</code>."
+  }
+];
+
+const stage=document.getElementById('stage'),bk=document.getElementById('bk'),fill=document.getElementById('fill'),count=document.getElementById('count');
+let cur=0,playing=false,timer=null;const MS=27000;
+SCENES.forEach((s,i)=>{const d=document.createElement('div');d.className='scene';d.id='s'+i;
+const stp=(s.steps||[]).map(x=>`<li>${x}</li>`).join('');
+d.innerHTML=`<div class="scene-num">Scene ${String(i+1).padStart(2,'0')} of ${SCENES.length}</div><h1>${s.title}</h1><div class="subtitle">${s.sub}</div><ul class="steps">${stp}</ul>${s.mock||''}<div class="caption">${s.cap}</div>`;
+stage.appendChild(d);
+const b=document.createElement('button');b.className='bk';b.dataset.idx=i;b.innerHTML=`<span class="num">${String(i+1).padStart(2,'0')}</span> ${s.title}`;b.onclick=()=>go(i);bk.appendChild(b);});
+function go(i){if(i<0||i>=SCENES.length)return;document.querySelectorAll('.scene').forEach(e=>e.classList.remove('active'));document.querySelectorAll('.bk').forEach(e=>e.classList.remove('active'));document.getElementById('s'+i).classList.add('active');document.querySelector(`.bk[data-idx="${i}"]`).classList.add('active');cur=i;count.textContent=`${i+1} / ${SCENES.length}`;fill.style.width=`${((i+1)/SCENES.length)*100}%`;document.querySelector(`.bk[data-idx="${i}"]`).scrollIntoView({block:'nearest',behavior:'smooth'});}
+document.getElementById('next').onclick=()=>{stop();go(Math.min(SCENES.length-1,cur+1));};
+document.getElementById('prev').onclick=()=>{stop();go(Math.max(0,cur-1));};
+document.getElementById('play').onclick=()=>playing?stop():play();
+addEventListener('keydown',e=>{if(e.key==='ArrowRight')go(Math.min(SCENES.length-1,cur+1));else if(e.key==='ArrowLeft')go(Math.max(0,cur-1));else if(e.key===' '){e.preventDefault();playing?stop():play();}});
+function play(){playing=true;document.getElementById('play').textContent='⏸ Pause';timer=setInterval(()=>{if(cur>=SCENES.length-1)return stop();go(cur+1);},MS);}
+function stop(){playing=false;document.getElementById('play').textContent='▶ Play';clearInterval(timer);}
+go(0);
+</script>
+</body>
+</html>

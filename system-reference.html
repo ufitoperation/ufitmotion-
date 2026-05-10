@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ufit Motion — System Reference</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--blue:#1E40AF;--yellow:#F59E0B;--ink:#111827;--muted:#6B7280;--rule:#E5E7EB;--bg:#FAFBFC}
+  body{font-family:'Inter',system-ui,sans-serif;color:var(--ink);background:var(--bg);line-height:1.6}
+  .topbar{background:var(--blue);color:#fff;padding:24px 32px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+  .topbar .brand{font-size:20px;font-weight:800;letter-spacing:.5px}
+  .topbar .brand .y{color:var(--yellow)}
+  .topbar .crumb{font-size:12px;opacity:.85;text-transform:uppercase;letter-spacing:.7px}
+  .doc-wrap{max-width:1080px;margin:0 auto;padding:36px 32px 80px;display:grid;grid-template-columns:240px 1fr;gap:36px}
+  .toc{position:sticky;top:24px;align-self:start;background:#fff;border:1px solid var(--rule);border-radius:8px;padding:18px;font-size:13px;max-height:calc(100vh - 48px);overflow-y:auto}
+  .toc h3{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:10px;font-weight:700}
+  .toc a{display:block;padding:5px 0;color:#374151;text-decoration:none;border-left:2px solid transparent;padding-left:10px;margin-left:-10px}
+  .toc a:hover{color:var(--blue);border-left-color:var(--blue)}
+  .toc a.sub{padding-left:20px;font-size:12.5px;color:var(--muted)}
+  main{min-width:0}
+  h1{font-size:34px;font-weight:800;color:var(--ink);margin-bottom:8px;line-height:1.15}
+  .lead{color:var(--muted);font-size:15px;line-height:1.55;max-width:760px;margin-bottom:32px}
+  h2{font-size:22px;font-weight:800;color:var(--ink);margin:40px 0 12px;padding-top:20px;border-top:1px solid var(--rule)}
+  h2:first-of-type{border-top:0;padding-top:0}
+  h3{font-size:16px;font-weight:700;color:var(--ink);margin:18px 0 6px}
+  p{margin-bottom:14px;color:#374151}
+  ul,ol{margin:6px 0 16px 24px;color:#374151}
+  li{margin:4px 0}
+  code{background:#F1F5F9;padding:1px 6px;border-radius:3px;font-size:13px;color:#0F172A;font-family:ui-monospace,Menlo,monospace}
+  table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--rule);border-radius:8px;overflow:hidden;margin:14px 0;font-size:13.5px}
+  th{background:#F8FAFC;text-align:left;padding:10px 12px;font-weight:700;font-size:12px;color:#0F172A;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--rule)}
+  td{padding:10px 12px;border-bottom:1px solid #F3F4F6;color:#374151;vertical-align:top}
+  tr:last-child td{border-bottom:0}
+  .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600}
+  .pill-blue{background:#DBEAFE;color:#1E3A8A}
+  .pill-amber{background:#FEF3C7;color:#92400E}
+  .pill-green{background:#DCFCE7;color:#15803D}
+  .pill-red{background:#FEE2E2;color:#B91C1C}
+  .pill-gray{background:#F3F4F6;color:#374151}
+  .callout{display:flex;gap:14px;background:#FEF9E7;border-left:4px solid var(--yellow);padding:14px 16px;border-radius:0 8px 8px 0;margin:16px 0;font-size:14px;line-height:1.55}
+  .callout strong{color:#92400E}
+  .callout-blue{background:#EFF6FF;border-color:var(--blue)}
+  .callout-blue strong{color:var(--blue)}
+  .flow{background:#fff;border:1px solid var(--rule);border-radius:10px;padding:24px;margin:18px 0;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+  .flow-title{font-size:13px;font-weight:700;color:var(--blue);margin-bottom:14px;text-transform:uppercase;letter-spacing:.4px}
+  .flow-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0;font-size:13.5px}
+  .flow-node{padding:8px 14px;border-radius:6px;font-weight:600;color:#fff;font-size:12.5px;white-space:nowrap}
+  .flow-node.coach{background:#10B981}
+  .flow-node.admin{background:#1E40AF}
+  .flow-node.principal{background:#F59E0B}
+  .flow-node.parent{background:#A855F7}
+  .flow-node.system{background:#475569}
+  .flow-arrow{color:var(--muted);font-size:18px}
+  .flow-action{color:#374151;font-size:13px;font-style:italic}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:14px 0}
+  .card{background:#fff;border:1px solid var(--rule);border-radius:8px;padding:16px}
+  .card h4{font-size:14px;font-weight:700;margin-bottom:6px;color:var(--ink)}
+  .card p{font-size:13px;color:var(--muted);margin:0;line-height:1.5}
+  .footer{margin-top:60px;padding-top:24px;border-top:1px solid var(--rule);font-size:12px;color:var(--muted);text-align:center;line-height:1.6}
+  @media (max-width:880px){
+    .doc-wrap{grid-template-columns:1fr;padding:20px}
+    .toc{position:static;max-height:none}
+    .grid-2{grid-template-columns:1fr}
+  }
+  @media print{
+    .topbar{padding:16px 24px}
+    .toc{display:none}
+    .doc-wrap{grid-template-columns:1fr;padding:0 24px}
+    h2{break-before:page}
+    h2:first-of-type{break-before:auto}
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">UFIT <span class="y">MOTION</span></div>
+  <div class="crumb">System Reference · Architecture &amp; Communication Flow</div>
+</div>
+<div class="doc-wrap">
+  <nav class="toc" aria-label="Table of contents">
+    <h3>Contents</h3>
+    <a href="#overview">1. Overview</a>
+    <a href="#architecture">2. Architecture</a>
+    <a href="#data-model">3. Data Model</a>
+    <a href="#roles" class="">4. Roles &amp; Permissions</a>
+    <a href="#flow">5. Communication Flow</a>
+    <a href="#flow-session" class="sub">5a. Session lifecycle</a>
+    <a href="#flow-incident" class="sub">5b. Incident lifecycle</a>
+    <a href="#flow-onboard" class="sub">5c. Coach onboarding</a>
+    <a href="#flow-parent" class="sub">5d. Parent onboarding</a>
+    <a href="#auth">6. Auth &amp; Security</a>
+    <a href="#email">7. Email &amp; Notifications</a>
+    <a href="#ferpa">8. FERPA &amp; Compliance</a>
+    <a href="#ops">9. Operations</a>
+  </nav>
+  <main>
+    <h1>System Reference</h1>
+    <p class="lead">A guide to how Ufit Motion is built — the data model, how the four user roles interact, the lifecycle of every important action (session, incident, onboarding), and the operational shape of the platform. Aimed at administrators, future engineers, and anyone evaluating Ufit Motion technically.</p>
+
+    <h2 id="overview">1. Overview</h2>
+    <p>Ufit Motion is a multi-organization PE program management platform. One installation serves multiple school districts, with strict data isolation between organizations. Inside an organization, four user roles consume and produce data:</p>
+    <table>
+      <thead><tr><th>Role</th><th>What they do</th><th>What they see</th></tr></thead>
+      <tbody>
+        <tr><td><span class="pill pill-blue">Admin / CEO</span></td><td>Onboard schools, hire coaches, monitor compliance, export reports</td><td>Everything across the organization</td></tr>
+        <tr><td><span class="pill pill-green">Coach</span></td><td>Run sessions, log EODs, score assessments, file incidents</td><td>Their assigned schools only</td></tr>
+        <tr><td><span class="pill pill-amber">Principal / School Staff</span></td><td>Review EODs, monitor program health at their school</td><td>Their one school only (read-mostly)</td></tr>
+        <tr><td><span class="pill" style="background:#F3E8FF;color:#6B21A8;">Parent</span></td><td>View their child's progress</td><td>Their child's record only</td></tr>
+      </tbody>
+    </table>
+    <p>The platform is opinionated: every screen exists for a reason. There are no dashboards "you can customize," no "themes," no "workflow builders." The product is a <strong>service-delivery tool</strong>, not a no-code platform.</p>
+
+    <h2 id="architecture">2. Architecture</h2>
+    <p>Ufit Motion is a single Flask web application backed by Postgres, hosted on Render, with a Supabase-managed database.</p>
+    <table>
+      <thead><tr><th>Layer</th><th>Technology</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Backend</td><td>Flask 3 (Python 3.12)</td><td>Mature, simple, well-understood. Single-process gunicorn under Render.</td></tr>
+        <tr><td>Database</td><td>PostgreSQL 15+ via Supabase</td><td>Managed Postgres with automatic backups, point-in-time recovery, and a transaction pooler for connection multiplexing.</td></tr>
+        <tr><td>Frontend</td><td>Vanilla JavaScript SPA</td><td>No framework dependency. The entire frontend lives in one <code>static/app.js</code> file and one <code>templates/index.html</code> shell. Cold load is small (&lt;200 KB).</td></tr>
+        <tr><td>Hosting</td><td>Render (web service + cron)</td><td>Auto-deploy from <code>main</code> branch on push. One nightly cron recalculates coach performance scores.</td></tr>
+        <tr><td>Email</td><td>Gmail SMTP (paid Render) <em>or</em> Resend HTTP API (free Render)</td><td>Dual transport — code prefers Resend if configured, falls back to Gmail SMTP.</td></tr>
+        <tr><td>Auth</td><td>Flask sessions (signed-cookie)</td><td>HTTP-only, SameSite=Strict, secure flag in production. PBKDF2-SHA-256 password hashing.</td></tr>
+        <tr><td>CRM sync</td><td>HubSpot integration (optional)</td><td>New principals + parents are mirrored to HubSpot for outreach tracking.</td></tr>
+      </tbody>
+    </table>
+    <div class="callout callout-blue">
+      <div><strong>Single source of truth.</strong> All operational data lives in one Supabase Postgres database. There are no microservices, no cross-database joins, no eventual-consistency edge cases. A query against the production DB returns the truth at the time of the query.</div>
+    </div>
+
+    <h2 id="data-model">3. Data Model</h2>
+    <p>32 tables in total, organized into four conceptual groups:</p>
+
+    <h3>Identity (who's in the system)</h3>
+    <ul>
+      <li><code>organizations</code> — the top-level tenant boundary. Every other row is scoped to one of these.</li>
+      <li><code>regions</code> — geographic groupings inside an organization.</li>
+      <li><code>contracts</code> — the legal agreement between Ufit and a school district.</li>
+      <li><code>users</code> — the canonical identity row. Joined to <code>staff_profiles</code> or <code>parents</code> depending on role.</li>
+      <li><code>staff_profiles</code> — Ufit-employee details (employee type, hire date, training level).</li>
+      <li><code>staff_assignments</code> — which staff member works at which school (multi-school capable).</li>
+      <li><code>parents</code> — parent records, linkable to up to two students each.</li>
+    </ul>
+
+    <h3>Programs &amp; sessions (what Ufit delivers)</h3>
+    <ul>
+      <li><code>schools</code> — physical school sites.</li>
+      <li><code>programs</code> — the contracted service at a school (PE Support, Lunch Sports, After-School Sports, etc.).</li>
+      <li><code>sessions</code> — a single coaching session: date, time, location, lead coach, planned vs actual activities.</li>
+      <li><code>session_staff</code> — which staff worked which session (lead, assistant).</li>
+      <li><code>student_session_attendance</code> — which students attended, with participation level.</li>
+      <li><code>students</code> — the student roster, including <code>local_student_identifier</code> (e.g. LAUSD-2026-0001).</li>
+      <li><code>student_program_enrollment</code> — which students are enrolled in which program.</li>
+    </ul>
+
+    <h3>Skills &amp; assessments (what students can do)</h3>
+    <ul>
+      <li><code>skill_domains</code> — the top-level skill categories (Physical/Psychomotor, Sport Fundamentals, SEL/Behavioral).</li>
+      <li><code>skills</code> — individual skills (dribbling, chest pass, listening) tied to a domain.</li>
+      <li><code>benchmarks</code> — the 1-5 rubric definitions per skill per grade band.</li>
+      <li><code>assessment_windows</code> — time periods for batch assessment (Fall, Winter, Spring).</li>
+      <li><code>assessments</code> — a single assessment event for one student.</li>
+      <li><code>assessment_scores</code> — individual skill scores within an assessment (1-5 raw, 20-100 normalized).</li>
+      <li><code>behavior_observations</code> — lightweight per-session SEL ratings (teamwork, effort, self-control).</li>
+    </ul>
+
+    <h3>Operations &amp; reporting (what's happening)</h3>
+    <ul>
+      <li><code>eod_reports</code> — end-of-day reports filed by coaches.</li>
+      <li><code>incident_reports</code> — injuries, behavior issues, equipment failures, facility issues.</li>
+      <li><code>coach_observations</code> — supervisor scoring of coaches on 6 dimensions.</li>
+      <li><code>coach_evaluations</code> — formal periodic evaluations of coaches.</li>
+      <li><code>coach_performance_snapshots</code> — nightly cron-computed rolling performance score per coach.</li>
+      <li><code>school_reports</code> — generated PDF reports for principals.</li>
+      <li><code>principal_satisfaction_surveys</code> — quarterly principal feedback.</li>
+      <li><code>student_skill_summary</code>, <code>student_domain_summary</code>, <code>student_overall_summary</code> — calculated rollups for parent progress views.</li>
+      <li><code>notifications</code> — in-app bell-icon feed.</li>
+      <li><code>audit_log</code> — write-only log of every state-changing action.</li>
+      <li><code>app_settings</code>, <code>role_permissions</code> — system configuration.</li>
+    </ul>
+
+    <h2 id="roles">4. Roles &amp; Permissions</h2>
+    <p>Nine user roles, grouped into four portals.</p>
+    <table>
+      <thead><tr><th>Role</th><th>Portal</th><th>Scope</th><th>Can do</th></tr></thead>
+      <tbody>
+        <tr><td><strong>ceo</strong></td><td>Admin Portal</td><td>Whole organization</td><td>Everything, including grant/revoke admin and ceo roles</td></tr>
+        <tr><td><strong>admin</strong></td><td>Admin Portal</td><td>Whole organization</td><td>Add schools, coaches, students; edit any non-CEO/admin user</td></tr>
+        <tr><td><strong>coach_overseer</strong></td><td>Admin Portal</td><td>Their region</td><td>Score coaches; view program data in their region</td></tr>
+        <tr><td><strong>site_coordinator</strong></td><td>Admin Portal</td><td>Their region</td><td>Coordinate operations across multiple schools</td></tr>
+        <tr><td><strong>head_coach</strong></td><td>Coach Portal</td><td>Their assigned schools</td><td>Run sessions, log EODs, file incidents, score assessments</td></tr>
+        <tr><td><strong>assistant_coach</strong></td><td>Coach Portal</td><td>Their assigned schools</td><td>Same as head coach but typically not the session lead</td></tr>
+        <tr><td><strong>principal</strong></td><td>Organization Portal</td><td>Their one school</td><td>Read-mostly: view EODs, incidents, student progress; submit satisfaction surveys</td></tr>
+        <tr><td><strong>school_staff</strong></td><td>Organization Portal</td><td>Their one school</td><td>Same as principal but typically lower-rank designee</td></tr>
+        <tr><td><strong>parent</strong></td><td>Parent Portal</td><td>Their child(ren) only</td><td>View progress, update contact info</td></tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <div><strong>Defense in depth.</strong> Every API endpoint enforces the role check at the route handler level. Every database query that touches student records also includes an organization or school scope filter. Frontend route guards exist but are never the only line of defense.</div>
+    </div>
+
+    <h2 id="flow">5. Communication Flow</h2>
+    <p>Here's how data actually moves between the four roles. Each subsection below traces a complete cycle.</p>
+
+    <h3 id="flow-session">5a. Session lifecycle (coach → admin → principal → parent)</h3>
+    <div class="flow">
+      <div class="flow-title">A typical PE session, from start to surfacing in the parent's view</div>
+      <div class="flow-row"><span class="flow-node coach">Coach</span><span class="flow-arrow">→</span><span class="flow-action">Logs in, picks today's school (if multi-assigned)</span></div>
+      <div class="flow-row"><span class="flow-node coach">Coach</span><span class="flow-arrow">→</span><span class="flow-action">Starts session: planned activities, student group, time</span></div>
+      <div class="flow-row"><span class="flow-node coach">Coach</span><span class="flow-arrow">→</span><span class="flow-action">Marks attendance for each student (present / absent / partial)</span></div>
+      <div class="flow-row"><span class="flow-node coach">Coach</span><span class="flow-arrow">→</span><span class="flow-action">Scores assessments (1-5 + observation tag) for any students assessed today</span></div>
+      <div class="flow-row"><span class="flow-node coach">Coach</span><span class="flow-arrow">→</span><span class="flow-action">Files end-of-day report (activities, engagement, behavior, success, challenges)</span></div>
+      <div class="flow-row"><span class="flow-node system">System</span><span class="flow-arrow">→</span><span class="flow-action">Recalculates student skill / domain / overall summaries (nightly cron + on-write triggers)</span></div>
+      <div class="flow-row"><span class="flow-node admin">Admin</span><span class="flow-arrow">→</span><span class="flow-action">Sees the EOD on the admin dashboard; compliance % updates</span></div>
+      <div class="flow-row"><span class="flow-node principal">Principal</span><span class="flow-arrow">→</span><span class="flow-action">Sees the latest EOD on her dashboard the next time she logs in</span></div>
+      <div class="flow-row"><span class="flow-node parent">Parent</span><span class="flow-arrow">→</span><span class="flow-action">Sees updated baseline / current / growth in the child's progress view</span></div>
+    </div>
+
+    <h3 id="flow-incident">5b. Incident lifecycle (coach → admin → school → family)</h3>
+    <div class="flow">
+      <div class="flow-title">From "student turned ankle" to closed incident</div>
+      <div class="flow-row"><span class="flow-node coach">Coach</span><span class="flow-arrow">→</span><span class="flow-action">Files incident: type (injury/behavior/equipment/facility), severity, description, action taken</span></div>
+      <div class="flow-row"><span class="flow-node coach">Coach</span><span class="flow-arrow">→</span><span class="flow-action">Toggles "school notified" + "family notified" booleans</span></div>
+      <div class="flow-row"><span class="flow-node system">System</span><span class="flow-arrow">→</span><span class="flow-action">If severity = critical: writes a notification row for every admin / overseer in the organization</span></div>
+      <div class="flow-row"><span class="flow-node system">System</span><span class="flow-arrow">→</span><span class="flow-action">audit_log row written: action=incident_filed, table=incident_reports</span></div>
+      <div class="flow-row"><span class="flow-node admin">Admin</span><span class="flow-arrow">→</span><span class="flow-action">Sees critical incident at the top of the admin dashboard, opens the detail view</span></div>
+      <div class="flow-row"><span class="flow-node admin">Admin</span><span class="flow-arrow">→</span><span class="flow-action">Reviews; may add resolution notes; closes the incident</span></div>
+      <div class="flow-row"><span class="flow-node principal">Principal</span><span class="flow-arrow">→</span><span class="flow-action">Sees the incident in her own school's incident feed for FERPA / duty-of-care compliance</span></div>
+    </div>
+
+    <h3 id="flow-onboard">5c. Coach onboarding (three converging paths)</h3>
+    <div class="flow">
+      <div class="flow-title">Three ways a coach gets into the system; all converge on the same email → set-password flow</div>
+      <div class="flow-row"><span class="flow-node admin">Admin</span><span class="flow-arrow">→</span><span class="flow-action"><strong>Path 1:</strong> Add Coach modal, single coach entry</span></div>
+      <div class="flow-row"><span class="flow-node admin">Admin</span><span class="flow-arrow">→</span><span class="flow-action"><strong>Path 2:</strong> Bulk Invite modal, paste up to 200 rows</span></div>
+      <div class="flow-row"><span class="flow-node coach">Coach</span><span class="flow-arrow">→</span><span class="flow-action"><strong>Path 3:</strong> Coach Portal → "Sign up with school code" — uses code admin gave the school</span></div>
+      <div class="flow-row"><span class="flow-node system">System</span><span class="flow-arrow">→</span><span class="flow-action">Creates pending user (active_status=FALSE, no password_hash) + staff_profile + staff_assignment</span></div>
+      <div class="flow-row"><span class="flow-node system">System</span><span class="flow-arrow">→</span><span class="flow-action">Generates 24-hour invite token; sends "Set My Password" email via Gmail / Resend</span></div>
+      <div class="flow-row"><span class="flow-node coach">Coach</span><span class="flow-arrow">→</span><span class="flow-action">Clicks email link, sets password, account becomes active_status=TRUE</span></div>
+      <div class="flow-row"><span class="flow-node coach">Coach</span><span class="flow-arrow">→</span><span class="flow-action">Logs in, lands at picker (if multi-school) or dashboard</span></div>
+    </div>
+
+    <h3 id="flow-parent">5d. Parent self-registration (parent → student verification → access)</h3>
+    <div class="flow">
+      <div class="flow-title">Parent gets to their child's progress without staff help</div>
+      <div class="flow-row"><span class="flow-node parent">Parent</span><span class="flow-arrow">→</span><span class="flow-action">Visits Parent Portal → "Create Account"</span></div>
+      <div class="flow-row"><span class="flow-node parent">Parent</span><span class="flow-arrow">→</span><span class="flow-action">Step 1: enters child's first/last name + local_student_identifier (e.g. LAUSD-2026-0001)</span></div>
+      <div class="flow-row"><span class="flow-node system">System</span><span class="flow-arrow">→</span><span class="flow-action">Verifies the student exists with that exact identifier and name</span></div>
+      <div class="flow-row"><span class="flow-node parent">Parent</span><span class="flow-arrow">→</span><span class="flow-action">Step 2: enters parent name / email / phone / relationship / password</span></div>
+      <div class="flow-row"><span class="flow-node system">System</span><span class="flow-arrow">→</span><span class="flow-action">Creates user + parent row; links to student.parent_primary_id (or _secondary if primary already filled)</span></div>
+      <div class="flow-row"><span class="flow-node system">System</span><span class="flow-arrow">→</span><span class="flow-action">Auto-login + writes notification to admins; HubSpot sync fires in background</span></div>
+      <div class="flow-row"><span class="flow-node parent">Parent</span><span class="flow-arrow">→</span><span class="flow-action">Lands on child's progress view: baseline / current / growth / behavior readiness</span></div>
+    </div>
+    <div class="callout">
+      <div><strong>Edge case: both parent slots full.</strong> If a student already has parent_primary_id and parent_secondary_id set, a third parent self-registering creates the parent record but leaves it unlinked, with a note. An admin notification fires for manual resolution.</div>
+    </div>
+
+    <h2 id="auth">6. Authentication &amp; Security</h2>
+    <ul>
+      <li><strong>Passwords</strong> — hashed with PBKDF2-SHA-256 (1,000,000 iterations). Plain passwords never touch the database.</li>
+      <li><strong>Sessions</strong> — Flask signed-cookie sessions; HTTPOnly, SameSite=Strict, Secure in production. 8-hour idle timeout.</li>
+      <li><strong>CSRF</strong> — every <code>POST/PATCH/DELETE</code> against <code>/api/*</code> requires the <code>X-Requested-With: XMLHttpRequest</code> header (set by the SPA's fetch wrapper). Plain HTML form posts from a phisher's domain are rejected.</li>
+      <li><strong>Rate limiting</strong> — Flask-Limiter on sensitive endpoints (login: 10/min, forgot-password: 5/min, coach-register: 5/hour, bulk-invite: 10/min).</li>
+      <li><strong>Constant-time login</strong> — even on "user not found", the server runs a dummy password hash check to keep response time uniform (prevents timing-based email enumeration).</li>
+      <li><strong>Audit log</strong> — every state-changing action writes a row to <code>audit_log</code> with the actor's user_id, IP, action verb, table, record_id, old_values, new_values.</li>
+      <li><strong>Session fixation</strong> — login clears the old session and rotates the session ID. Logout fully clears the session.</li>
+      <li><strong>Security headers</strong> — every response includes X-Frame-Options: DENY, X-Content-Type-Options: nosniff, Content-Security-Policy, Strict-Transport-Security in production.</li>
+    </ul>
+
+    <h2 id="email">7. Email &amp; Notifications</h2>
+    <p>Two distinct channels: <strong>email</strong> (transactional, leaves the platform) and <strong>notifications</strong> (in-app, never leaves).</p>
+
+    <h3>Email (transactional)</h3>
+    <table>
+      <thead><tr><th>Email type</th><th>Trigger</th><th>Recipient</th></tr></thead>
+      <tbody>
+        <tr><td>Coach invite</td><td>Admin adds a coach (single, bulk, or via school code)</td><td>The new coach's email</td></tr>
+        <tr><td>Principal invite</td><td>Admin adds a school with a principal email</td><td>The principal's email</td></tr>
+        <tr><td>Password reset</td><td>User clicks "Forgot password"</td><td>The user's email</td></tr>
+        <tr><td>Pending-user invite resend</td><td>User who never set their password clicks "Forgot password"</td><td>The user's email (fresh 24h invite token)</td></tr>
+        <tr><td>Help &amp; feedback</td><td>User submits the in-app Help modal</td><td><code>operations@ufitonline.net</code></td></tr>
+      </tbody>
+    </table>
+    <p>Transport: <strong>Resend HTTP API</strong> (preferred, works on free Render) or <strong>Gmail SMTP</strong> (fallback, works on paid Render or local dev). Auto-selected based on which env vars are set.</p>
+
+    <h3>Notifications (in-app)</h3>
+    <p>Bell-icon feed in the top-nav. Currently fires on:</p>
+    <ul>
+      <li>Critical incident filed (recipients: all admins / CEOs / overseers in the org)</li>
+      <li>Parent self-registers (recipients: same)</li>
+      <li>Coach self-registers via school code (recipients: same)</li>
+      <li>Pending invite about to expire (planned — needs a scheduled job)</li>
+    </ul>
+
+    <h2 id="ferpa">8. FERPA &amp; Compliance</h2>
+    <p>Student records on Ufit Motion are "education records" under FERPA (20 U.S.C. § 1232g). Ufit operates as a "school official" with legitimate educational interest under each district's data-processing agreement.</p>
+    <ul>
+      <li><strong>Org boundary</strong> — every student-touching query includes an organization or school filter. A coach in District A literally cannot query District B's students; the SQL won't return them.</li>
+      <li><strong>Parent rights</strong> — parents can inspect, correct, or request deletion of their child's records. Requests are routed through the school's FERPA officer.</li>
+      <li><strong>Retention</strong> — student records are retained for the duration of the school's contract + 3 years for audit purposes. Earlier deletion requested via the school.</li>
+      <li><strong>Re-disclosure</strong> — Ufit does not redisclose student data to any party outside the school's data-processing agreement, with exceptions only as required by law.</li>
+      <li><strong>Audit trail</strong> — every read or write of student data is auditable; the <code>audit_log</code> table captures actor, action, record, timestamp, IP.</li>
+    </ul>
+    <p>Public Privacy Policy and Terms of Service live at <code>/privacy</code> and <code>/terms</code>.</p>
+
+    <h2 id="ops">9. Operations</h2>
+    <table>
+      <thead><tr><th>Concern</th><th>How it's handled</th></tr></thead>
+      <tbody>
+        <tr><td>Backups</td><td>Supabase automatic daily backups + 7-day point-in-time recovery (Pro tier).</td></tr>
+        <tr><td>Restore drill</td><td>Documented in <code>docs/runbooks/backup-restore.md</code>. Run before first-school go-live.</td></tr>
+        <tr><td>Deploys</td><td>Auto-deploy from <code>main</code> branch on push to GitHub. Render rebuilds + replaces the gunicorn process. ~3-5 min from push to live.</td></tr>
+        <tr><td>Migrations</td><td>SQL files in <code>migrations/supabase/stepN_*.sql</code>. Applied via <code>python run_migrations.py</code> or directly in Supabase SQL Editor.</td></tr>
+        <tr><td>Coach score recalculation</td><td>Nightly cron at 02:00 UTC; <code>scripts/recalculate_coach_scores.py</code>.</td></tr>
+        <tr><td>Production wipe</td><td>One-shot <code>scripts/production_wipe.py</code> for resetting a stale environment. Documented in <code>docs/runbooks/super-admin-bootstrap.md</code>.</td></tr>
+        <tr><td>Monitoring</td><td><code>/api/health</code> endpoint returns <code>{ok:true, db:true}</code>. Sentry catches unhandled exceptions when SENTRY_DSN is set.</td></tr>
+        <tr><td>Logs</td><td>Render dashboard → service → Logs tab. Structured JSON in production.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="footer">
+      Ufit Motion · System Reference · Last updated 2026-05-10 · operations@ufitonline.net
+    </div>
+  </main>
+</div>
+</body>
+</html>

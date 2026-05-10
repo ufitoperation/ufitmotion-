@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ufit Motion — Training Manual</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--blue:#1E40AF;--yellow:#F59E0B;--ink:#111827;--muted:#6B7280;--rule:#E5E7EB;--bg:#FAFBFC}
+  body{font-family:'Inter',system-ui,sans-serif;color:var(--ink);background:var(--bg);line-height:1.6}
+  .topbar{background:var(--blue);color:#fff;padding:24px 32px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+  .topbar .brand{font-size:20px;font-weight:800;letter-spacing:.5px}
+  .topbar .brand .y{color:var(--yellow)}
+  .topbar .crumb{font-size:12px;opacity:.85;text-transform:uppercase;letter-spacing:.7px}
+  .doc-wrap{max-width:1100px;margin:0 auto;padding:36px 32px 80px;display:grid;grid-template-columns:240px 1fr;gap:36px}
+  .toc{position:sticky;top:24px;align-self:start;background:#fff;border:1px solid var(--rule);border-radius:8px;padding:18px;font-size:13px;max-height:calc(100vh - 48px);overflow-y:auto}
+  .toc h3{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:8px;font-weight:700}
+  .toc h3:not(:first-child){margin-top:14px;padding-top:12px;border-top:1px solid var(--rule)}
+  .toc a{display:block;padding:5px 0;color:#374151;text-decoration:none;border-left:2px solid transparent;padding-left:10px;margin-left:-10px}
+  .toc a:hover{color:var(--blue);border-left-color:var(--blue)}
+  .toc a.sub{padding-left:22px;font-size:12.5px;color:var(--muted)}
+  main{min-width:0}
+  h1{font-size:34px;font-weight:800;color:var(--ink);margin-bottom:8px;line-height:1.15}
+  .lead{color:var(--muted);font-size:15px;line-height:1.55;max-width:760px;margin-bottom:24px}
+  .chapter{padding:36px 0;border-top:1px solid var(--rule)}
+  .chapter:first-of-type{padding-top:0;border-top:0}
+  .chapter-tag{display:inline-block;padding:4px 12px;background:var(--blue);color:#fff;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-bottom:8px}
+  .chapter-tag.coach{background:#10B981}
+  .chapter-tag.principal{background:#F59E0B}
+  .chapter-tag.parent{background:#A855F7}
+  h2{font-size:26px;font-weight:800;color:var(--ink);margin-bottom:6px;line-height:1.2}
+  h3{font-size:18px;font-weight:700;color:var(--ink);margin:24px 0 8px}
+  h4{font-size:14px;font-weight:700;color:var(--ink);margin:14px 0 4px}
+  p{margin-bottom:12px;color:#374151}
+  ul,ol{margin:6px 0 14px 24px;color:#374151}
+  li{margin:4px 0}
+  ol li{padding-left:6px}
+  code{background:#F1F5F9;padding:1px 6px;border-radius:3px;font-size:13px;color:#0F172A;font-family:ui-monospace,Menlo,monospace}
+  .step{display:flex;gap:14px;margin:10px 0;background:#fff;border:1px solid var(--rule);border-radius:8px;padding:14px 16px}
+  .step-num{flex-shrink:0;width:28px;height:28px;background:var(--blue);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px}
+  .step-num.coach{background:#10B981}
+  .step-num.principal{background:#F59E0B}
+  .step-num.parent{background:#A855F7}
+  .step-body{flex:1;font-size:14px;line-height:1.55}
+  .step-body strong{color:var(--ink)}
+  .callout{display:flex;gap:12px;background:#FEF9E7;border-left:4px solid var(--yellow);padding:12px 16px;border-radius:0 8px 8px 0;margin:14px 0;font-size:13.5px;line-height:1.55}
+  .callout strong{color:#92400E}
+  .callout-blue{background:#EFF6FF;border-color:var(--blue)}
+  .callout-blue strong{color:var(--blue)}
+  .callout-red{background:#FEF2F2;border-color:#B91C1C}
+  .callout-red strong{color:#B91C1C}
+  .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600}
+  .pill-blue{background:#DBEAFE;color:#1E3A8A}
+  .pill-green{background:#DCFCE7;color:#15803D}
+  .pill-amber{background:#FEF3C7;color:#92400E}
+  .pill-red{background:#FEE2E2;color:#B91C1C}
+  table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--rule);border-radius:8px;overflow:hidden;margin:10px 0 18px;font-size:13px}
+  th{background:#F8FAFC;text-align:left;padding:9px 11px;font-weight:700;font-size:11.5px;color:#0F172A;text-transform:uppercase;letter-spacing:.4px}
+  td{padding:9px 11px;border-bottom:1px solid #F3F4F6;color:#374151;vertical-align:top}
+  tr:last-child td{border-bottom:0}
+  .footer{margin-top:60px;padding-top:24px;border-top:1px solid var(--rule);font-size:12px;color:var(--muted);text-align:center;line-height:1.6}
+  @media (max-width:880px){
+    .doc-wrap{grid-template-columns:1fr;padding:20px}
+    .toc{position:static;max-height:none}
+  }
+  @media print{
+    .topbar{padding:16px 24px}
+    .toc{display:none}
+    .doc-wrap{grid-template-columns:1fr;padding:0 24px}
+    .chapter{break-before:page;border-top:0}
+    .chapter:first-of-type{break-before:auto}
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">UFIT <span class="y">MOTION</span></div>
+  <div class="crumb">Training Manual · Admin · Coach · Principal · Parent</div>
+</div>
+<div class="doc-wrap">
+  <nav class="toc" aria-label="Table of contents">
+    <h3>Chapter 1 · Admin</h3>
+    <a href="#admin-login">Logging in</a>
+    <a href="#admin-add-school">Adding a school</a>
+    <a href="#admin-add-coaches">Adding coaches</a>
+    <a href="#admin-students">Importing students</a>
+    <a href="#admin-monitor">Monitoring activity</a>
+    <a href="#admin-incidents">Reviewing incidents</a>
+    <a href="#admin-export">Exporting reports</a>
+    <a href="#admin-edit-coach">Editing a coach's role</a>
+    <a href="#admin-trouble">Troubleshooting</a>
+    <h3>Chapter 2 · Coach</h3>
+    <a href="#coach-login">Logging in</a>
+    <a href="#coach-multi-school">Multi-school picker</a>
+    <a href="#coach-session">Logging a session</a>
+    <a href="#coach-attendance">Taking attendance</a>
+    <a href="#coach-eod">Filing an EOD</a>
+    <a href="#coach-assess">Scoring assessments</a>
+    <a href="#coach-incident">Filing an incident</a>
+    <a href="#coach-trouble">Troubleshooting</a>
+    <h3>Chapter 3 · Principal</h3>
+    <a href="#prin-login">Logging in</a>
+    <a href="#prin-dashboard">Reviewing the dashboard</a>
+    <a href="#prin-eod">Reading an EOD</a>
+    <a href="#prin-students">Student progress</a>
+    <a href="#prin-survey">Filing a survey</a>
+    <h3>Chapter 4 · Parent</h3>
+    <a href="#par-register">Self-registering</a>
+    <a href="#par-progress">Viewing progress</a>
+    <a href="#par-account">Account management</a>
+  </nav>
+  <main>
+    <h1>Training Manual</h1>
+    <p class="lead">A click-by-click guide for every role on Ufit Motion. Hand the relevant chapter to a new staff member; they should be able to do their job after one read-through. Each chapter is self-contained — skip to yours.</p>
+
+    <!-- =================================================================== -->
+    <!-- CHAPTER 1: ADMIN                                                     -->
+    <!-- =================================================================== -->
+    <section class="chapter" id="ch-admin">
+      <div class="chapter-tag">Chapter 1</div>
+      <h2>Admin</h2>
+      <p>You're a Ufit operations administrator. You're the source of truth on school onboarding, coach hiring, and program compliance. This chapter walks you through the full admin workflow.</p>
+
+      <h3 id="admin-login">Logging in</h3>
+      <div class="step"><div class="step-num">1</div><div class="step-body">Go to <code>https://ufitmotion.onrender.com/login</code>.</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-body">Click <strong>Admin Portal</strong> (the building icon, top-left).</div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-body">Enter your email and password. Click <strong>Sign In</strong>.</div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-body">If this is your first login, you arrived via an email link. Set your password (8+ characters) and click Save. You're then auto-redirected to the dashboard.</div></div>
+      <div class="callout"><div><strong>Forgot password?</strong> Click the "Forgot password?" link below the Sign In button. You'll receive a reset link within ~30 seconds at the email on file.</div></div>
+
+      <h3 id="admin-add-school">Adding a school</h3>
+      <p>This is the first thing you do for a new client district.</p>
+      <div class="step"><div class="step-num">1</div><div class="step-body">From the dashboard, click the <strong>Schools</strong> item in the left sidebar.</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-body">Click <strong>+ Add School</strong> in the top-right of the page.</div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-body">In the modal: pick or create the parent organization (district), enter the school name, choose school type (Elementary, Middle, K-8, etc.), city, state.</div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-body"><strong>Optional but recommended:</strong> add the principal's name + email. The system will auto-send a "Set My Password" invite to that email when you save.</div></div>
+      <div class="step"><div class="step-num">5</div><div class="step-body">Click <strong>Add School</strong>. The school appears in your schools table immediately, with a yellow ⏱ Pending badge next to the principal's name until they set their password.</div></div>
+
+      <h3 id="admin-add-coaches">Adding coaches</h3>
+      <p>Three ways to onboard coaches. Pick the one that matches your situation.</p>
+
+      <h4>Path 1 — One coach at a time</h4>
+      <p>Use this when you have a single new hire and you have all their details on hand.</p>
+      <div class="step"><div class="step-num">1</div><div class="step-body">Sidebar → <strong>Coaches</strong>.</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-body">Click <strong>+ Add Coach</strong>.</div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-body">Fill in: first name, last name, email, role (Head Coach / Assistant / Site Coordinator / etc.), and the school they'll work at.</div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-body">Leave the password field blank — the system generates a 24-hour invite token and emails the coach a "Set My Password" link.</div></div>
+      <div class="step"><div class="step-num">5</div><div class="step-body">Submit. The coach appears in your coaches table with ⏱ Pending until they click their email link.</div></div>
+
+      <h4>Path 2 — Bulk invite (paste / CSV)</h4>
+      <p>Use this when you're onboarding an entire school's coaching staff at once.</p>
+      <div class="step"><div class="step-num">1</div><div class="step-body">Sidebar → <strong>Coaches</strong> → click <strong>Bulk Invite</strong> (next to + Add Coach).</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-body">Set <strong>Default Role</strong> (used when a row leaves the role blank).</div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-body">Set <strong>Default Schools</strong> (used when a row doesn't specify a school).</div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-body">Paste rows in <code>first,last,email,role</code> format — one per line. Up to 200 rows per batch.</div></div>
+      <div class="step"><div class="step-num">5</div><div class="step-body">Click <strong>Send Invites</strong>. Server returns: <strong>X created · Y duplicates · Z errors</strong> with row numbers for any failures. Bad rows don't kill the batch.</div></div>
+      <p><strong>Sample paste:</strong></p>
+      <pre style="background:#F1F5F9;padding:12px;border-radius:6px;font-size:12px;overflow-x:auto;">Ada,Lovelace,ada@lincoln.edu,head_coach
+Bo,Knight,bo@lincoln.edu,
+Cam,Reyes,cam@lincoln.edu,assistant_coach</pre>
+
+      <h4>Path 3 — School invite code (let coaches sign themselves up)</h4>
+      <p>Use this when the school's HR is hiring directly and you don't yet know who's coming.</p>
+      <div class="step"><div class="step-num">1</div><div class="step-body">From the school's detail page, find the <strong>Coach Invite Code</strong> (e.g. <code>LCN-X7M9-2026</code>).</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-body">Hand the code to the school's HR contact. They share it with new coaches.</div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-body">Coach goes to <code>https://ufitmotion.onrender.com/login</code> → Coach Portal → "Sign up with school code" → enters the code + their info.</div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-body">You'll get a notification: "Coach X self-registered at Lincoln via invite code." Verify the person actually belongs there.</div></div>
+      <div class="step"><div class="step-num">5</div><div class="step-body">If the code leaks publicly, click <strong>Regenerate</strong> on the school detail page. The old code is dead immediately.</div></div>
+
+      <h3 id="admin-students">Importing students</h3>
+      <div class="step"><div class="step-num">1</div><div class="step-body">Sidebar → <strong>Students</strong>.</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-body">Click <strong>Import CSV</strong> in the top-right.</div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-body">Drop the school's roster CSV. Required columns: <code>first</code>, <code>last</code>, <code>grade</code>, <code>local_student_identifier</code>.</div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-body">Preview shows the first 5 rows. Verify the column mapping is correct.</div></div>
+      <div class="step"><div class="step-num">5</div><div class="step-body">Click <strong>Confirm Import</strong>. Students appear in the roster immediately.</div></div>
+      <div class="callout callout-blue"><div><strong>Always include local_student_identifier.</strong> This is the key parents use to verify their child during self-registration. Without it, parents have to know an internal integer ID, which most won't.</div></div>
+
+      <h3 id="admin-monitor">Monitoring activity</h3>
+      <p>The dashboard is your daily check-in. Once schools are live, the empty-state checklist disappears and stat cards light up.</p>
+      <ul>
+        <li><strong>Schools / Coaches / Sessions / EOD compliance / Open incidents</strong> — five stat cards across the top.</li>
+        <li><strong>Quick Actions</strong> — shortcuts to Add School, Add Coach, Review Incidents.</li>
+        <li><strong>This Week at a Glance</strong> — sessions logged + EOD compliance rate.</li>
+        <li><strong>🔔 Bell icon</strong> — unread notifications (incident filed, parent registered, coach pending).</li>
+      </ul>
+
+      <h3 id="admin-incidents">Reviewing incidents</h3>
+      <div class="step"><div class="step-num">1</div><div class="step-body">Sidebar → <strong>Incidents</strong>.</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-body">Filter by status: Open / Investigating / Resolved / Closed. Default is Open.</div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-body">Click any row to see the full detail: type, severity, description, action taken, school + family notification booleans.</div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-body">Add resolution notes and update status as the case progresses.</div></div>
+      <div class="callout callout-red"><div><strong>Critical incidents auto-notify all admins.</strong> If a coach files an incident with severity = <em>critical</em>, the bell icon updates for every admin / CEO / overseer in the org within ~5 seconds.</div></div>
+
+      <h3 id="admin-export">Exporting reports (CSV)</h3>
+      <p>Three CSV exports for sharing with school districts, board members, or your own spreadsheets.</p>
+      <table>
+        <thead><tr><th>What</th><th>Where</th></tr></thead>
+        <tbody>
+          <tr><td>Schools list</td><td>Sidebar → Schools → <strong>Export CSV</strong></td></tr>
+          <tr><td>Coaches list</td><td>Sidebar → Coaches → <strong>Export CSV</strong></td></tr>
+          <tr><td>Students list</td><td>Sidebar → Students → <strong>Export CSV</strong></td></tr>
+        </tbody>
+      </table>
+      <p>Each downloads as a <code>.csv</code> file with a clear filename. Open in Excel, Google Sheets, or attach to email.</p>
+
+      <h3 id="admin-edit-coach">Editing a coach's role or schools</h3>
+      <div class="step"><div class="step-num">1</div><div class="step-body">Sidebar → <strong>Coaches</strong>.</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-body">Click the <strong>Edit</strong> icon on the coach's row.</div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-body">Change the role (Head Coach ↔ Assistant Coach, etc.) and/or the multi-school selection.</div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-body">Save. The coach's old assignments are marked inactive; new assignments are created. Audit log row written automatically.</div></div>
+      <div class="callout"><div><strong>Permission rules:</strong> You cannot edit your own role here. Only the CEO can grant or demote admin / CEO roles. Admins can change any non-CEO/non-admin user.</div></div>
+
+      <h3 id="admin-trouble">Troubleshooting (admin)</h3>
+      <table>
+        <thead><tr><th>Symptom</th><th>Likely cause / fix</th></tr></thead>
+        <tbody>
+          <tr><td>"Invalid email or password" at login</td><td>Either typo or your account was deactivated. Click "Forgot password" to reset.</td></tr>
+          <tr><td>Coach never received their invite email</td><td>Check the email is correct, then click Resend Invite on the coach's row. The 24h token regenerates.</td></tr>
+          <tr><td>Bulk invite shows duplicates</td><td>Email already in the system (live or soft-deleted). Use the existing user or contact support.</td></tr>
+          <tr><td>Can't add a school principal because the email exists</td><td>That email is already used by another user. Pick a different principal email or contact support.</td></tr>
+          <tr><td>Stat cards say 0 but I have data</td><td>The dashboard caches for ~5 seconds. Refresh the page.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- CHAPTER 2: COACH                                                     -->
+    <!-- =================================================================== -->
+    <section class="chapter" id="ch-coach">
+      <div class="chapter-tag coach">Chapter 2</div>
+      <h2>Coach</h2>
+      <p>You're a coach in the field. You're using this on a phone, outside, between activities. The app is built so every common task takes &lt; 2 minutes.</p>
+
+      <h3 id="coach-login">Logging in</h3>
+      <div class="step"><div class="step-num coach">1</div><div class="step-body">Open <code>https://ufitmotion.onrender.com/login</code> on your phone (Safari on iPhone, Chrome on Android both work).</div></div>
+      <div class="step"><div class="step-num coach">2</div><div class="step-body">Tap <strong>Coach Portal</strong> (the runner icon).</div></div>
+      <div class="step"><div class="step-num coach">3</div><div class="step-body">Enter your email + password. Tap <strong>Sign In</strong>.</div></div>
+      <div class="step"><div class="step-num coach">4</div><div class="step-body">First time? You arrived via an email link. Set a password (8+ characters), then proceed.</div></div>
+      <p><strong>Pro tip:</strong> Add the page to your home screen — Safari → share → Add to Home Screen — for one-tap access. The app behaves like a native app from there.</p>
+
+      <h3 id="coach-multi-school">Multi-school picker</h3>
+      <p>If you're assigned to two or more schools, you'll see a "Where are you working today?" screen after login. Tap the school you're at right now.</p>
+      <p><strong>Switching schools mid-day:</strong> tap the school chip in the top-nav (e.g. <code>● Lincoln Elementary ▾</code>). The picker reopens. Pick the new school. Your dashboard updates without logging out.</p>
+
+      <h3 id="coach-session">Logging a session</h3>
+      <p>Do this at the start or end of your session — either way is fine.</p>
+      <div class="step"><div class="step-num coach">1</div><div class="step-body">Sidebar (or hamburger menu on phone) → <strong>Sessions</strong>.</div></div>
+      <div class="step"><div class="step-num coach">2</div><div class="step-body">Tap <strong>+ Log Session</strong>.</div></div>
+      <div class="step"><div class="step-num coach">3</div><div class="step-body">Pick the program (auto-filled from your assignment). Set the date (defaults to today). Set start + end times.</div></div>
+      <div class="step"><div class="step-num coach">4</div><div class="step-body">Choose session type: <strong>Regular / Makeup / Tournament / Assessment</strong>.</div></div>
+      <div class="step"><div class="step-num coach">5</div><div class="step-body">Briefly describe planned + actual activities (you can update actual at the end).</div></div>
+      <div class="step"><div class="step-num coach">6</div><div class="step-body">Tap <strong>Save</strong>. The session shows up in your sessions list.</div></div>
+
+      <h3 id="coach-attendance">Taking attendance</h3>
+      <div class="step"><div class="step-num coach">1</div><div class="step-body">Open the session you just created.</div></div>
+      <div class="step"><div class="step-num coach">2</div><div class="step-body">Tap <strong>Take Attendance</strong>.</div></div>
+      <div class="step"><div class="step-num coach">3</div><div class="step-body">For each student, tap one: <strong>Present</strong>, <strong>Absent</strong>, <strong>Excused</strong>, <strong>Partial</strong>. Default is Present.</div></div>
+      <div class="step"><div class="step-num coach">4</div><div class="step-body">If you mark Partial, set participation level: Full / Moderate / Limited / Refused.</div></div>
+      <div class="step"><div class="step-num coach">5</div><div class="step-body">Tap <strong>Save</strong>. Total students present updates automatically.</div></div>
+
+      <h3 id="coach-eod">Filing an EOD report</h3>
+      <p>Required at the end of every session. Target time: under 2 minutes.</p>
+      <div class="step"><div class="step-num coach">1</div><div class="step-body">Sidebar → <strong>EOD Reports</strong>.</div></div>
+      <div class="step"><div class="step-num coach">2</div><div class="step-body">Tap <strong>+ File EOD</strong>.</div></div>
+      <div class="step"><div class="step-num coach">3</div><div class="step-body">Required fields: <strong>Activities completed</strong>, <strong>Student engagement</strong>, <strong>Behavior summary</strong>, <strong>Success story</strong>, <strong>Challenge summary</strong>.</div></div>
+      <div class="step"><div class="step-num coach">4</div><div class="step-body">If anything went wrong: tap <strong>Injury / Incident occurred</strong>. This pre-fills an incident report after submit.</div></div>
+      <div class="step"><div class="step-num coach">5</div><div class="step-body">Optional site-level fields: school concerns, schedule changes, equipment requests, late arrivals, etc. Leave blank if nothing to report.</div></div>
+      <div class="step"><div class="step-num coach">6</div><div class="step-body">Tap <strong>Submit EOD</strong>. The compliance ✓ On-time badge appears if you submitted same day.</div></div>
+      <div class="callout"><div><strong>"Submitted on time" matters.</strong> EOD compliance % on the admin dashboard is calculated from this field. Submit your EODs before midnight Pacific same-day.</div></div>
+
+      <h3 id="coach-assess">Scoring assessments</h3>
+      <p>Use this during baseline (first 2-4 weeks), monthly progress checks, or quarterly reporting windows.</p>
+      <div class="step"><div class="step-num coach">1</div><div class="step-body">Sidebar → <strong>Assessments</strong>.</div></div>
+      <div class="step"><div class="step-num coach">2</div><div class="step-body">Tap <strong>+ Score Student</strong>.</div></div>
+      <div class="step"><div class="step-num coach">3</div><div class="step-body">Pick the student from your roster. Skill catalog auto-filters to their grade band (K-2 / 3-5 / 6-8).</div></div>
+      <div class="step"><div class="step-num coach">4</div><div class="step-body">Pick the skill (Dribbling, Chest pass, Galloping, etc.).</div></div>
+      <div class="step"><div class="step-num coach">5</div><div class="step-body">Pick the level: <strong>1 Emerging / 2 Developing / 3 Functional / 4 Proficient / 5 Advanced</strong>. Tap the corresponding card.</div></div>
+      <div class="step"><div class="step-num coach">6</div><div class="step-body"><strong>Required:</strong> pick an observation tag from the dropdown — independent / needs prompt / inconsistent / strong control / low confidence / gameplay transfer observed.</div></div>
+      <div class="step"><div class="step-num coach">7</div><div class="step-body">Optional: add a one-line note for context.</div></div>
+      <div class="step"><div class="step-num coach">8</div><div class="step-body">Tap <strong>Save Score</strong>. The normalized score (20 / 40 / 60 / 80 / 100) is computed automatically.</div></div>
+
+      <h3 id="coach-incident">Filing an incident</h3>
+      <p>Use this for injuries, behavior issues, equipment failures, facility problems.</p>
+      <div class="step"><div class="step-num coach">1</div><div class="step-body">Sidebar → <strong>Incidents</strong>.</div></div>
+      <div class="step"><div class="step-num coach">2</div><div class="step-body">Tap <strong>+ File Incident</strong>.</div></div>
+      <div class="step"><div class="step-num coach">3</div><div class="step-body">Pick incident type: <strong>Injury / Behavior / Equipment / Facility / Safety / Other</strong>.</div></div>
+      <div class="step"><div class="step-num coach">4</div><div class="step-body">Pick severity: <strong>Low / Medium / High / Critical</strong>. Critical fires immediate admin notifications.</div></div>
+      <div class="step"><div class="step-num coach">5</div><div class="step-body">If a specific student is involved, pick them from the dropdown.</div></div>
+      <div class="step"><div class="step-num coach">6</div><div class="step-body">Describe what happened (description) and what you did about it (immediate action taken).</div></div>
+      <div class="step"><div class="step-num coach">7</div><div class="step-body">Toggle <strong>School notified</strong> + <strong>Family notified</strong> as appropriate. These are tracked separately for compliance.</div></div>
+      <div class="step"><div class="step-num coach">8</div><div class="step-body">Tap <strong>Submit Incident</strong>. An audit log row is written automatically.</div></div>
+
+      <h3 id="coach-trouble">Troubleshooting (coach)</h3>
+      <table>
+        <thead><tr><th>Symptom</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td>App slow to load on phone</td><td>Cold-load is ~3 sec on Render free tier (the server "wakes up"). Subsequent loads are instant.</td></tr>
+          <tr><td>Can't see students from my new school</td><td>Tap the top-nav school chip → switch to the right school.</td></tr>
+          <tr><td>"Submit failed" toast on EOD</td><td>Network dropped. Your draft is saved locally — wait 30 sec and tap Submit again.</td></tr>
+          <tr><td>Forgot password</td><td>Login screen → "Forgot password?" → enter email → reset link arrives in ~30 sec.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- CHAPTER 3: PRINCIPAL                                                 -->
+    <!-- =================================================================== -->
+    <section class="chapter" id="ch-principal">
+      <div class="chapter-tag principal">Chapter 3</div>
+      <h2>Principal / School Staff</h2>
+      <p>You're a principal or designated school staff member. The platform is read-mostly for you — you review, monitor, and submit periodic feedback. Designed for a 30-second scan between bell rings.</p>
+
+      <h3 id="prin-login">Logging in</h3>
+      <div class="step"><div class="step-num principal">1</div><div class="step-body">Open <code>https://ufitmotion.onrender.com/login</code>.</div></div>
+      <div class="step"><div class="step-num principal">2</div><div class="step-body">Click <strong>Organization Portal</strong> (the school icon).</div></div>
+      <div class="step"><div class="step-num principal">3</div><div class="step-body">Enter your email + password. First time? Use the "Set My Password" link from the email Ufit sent you.</div></div>
+
+      <h3 id="prin-dashboard">Reviewing the dashboard</h3>
+      <p>Your dashboard shows ONLY your school. You can't see other schools in the district.</p>
+      <ul>
+        <li><strong>Open incidents banner</strong> (red, top of page) — any unresolved injuries / behavior issues / facility problems.</li>
+        <li><strong>EOD on-time %</strong> — what fraction of this week's sessions had EODs filed same-day.</li>
+        <li><strong>Sessions logged</strong> — count for this week.</li>
+        <li><strong>Active students</strong> — total enrolled in your PE program.</li>
+        <li><strong>Latest EOD card</strong> — most recent end-of-day report from your school's coaches.</li>
+      </ul>
+
+      <h3 id="prin-eod">Reading an EOD</h3>
+      <div class="step"><div class="step-num principal">1</div><div class="step-body">Sidebar → <strong>EOD Reports</strong>.</div></div>
+      <div class="step"><div class="step-num principal">2</div><div class="step-body">Reports are listed newest first. Click any row to expand.</div></div>
+      <div class="step"><div class="step-num principal">3</div><div class="step-body">You'll see: activities, engagement summary, behavior summary, success story, challenge, any flagged incidents, site-level concerns.</div></div>
+      <div class="step"><div class="step-num principal">4</div><div class="step-body">If a coach flagged "principal communication needed", the EOD will be highlighted at the top until you mark it reviewed.</div></div>
+
+      <h3 id="prin-students">Student progress</h3>
+      <div class="step"><div class="step-num principal">1</div><div class="step-body">Sidebar → <strong>My Students</strong>.</div></div>
+      <div class="step"><div class="step-num principal">2</div><div class="step-body">Search or filter by grade level.</div></div>
+      <div class="step"><div class="step-num principal">3</div><div class="step-body">Click any student. You'll see baseline → current → growth across all assessed skills, behavior readiness ratings, and attendance %.</div></div>
+
+      <h3 id="prin-survey">Filing a satisfaction survey</h3>
+      <p>Quarterly. Ufit operations sends you a reminder.</p>
+      <div class="step"><div class="step-num principal">1</div><div class="step-body">Sidebar → <strong>Surveys</strong>.</div></div>
+      <div class="step"><div class="step-num principal">2</div><div class="step-body">Click <strong>+ New Survey</strong>.</div></div>
+      <div class="step"><div class="step-num principal">3</div><div class="step-body">Rate overall satisfaction (1-5), program impact (1-5), communication quality (1-5). Add free-text suggestions.</div></div>
+      <div class="step"><div class="step-num principal">4</div><div class="step-body">Submit. Your responses go to the Ufit ops team but are NOT visible to the coaches you're rating.</div></div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- CHAPTER 4: PARENT                                                    -->
+    <!-- =================================================================== -->
+    <section class="chapter" id="ch-parent">
+      <div class="chapter-tag parent">Chapter 4</div>
+      <h2>Parent</h2>
+      <p>You're a parent. You want to see how your child is doing in PE. The platform is built so you can self-register — no school staff intervention required — and view your child's progress in plain English.</p>
+
+      <h3 id="par-register">Self-registering</h3>
+      <p>You'll need: your child's first name, last name, and student ID (sometimes called "local student identifier"). Your school's office can give you the ID if you don't have it.</p>
+      <div class="step"><div class="step-num parent">1</div><div class="step-body">Open <code>https://ufitmotion.onrender.com/login</code>.</div></div>
+      <div class="step"><div class="step-num parent">2</div><div class="step-body">Click <strong>Parent Portal</strong> (the family icon).</div></div>
+      <div class="step"><div class="step-num parent">3</div><div class="step-body">Click <strong>Create Account</strong> below the Sign In form.</div></div>
+      <div class="step"><div class="step-num parent">4</div><div class="step-body"><strong>Step 1 — Verify your child:</strong> enter your child's first name, last name, and student ID exactly as shown on school records. Click Continue.</div></div>
+      <div class="step"><div class="step-num parent">5</div><div class="step-body">If verified, you'll see "✓ Verified — [Child's Name], Grade X, [School]". If not, double-check spelling or contact your school's office.</div></div>
+      <div class="step"><div class="step-num parent">6</div><div class="step-body"><strong>Step 2 — Your information:</strong> your name, email, phone, relationship (Mother / Father / Guardian / etc.), and a password.</div></div>
+      <div class="step"><div class="step-num parent">7</div><div class="step-body">Click <strong>Create Account</strong>. You're auto-logged-in and land on your child's progress view.</div></div>
+      <div class="callout"><div><strong>Both parents already registered?</strong> If your child already has two parents in the system, your registration completes but stays unlinked. The school office gets a notification to resolve it. Email <code>operations@ufitonline.net</code> if you need help.</div></div>
+
+      <h3 id="par-progress">Viewing progress</h3>
+      <p>The progress view is read-only. There's nothing for you to fill in — Ufit's coaches do the data entry.</p>
+      <ul>
+        <li><strong>Overall UFIT score</strong> (0-100) with a performance band: Emerging / Developing / On Track / Proficient / Advanced.</li>
+        <li><strong>Top strength</strong> — your child's highest-scoring skill.</li>
+        <li><strong>Top growth</strong> — biggest improvement from baseline.</li>
+        <li><strong>Attendance</strong> — how many sessions your child attended.</li>
+        <li><strong>Behavior readiness</strong> — six-dimension rating: teamwork, effort, self-control, listening, sportsmanship, confidence.</li>
+      </ul>
+      <p>Skill scores use a 1-5 rubric (Emerging → Advanced) which the platform converts to 20 / 40 / 60 / 80 / 100 for averaging. Growth = current − baseline.</p>
+
+      <h3 id="par-account">Account management</h3>
+      <h4>Update your contact info</h4>
+      <p>Settings → My Profile → edit name, email, phone → Save.</p>
+      <h4>Change password</h4>
+      <p>Settings → Change Password → enter current + new (8+ chars).</p>
+      <h4>Multiple children?</h4>
+      <p>Once you've registered with one child, you can verify a second from your dashboard: My Children → + Add Another Child → repeat the verification flow.</p>
+      <h4>Forgot password</h4>
+      <p>Login screen → "Forgot password?" → enter email. Reset link arrives in ~30 seconds.</p>
+    </section>
+
+    <div class="footer">
+      Ufit Motion · Training Manual · Last updated 2026-05-10 · operations@ufitonline.net<br/>
+      Need help? Click the ? icon in the top-nav of any logged-in page → opens the in-app feedback form.
+    </div>
+  </main>
+</div>
+</body>
+</html>
