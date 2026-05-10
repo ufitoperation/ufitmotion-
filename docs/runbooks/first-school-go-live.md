@@ -115,7 +115,7 @@ If it refuses with exit code 3, check that all four `SUPER_ADMIN_*` env vars are
 
 ### Step 5 — Log in + change password
 
-1. Visit `https://ufit-motion.onrender.com/login` (or your prod URL).
+1. Visit `https://ufitmotion.onrender.com/login` (or your prod URL).
 2. Click **Admin Portal**.
 3. Sign in with `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD`.
 4. From the dashboard, open **Settings → Change Password**. Set a new password (different from the env-var one).
