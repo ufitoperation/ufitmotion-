@@ -27,6 +27,7 @@ MIGRATIONS = [
     "step13_coach_evaluations.sql",
     "step14_staff_assignment_role_principal.sql",
     "step15_audit_log_action_freeform.sql",
+    "step16_school_coach_invite_code.sql",
 ]
 
 MIGRATIONS_DIR = Path(__file__).parent / "migrations" / "supabase"

@@ -31,6 +31,9 @@ def init_db() -> None:
         ensure_column(db, "schools", "city", "TEXT DEFAULT NULL")
         ensure_column(db, "schools", "state", "TEXT DEFAULT NULL")
         ensure_column(db, "schools", "zip_code", "TEXT DEFAULT NULL")
+        # B8 — coach self-registration via school invite code (step16 migration).
+        ensure_column(db, "schools", "coach_invite_code", "TEXT DEFAULT NULL")
+        ensure_column(db, "schools", "coach_invite_code_expires_at", "TIMESTAMPTZ DEFAULT NULL")
         ensure_column(db, "staff_profiles", "deleted_at", "TIMESTAMPTZ DEFAULT NULL")
         ensure_column(db, "staff_profiles", "rolling_score", "NUMERIC(5,2) DEFAULT NULL")
         ensure_column(db, "staff_profiles", "rolling_band", "TEXT DEFAULT NULL")

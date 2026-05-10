@@ -504,6 +504,7 @@ function renderPortalLoginForm(portal, allowRegister) {
           <div style="text-align:center;margin-top:4px;display:flex;flex-direction:column;gap:6px;">
             <button class="btn btn-ghost btn-sm" type="button" id="forgot-pw-link" style="font-size:0.875rem;">Forgot password?</button>
             ${allowRegister ? `<button class="btn btn-ghost btn-sm" type="button" id="parent-register-link" style="font-size:0.875rem;color:var(--color-primary,#1E40AF);font-weight:600;">New here? Create Account</button>` : ''}
+            ${portal.key === 'coach' ? `<button class="btn btn-ghost btn-sm" type="button" id="coach-code-signup-link" style="font-size:0.875rem;color:var(--color-primary,#1E40AF);font-weight:600;">Sign up with a school code</button>` : ''}
           </div>
         </div>
       </form>
@@ -582,6 +583,8 @@ function attachLoginListeners() {
   }));
 
   document.getElementById('forgot-pw-link')?.addEventListener('click', openForgotPasswordModal);
+
+  document.getElementById('coach-code-signup-link')?.addEventListener('click', openCoachCodeSignupModal);
 
   document.getElementById('parent-register-link')?.addEventListener('click', () => {
     state._showParentRegister = true;
@@ -1209,6 +1212,72 @@ async function openEditSchoolModal(schoolId) {
 /* ============================================================
    14. COACHES PAGE
    ============================================================ */
+/**
+ * B8 — Coach self-registration via school invite code.
+ * Public, unauthenticated. Posts to /api/auth/coach-register; server creates
+ * a pending user + assignment + emails the set-password link.
+ */
+function openCoachCodeSignupModal() {
+  openModal(`
+    <div class="modal-header">
+      <h2 class="modal-title">Sign up with a school code</h2>
+      <button class="modal-close btn btn-ghost btn-sm" aria-label="Close" onclick="closeModal()">${iconClose()}</button>
+    </div>
+    <form id="coach-code-form" class="modal-body form-stack">
+      <p style="margin:0 0 12px;color:var(--color-text-secondary);font-size:0.875rem;">
+        Enter the code your school provided, plus your name and email. We'll send you a link to set your password.
+      </p>
+      <div class="form-group">
+        <label class="form-label">School code</label>
+        <input class="form-input" id="cc-code" type="text" required autocomplete="off" placeholder="LCN-X7M9-2026" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">First name</label>
+        <input class="form-input" id="cc-first" type="text" required />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Last name</label>
+        <input class="form-input" id="cc-last" type="text" required />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input class="form-input" id="cc-email" type="email" required />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Role</label>
+        <select class="form-input" id="cc-role">
+          <option value="head_coach">Head Coach</option>
+          <option value="assistant_coach">Assistant Coach</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;">
+        <button type="button" class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="cc-submit">Sign Up</button>
+      </div>
+    </form>
+  `);
+  document.getElementById('coach-code-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('cc-submit');
+    btn.disabled = true; btn.textContent = 'Submitting…';
+    try {
+      await api('POST', '/api/auth/coach-register', {
+        code: document.getElementById('cc-code').value.trim(),
+        first_name: document.getElementById('cc-first').value.trim(),
+        last_name: document.getElementById('cc-last').value.trim(),
+        email: document.getElementById('cc-email').value.trim(),
+        role: document.getElementById('cc-role').value,
+      });
+      closeModal();
+      showAlert('Check your email — we sent a link to set your password.', 'success', 8000);
+    } catch (err) {
+      btn.disabled = false; btn.textContent = 'Sign Up';
+      showAlert(err?.message || 'Could not register.', 'error');
+    }
+  });
+}
+
+
 /**
  * B7 — Bulk Invite modal: paste/CSV of coach rows, optional default role +
  * default schools, server returns per-row results.

@@ -86,6 +86,11 @@ def app(_anchor_conn):
     flask_app = create_app(config=cfg)
     flask_app.config["TESTING"] = True
     flask_app.config["WTF_CSRF_ENABLED"] = False
+    # Disable Flask-Limiter in tests — its in-memory state would exhaust
+    # across the test session and produce flaky 429s on legitimate calls.
+    flask_app.config["RATELIMIT_ENABLED"] = False
+    from app.extensions import limiter as _limiter
+    _limiter.enabled = False
 
     yield flask_app
 

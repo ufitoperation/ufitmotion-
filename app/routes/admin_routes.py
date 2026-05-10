@@ -898,6 +898,63 @@ def send_user_invite(user_id: int):
 
 
 # ---------------------------------------------------------------------------
+# POST /api/admin/schools/<id>/invite-code/regenerate  (B8)
+# ---------------------------------------------------------------------------
+def _generate_invite_code(school_name: str, school_id: int) -> str:
+    """SCH-RANDOM8-YEAR uppercase. Collisions are exceedingly unlikely; the
+    unique index on schools.coach_invite_code catches the rare case."""
+    import re
+    prefix = re.sub(r'[^A-Za-z]', 'X', (school_name or 'SCH')[:3]).upper() or 'SCH'
+    rand = secrets.token_hex(4).upper()  # 8 hex chars
+    year = datetime.datetime.now(timezone.utc).year
+    return f"{prefix}-{rand}-{year}"
+
+
+@admin_bp.route("/api/admin/schools/<int:school_id>/invite-code/regenerate",
+                methods=["POST"])
+@limiter.limit("10 per minute")
+@admin_required
+def regenerate_school_invite_code(school_id: int):
+    """Rotate the school's coach invite code. Old code is immediately dead."""
+    actor = current_user()
+    db = get_db()
+    try:
+        school = db.execute(
+            "SELECT school_id, school_name FROM schools "
+            "WHERE school_id = ? AND deleted_at IS NULL",
+            (school_id,),
+        ).fetchone()
+        if school is None:
+            return jsonify({"error": "School not found."}), 404
+
+        # Try a few times in the rare event of a collision against the unique index.
+        for _ in range(5):
+            new_code = _generate_invite_code(school["school_name"], school_id)
+            try:
+                db.execute(
+                    "UPDATE schools SET coach_invite_code = ?, "
+                    "coach_invite_code_expires_at = ? WHERE school_id = ?",
+                    (new_code,
+                     (datetime.datetime.now(timezone.utc) + timedelta(days=180)).isoformat(),
+                     school_id),
+                )
+                db.commit()
+                break
+            except Exception:
+                db.rollback()
+                continue
+        else:
+            return jsonify({"error": "Could not allocate a unique code, please retry."}), 500
+
+        audit(db, actor["user_id"], "regenerate_invite_code", "schools", school_id,
+              new_values={"code": new_code})
+        db.commit()
+        return jsonify({"ok": True, "code": new_code})
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
 # POST /api/admin/coaches/bulk-invite
 # ---------------------------------------------------------------------------
 _BULK_INVITE_VALID_ROLES = (

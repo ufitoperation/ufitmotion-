@@ -221,6 +221,108 @@ def select_school():
 
 
 # ---------------------------------------------------------------------------
+# POST /api/auth/coach-register  (B8 — school invite code self-registration)
+# ---------------------------------------------------------------------------
+_COACH_REGISTER_VALID_ROLES = ("head_coach", "assistant_coach")
+
+
+@auth_bp.route("/api/auth/coach-register", methods=["POST"])
+@limiter.limit("5 per hour")
+def coach_register():
+    """
+    Public endpoint — any visitor with a valid school invite code can
+    self-register as a pending coach. Server creates the user with
+    active_status=FALSE and a 24h invite token; the user activates by
+    setting their password via the emailed link.
+
+    Body: { code, first_name, last_name, email, role }
+    role must be 'head_coach' or 'assistant_coach' — no admin escalation
+    via this endpoint.
+    """
+    data = parse_json()
+    code = (data.get("code") or "").strip()
+    first_name = (data.get("first_name") or "").strip()[:100]
+    last_name = (data.get("last_name") or "").strip()[:100]
+    email = (data.get("email") or "").strip().lower()[:254]
+    role = (data.get("role") or "").strip()
+
+    if not code or not first_name or not last_name or not email:
+        return jsonify({"error": "code, first_name, last_name, and email are required."}), 400
+    if "@" not in email or "." not in email.split("@")[-1]:
+        return jsonify({"error": "Invalid email format."}), 400
+    if role not in _COACH_REGISTER_VALID_ROLES:
+        return jsonify({"error": f"role must be one of: {', '.join(_COACH_REGISTER_VALID_ROLES)}."}), 400
+
+    db = get_db()
+    try:
+        school = db.execute(
+            "SELECT school_id, school_name, coach_invite_code_expires_at "
+            "FROM schools WHERE coach_invite_code = ? AND deleted_at IS NULL",
+            (code,),
+        ).fetchone()
+        if school is None:
+            return jsonify({"error": "Invalid or expired invite code."}), 400
+
+        # Expiry check — string comparison works for ISO-8601 timestamps.
+        expires_at = school["coach_invite_code_expires_at"]
+        now_iso = datetime.now(timezone.utc).isoformat()
+        if expires_at and expires_at < now_iso:
+            return jsonify({"error": "Invalid or expired invite code."}), 400
+
+        dup = db.execute("SELECT user_id FROM users WHERE email = ?", (email,)).fetchone()
+        if dup is not None:
+            return jsonify({"error": "An account with that email already exists."}), 409
+
+        ts = now_utc()
+        invite_token_plain = secrets.token_urlsafe(32)
+        invite_token_hash = hashlib.sha256(invite_token_plain.encode()).hexdigest()
+        invite_expires = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+
+        cur = db.execute(
+            """INSERT INTO users
+               (role, first_name, last_name, email, active_status,
+                password_reset_token, password_reset_expires_at, created_at)
+               VALUES (?, ?, ?, ?, FALSE, ?, ?, ?)""",
+            (role, first_name, last_name, email,
+             invite_token_hash, invite_expires, ts),
+        )
+        new_user_id = cur.lastrowid
+
+        sp_cur = db.execute(
+            """INSERT INTO staff_profiles
+               (user_id, status, created_at) VALUES (?, 'active', ?)""",
+            (new_user_id, ts),
+        )
+        staff_id = sp_cur.lastrowid
+
+        db.execute(
+            """INSERT INTO staff_assignments
+               (staff_id, school_id, assignment_role, start_date, active_status, created_at)
+               VALUES (?, ?, ?, ?, TRUE, ?)""",
+            (staff_id, school["school_id"], role, ts[:10], ts),
+        )
+
+        audit(db, new_user_id, "coach_self_register", "users", new_user_id,
+              new_values={"role": role, "school_id": school["school_id"],
+                          "ip": request.remote_addr})
+        db.commit()
+
+        # Best-effort invite email — graceful no-op without GMAIL_APP_PASSWORD.
+        try:
+            from app.email import send_invite_email
+            send_invite_email(email, first_name or "there", role, invite_token_plain)
+        except Exception:
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "coach_register: invite email send failed for %s", email
+            )
+
+        return jsonify({"ok": True, "school_id": school["school_id"]}), 201
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
 # POST /api/auth/logout
 # ---------------------------------------------------------------------------
 @auth_bp.route("/api/auth/logout", methods=["POST"])
